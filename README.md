@@ -4,11 +4,12 @@ You can specify category name to be extracted, maximum/minimum number of words a
 
 #Requirement
 You need a dictionary available at http://www.cis.upenn.edu/~xtag/swrelease.html.
-Specifically, download and uncompress ftp://ftp.cis.upenn.edu/pub/xtag/morph-1.5/morph-1.5.tar.gz and then you'll find data/morph_english.flat.
+Specifically, please download and uncompress ftp://ftp.cis.upenn.edu/pub/xtag/morph-1.5/morph-1.5.tar.gz and then you'll find data/morph_english.flat.
+It will let this program convert words to original form.
 
-#To compile
-g++ extract_wikipedia_xml.cpp -std=c++0x -lboost_thread-mt -lboost_regex -o extract_wikipedia_xml
+#To compile on Fedora 20 with g++ 4.8.3 and boost-1.54.0
+g++ extract_wikipedia_xml.cpp -std=c++0x -lboost_thread -lboost_regex -o extWikipediaXml
 
 #Note
-This uses cpu_set_t but I do not know if Max OS provides it.
+This uses cpu_set_t but currently I do not know if Max OS provides it.
 
