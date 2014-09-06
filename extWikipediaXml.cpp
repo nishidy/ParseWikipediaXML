@@ -20,7 +20,7 @@ using namespace std;
 using namespace boost;
 
 #include <sched.h>
-// #include <error.h>
+#include <error.h>
 #include <sys/types.h> // gettid() (they do not provide wrapper func)
 
 #include <unistd.h>
@@ -154,7 +154,7 @@ string count_words(string text,int* n){
 		(*n)+=it->second;
 	}
 	if(res.size()>0) res.erase(--res.end());
-
+ 
 	return res;
 }
 
@@ -189,6 +189,7 @@ string trim_text(string text){
 }
 */
 
+/* Fix thread with a certain CPU. The argument id is just incremented. */
 int set_cpu_id(int id)
 {
 	cpu_set_t mask;
@@ -215,7 +216,6 @@ int set_cpu_id(int id)
 string CATEGORY;
 int category_check(string text)
 {
-	// XXX: bug!
 	//regex txt_reg("[[Category:([^[]]+)]]");
 	regex txt_reg("\\[\\[\\:*Category:([^\\[\\]]+)\\|*[^\\[\\]]*\\]\\]");
 	smatch match;
@@ -240,6 +240,7 @@ int title_check(string text)
 	return 1;
 }
 
+/* To filter text out */
 void do_write(string page,struct smisc *misc)
 {
 	string title;
@@ -263,6 +264,7 @@ void do_write(string page,struct smisc *misc)
 	//text=trim_text(text);
 	text=convert_text(text);
 
+	/* Show debug prints */
 	int n=0;
 	text=count_words(text,&n);
 	if(n<MIN_WORDS){
@@ -284,6 +286,7 @@ void do_write(string page,struct smisc *misc)
 
 }
 
+/* This is the top function of functions to write the result into output files */
 void write(struct smisc *misc,int id)
 {
 
@@ -319,6 +322,7 @@ void enqueue(string page)
 
 int main(int argc, char* argv[])
 {
+	/* Read inputs and outputs */
 	if(argc<9){
 		cout<<"Usage:"<<argv[0]<<" [i]File(Wikipedia) [i]File(dictionary)"
 			"[o]File(Sentence) [o]File(Title) [i]min_words [i]max_words"
@@ -340,20 +344,27 @@ int main(int argc, char* argv[])
 	ofstream ofs(outFile);
 	ofstream tofs(outFile2);
 
+	/* Read stopwords and dictionary to convert to original form */
 	read_dict(inFile2);
+
+	/* Create threads fetching text within <page> from queue */
+	int cpus;
+	cpus=thread::hardware_concurrency();
+	//cpus--;
 
 	struct smisc misc;
 	misc.ofs=&ofs;
 	misc.tofs=&tofs;
 
-	int cpus;
-	cpus=thread::hardware_concurrency();
-	cpus--;
-
 	thread_group g;
-	for(int i=0;i<cpus;i++){
-		g.create_thread(bind(&write,&misc,i));
+	if(cpus==1){
+		g.create_thread(bind(&write,&misc,0));
+	}else{
+		for(int i=1;i<cpus;i++){
+			g.create_thread(bind(&write,&misc,i));
+		}
 	}
+	cout<<cpus<<" of threads spawned."<<endl;
 
 	string line="";
 	string page="";
@@ -362,8 +373,10 @@ int main(int argc, char* argv[])
 	ifstream ifs(inFile);
 	if(!ifs) return 0;
 
+	/* Display three decimal places */
 	cout<<setprecision(3);
 
+	/* Put text within <page> onto queue */
 	while(ifs&&getline(ifs,line)){
 		if(string::npos!=line.find("<page>",0)) sflag=1;
 		if(string::npos!=line.find("</page>",0)) eflag=1;
