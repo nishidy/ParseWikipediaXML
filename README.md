@@ -13,4 +13,3 @@ g++ extWikipediaXml.cpp -std=c++0x -lboost_thread -lboost_regex -o extWikipediaX
 #Note
 This uses cpu_set_t but currently I do not know if Max OS provides it.
 
-test
