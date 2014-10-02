@@ -13,10 +13,10 @@ You also need to put stopwords.text which represents words to be ignored on the 
 
 #Compilation
 To compile on Fedora 20 with g++ 4.8.3 and boost-1.54.0:  
-$g++ extWikipediaXml.cpp -std=c++0x -lboost_thread -lboost_regex -o extWikipediaXml
+$g++ extWikipediaXml.cpp -std=c++11 -lboost_thread -lboost_regex -o extWikipediaXml
 
 #Usage example
-./extWikipediaXml enwiki-latest-pages-articles1.xml ./morph_english.flat page.out title.out 1000 5000 2 "Capitals in Europe"
+./extWikipediaXml enwiki-latest-pages-articles1.xml ./morph_english.flat page.out title.out 1000 5000 2 ".*people$" 1
 
 #Note
 This uses cpu_set_t but currently I do not know if Max OS provides it.
