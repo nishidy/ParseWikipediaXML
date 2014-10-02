@@ -213,16 +213,22 @@ int set_cpu_id(int id)
 	return 1;
 }
 
+bool DEBUG=false;
 string CATEGORY;
 int category_check(string text)
 {
-	//regex txt_reg("[[Category:([^[]]+)]]");
+	if(CATEGORY=="") return 1;
+
 	regex txt_reg("\\[\\[\\:*Category:([^\\[\\]]+)\\|*[^\\[\\]]*\\]\\]");
 	smatch match;
 	string::const_iterator start=text.begin();
 	string::const_iterator end=text.end();
+	regex cate_reg(CATEGORY);
 	while(regex_search(start,end,match,txt_reg)){
-		if(CATEGORY==match.str(1)){
+		smatch cmatch;
+		if(regex_search(match.str(1),cmatch,cate_reg)){
+			if(DEBUG)
+				cout<<"[Info: Category matched is "<<match.str(1)<<".]"<<endl;
 			return 1;
 		}
 		start=match[0].second;
@@ -267,10 +273,10 @@ void do_write(string page,struct smisc *misc)
 	/* Show debug prints */
 	int n=0;
 	text=count_words(text,&n);
-	if(n<MIN_WORDS){
+	if(n<MIN_WORDS&&DEBUG){
 		cout<<"[Info: "<<MIN_WORDS<<" > "<<title<<": "<<n<<"]"<<endl;
 		return ;
-	}else if(n>MAX_WORDS){
+	}else if(n>MAX_WORDS&&DEBUG){
 		cout<<"[Info: "<<MAX_WORDS<<" < "<<title<<": "<<n<<"]"<<endl;
 		return ;
 	}else{
@@ -317,7 +323,7 @@ void enqueue(string page)
 			c.wait(lk);
 		q.push_back(page);
 	}
-	//c.notify_one();
+	c.notify_one();
 }
 
 int main(int argc, char* argv[])
@@ -326,7 +332,10 @@ int main(int argc, char* argv[])
 	if(argc<9){
 		cout<<"Usage:"<<argv[0]<<" [i]File(Wikipedia) [i]File(dictionary) "
 			"[o]File(Sentence) [o]File(Title) [i]min_words [i]max_words "
-			"[i]min_word_count [i]category"<<endl;
+			"[i]min_word_count [i]category ([i]debug)\n"
+			"Note:\n"
+			" - category can be regular expression."
+			" - debug message is shown by setting debug 1."<<endl;
 		return 0;
 	}
 
@@ -340,6 +349,12 @@ int main(int argc, char* argv[])
 	MIN_WORD_CNT = atoi(argv[7]);
 
 	CATEGORY=(string)argv[8];
+
+	if(argc==10){
+		if(atoi(argv[9])==1){
+			DEBUG=true;
+		}
+	}
 
 	ofstream ofs(outFile);
 	ofstream tofs(outFile2);
@@ -364,7 +379,9 @@ int main(int argc, char* argv[])
 			g.create_thread(bind(&write,&misc,i));
 		}
 	}
-	cout<<"[Info: "<<cpus<<" threads spawned.]"<<endl;
+
+	if(DEBUG)
+		cout<<"[Info: "<<cpus<<" threads spawned.]"<<endl;
 
 	string line="";
 	string page="";
@@ -388,11 +405,13 @@ int main(int argc, char* argv[])
 		}
 		lnum++;
 	}
-	cout<<"[Info: Finish reading "<<inFile<<".]"<<endl;
+
+	if(DEBUG)
+		cout<<"[Info: Finish reading "<<inFile<<".]"<<endl;
 
 	while(q.size()>0){}
 	f=1;
-	//c.notify_all();
+	c.notify_all();
 
 	g.join_all();
 
