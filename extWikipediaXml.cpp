@@ -268,10 +268,10 @@ void do_write(string page,struct smisc *misc)
 	int n=0;
 	text=count_words(text,&n);
 	if(n<MIN_WORDS){
-		cout<<"> "<<title<<": "<<n<<endl;
+		cout<<"[Info: "<<MIN_WORDS<<" > "<<title<<": "<<n<<"]"<<endl;
 		return ;
 	}else if(n>MAX_WORDS){
-		cout<<"< "<<title<<": "<<n<<endl;
+		cout<<"[Info: "<<MAX_WORDS<<" < "<<title<<": "<<n<<"]"<<endl;
 		return ;
 	}else{
 		cout<<title<<": "<<n<<endl;
@@ -324,8 +324,8 @@ int main(int argc, char* argv[])
 {
 	/* Read inputs and outputs */
 	if(argc<9){
-		cout<<"Usage:"<<argv[0]<<" [i]File(Wikipedia) [i]File(dictionary)"
-			"[o]File(Sentence) [o]File(Title) [i]min_words [i]max_words"
+		cout<<"Usage:"<<argv[0]<<" [i]File(Wikipedia) [i]File(dictionary) "
+			"[o]File(Sentence) [o]File(Title) [i]min_words [i]max_words "
 			"[i]min_word_count [i]category"<<endl;
 		return 0;
 	}
@@ -364,7 +364,7 @@ int main(int argc, char* argv[])
 			g.create_thread(bind(&write,&misc,i));
 		}
 	}
-	cout<<cpus<<" of threads spawned."<<endl;
+	cout<<"[Info: "<<cpus<<" threads spawned.]"<<endl;
 
 	string line="";
 	string page="";
@@ -388,6 +388,7 @@ int main(int argc, char* argv[])
 		}
 		lnum++;
 	}
+	cout<<"[Info: Finish reading "<<inFile<<".]"<<endl;
 
 	while(q.size()>0){}
 	f=1;
