@@ -16,7 +16,7 @@ To compile on Fedora 20 with g++ 4.8.3 and boost-1.54.0:
 $g++ extWikipediaXml.cpp -std=c++11 -lboost_thread -lboost_regex -o extWikipediaXml
 
 #Usage example
-./extWikipediaXml -i jawiki-20140930-pages-articles1.xml -d morph_english.flat -s page.out -t title.out -m 1000 -x 5000 -c 2 -g ".*people$" -v 1 -l EN
+./extWikipediaXml -i enwiki-latest-pages-articles1.xml -d morph_english.flat -s page.out -t title.out -m 1000 -x 5000 -c 2 -g ".*people$" -v 1 -l EN
 
 Please simply run ./extWikipediaXml to see option usage.
 
