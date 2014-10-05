@@ -461,7 +461,7 @@ int main(int argc, char* argv[])
 			"-s File(Sentence) -t File(Title) -m min_words -x max_words "
 			"-c min_word_count -g category [-v debug] -l [JP|EN] \n"
 			"Note:\n"
-			" - category can be regular expression.\n"
+			" - category is regular expression.\n"
 			" - debug message is shown by setting debug 1."<<endl;
 		return 0;
 	}
