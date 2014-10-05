@@ -91,6 +91,96 @@ void read_dict(string inFile2)
 
 }
 
+bool DEBUG=false;
+
+// R script may return the sequence of only symbols extracted by "サ変接続" noun.
+bool check_all_symbols(string w){
+
+	setlocale(LC_CTYPE,"ja_JP.utf8");
+
+	int wcsn;
+	wchar_t *wc = new wchar_t[w.size()+1];
+	wcsn=mbstowcs(wc,w.c_str(),w.size()+1);
+	if(wcsn<0){
+		cout<<"[Warning: Failed to convert from multibyte string to wide string: "<<w<<endl;
+		return 0;
+	}
+
+	wregex wsym_reg(L"[｛｝［］（）＼「」〜！＠＃＄％＾＆＊ーｰ”’：；｜※。、＿？ ]+");
+	wsmatch wmatch;
+
+	wstring::const_iterator wstart=((wstring)wc).begin();
+	wstring::const_iterator wend=((wstring)wc).end();
+
+	int len=0;
+
+	// XXX Not sure about the reason why regex_search fails...
+	// According to the backtrace, L\000 should not be passed to this func.
+	// I tried Boost-1.54.0 and 1.56.0 but neither of them worked.
+	while(regex_search(wstart,wend,wmatch,wsym_reg)){
+		len+=wmatch.str(0).size();
+		// XXX Some of the wide character string may be converted
+		// to one of wsym_reg!! Abort check.
+		if(len>wcsn) return 1;
+		wstart=wmatch[0].second;
+	}
+
+	regex sym_reg("[\\{\\}\\[\\]\\(\\)\\~\\!\\@\\#\\$\\%\\^\\&\\*\\-\"\'\\:\\;\\|\\.,_\\/\? ]+");
+	smatch match;
+
+	string::const_iterator start=w.begin();
+	string::const_iterator end=w.end();
+
+	while(regex_search(start,end,match,sym_reg)){
+		len+=match.str(0).size();
+		// XXX
+		if(len>wcsn) return 1;
+		start=match[0].second;
+	}
+
+	if(len==wcsn){
+		if(DEBUG){
+			cout<<"[Info: "<<w<<" is omitted since the length is same as "
+			<<wcsn<<".]"<<endl;
+		}
+		return 1;
+	}
+	return 0;
+
+}
+
+string LANGUAGE="EN";
+string convert_text_jp(string text,string title,int id){
+	string res="";
+
+	char tmp[64];
+	sprintf(tmp,"/tmp/.%s%02d",__func__,id);
+	ofstream ofs(tmp);
+	ofs<<text;
+	
+        string command = "Rscript rmecabfreq.r "+(string)tmp+" \""+title+"\"";
+        FILE *fp = popen((const char*)command.c_str(),"r");
+        char buf[64];
+	string w,cnt;
+
+	stringstream ss;
+        while(fgets(buf,sizeof(buf),fp) != NULL){
+		if(strstr(buf,"=")!=0) continue;
+		ss<<(string)buf;
+		ss>>w>>cnt;
+		
+		//if(check_all_symbols(w)) continue;
+
+		if(!isdigit(cnt.c_str()[0])) continue;
+		if(find(st.begin(),st.end(),w)!=st.end()) continue;
+
+		res+=w+" "+cnt+" ";
+	}
+
+	pclose(fp);
+	return res;
+}
+
 string convert_text(string text){
 	stringstream ss(text);
 	string w,res="";
@@ -103,8 +193,7 @@ string convert_text(string text){
 		if(w.size()==0) continue;
 		if(w.at(w.size()-1)=='\n') w.erase(--w.end());
 
-		if(find(st.begin(),st.end(),w)!=st.end())
-			continue;
+		if(find(st.begin(),st.end(),w)!=st.end()) continue;
 
 		// Books -> books => book
 		// Australian -> australian -> Australian => Asutralia
@@ -158,8 +247,35 @@ string count_words(string text,int* n){
 	return res;
 }
 
+string count_words_jp(string text,int* n){
+	unordered_map<string,int> words;
+	stringstream ss(text);
+	string w,res="";
+	int cnt;
+	while(!ss.eof()){
+		ss>>w>>cnt;
+		if(words.find(w)==words.end()){
+			words[w]=cnt;
+		}else{
+			words[w]+=cnt;
+		}
+	}
 
-/*
+	for(unordered_map<string,int>::iterator it=words.begin();\
+		it!=words.end();++it){
+		if(it->second<MIN_WORD_CNT) continue;
+		ss.str("");
+		ss.clear();
+		ss<<it->second;
+		res+=it->first+" "+ss.str()+" ";
+		(*n)+=it->second;
+	}
+	if(res.size()>0) res.erase(--res.end());
+ 
+	return res;
+}
+
+
 string trim_text(string text){
 
 	string text_wo_http;
@@ -185,9 +301,7 @@ string trim_text(string text){
 	text_wo_spaces = boost::regex_replace(text_wo_http,spaces_reg," ");
 
 	return text_wo_spaces;
-
 }
-*/
 
 /* Fix thread with a certain CPU. The argument id is just incremented. */
 int set_cpu_id(int id)
@@ -213,7 +327,6 @@ int set_cpu_id(int id)
 	return 1;
 }
 
-bool DEBUG=false;
 string CATEGORY;
 int category_check(string text)
 {
@@ -247,7 +360,7 @@ int title_check(string text)
 }
 
 /* To filter text out */
-void do_write(string page,struct smisc *misc)
+void do_write(string page,struct smisc *misc,int id)
 {
 	string title;
 	regex t_reg("<title>(.*)</title>");
@@ -264,20 +377,34 @@ void do_write(string page,struct smisc *misc)
 	regex txt_reg("<text[^>]*>(.*)</text>");
 	if(regex_search(page,match,txt_reg))
 		text=match.str(1);
-	
-	if(!category_check(text)) return;
 
-	//text=trim_text(text);
-	text=convert_text(text);
+	if(text.size()>0){
+		if(!category_check(text)) return;
 
-	/* Show debug prints */
+		if(LANGUAGE=="EN"){
+			text=convert_text(text);
+		}else{
+			text=convert_text_jp(text,title,id);
+		}
+	}
+
 	int n=0;
-	text=count_words(text,&n);
-	if(n<MIN_WORDS&&DEBUG){
-		cout<<"[Info: "<<MIN_WORDS<<" > "<<title<<": "<<n<<"]"<<endl;
+	if(text.size()>0){
+		/* Show debug prints */
+		if(LANGUAGE=="EN"){
+			text=count_words(text,&n);
+		}else{
+			text=count_words_jp(text,&n);
+		}
+	}
+
+	if(n<MIN_WORDS){
+		if(DEBUG)
+			cout<<"[Info: "<<MIN_WORDS<<" > "<<title<<": "<<n<<"]"<<endl;
 		return ;
-	}else if(n>MAX_WORDS&&DEBUG){
-		cout<<"[Info: "<<MAX_WORDS<<" < "<<title<<": "<<n<<"]"<<endl;
+	}else if(n>MAX_WORDS){
+		if(DEBUG)
+			cout<<"[Info: "<<MAX_WORDS<<" < "<<title<<": "<<n<<"]"<<endl;
 		return ;
 	}else{
 		cout<<title<<": "<<n<<endl;
@@ -309,7 +436,7 @@ void write(struct smisc *misc,int id)
 				c.notify_one();
 			}
 		}
-		if(page!="") do_write(page,misc);
+		if(page!="") do_write(page,misc,id);
 		if(f) break;
 	}
 
@@ -330,31 +457,64 @@ int main(int argc, char* argv[])
 {
 	/* Read inputs and outputs */
 	if(argc<9){
-		cout<<"Usage:"<<argv[0]<<" [i]File(Wikipedia) [i]File(dictionary) "
-			"[o]File(Sentence) [o]File(Title) [i]min_words [i]max_words "
-			"[i]min_word_count [i]category ([i]debug)\n"
+		cout<<"Usage:"<<argv[0]<<" -i File(Wikipedia) [-d File(dictionary)] "
+			"-s File(Sentence) -t File(Title) -m min_words -x max_words "
+			"-c min_word_count -g category [-v debug] -l [JP|EN] \n"
 			"Note:\n"
-			" - category can be regular expression."
+			" - category can be regular expression.\n"
 			" - debug message is shown by setting debug 1."<<endl;
 		return 0;
 	}
 
-	string inFile=(string)argv[1];	
-	string inFile2=(string)argv[2];	
-	string outFile=(string)argv[3];	
-	string outFile2=(string)argv[4];	
+	string inFile,inFile2,outFile,outFile2;
 
-	MIN_WORDS = atoi(argv[5]);
-	MAX_WORDS = atoi(argv[6]);
-	MIN_WORD_CNT = atoi(argv[7]);
-
-	CATEGORY=(string)argv[8];
-
-	if(argc==10){
-		if(atoi(argv[9])==1){
+	int argcnt=1;
+	char arg;
+	while(argcnt<argc){
+		arg=argv[argcnt][1];
+		switch(arg){
+		case 'i':
+			inFile=(string)argv[++argcnt];
+			break;
+		case 'd':
+			inFile2=(string)argv[++argcnt];
+			break;
+		case 's':
+			outFile=(string)argv[++argcnt];
+			break;
+		case 't':
+			outFile2=(string)argv[++argcnt];
+			break;
+		case 'm':
+			MIN_WORDS = atoi(argv[++argcnt]);
+			break;
+		case 'x':
+			MAX_WORDS = atoi(argv[++argcnt]);
+			break;
+		case 'c':
+			MIN_WORD_CNT = atoi(argv[++argcnt]);
+			break;
+		case 'g':
+			CATEGORY=(string)argv[++argcnt];
+			break;
+		case 'v':
+			++argcnt;
 			DEBUG=true;
+			break;
+		case 'l':
+			LANGUAGE=(string)argv[++argcnt];
+			if(!(LANGUAGE=="EN"||LANGUAGE=="JP")){
+				cerr<<"No such language supported."<<endl;
+			}
+			break;
+		default:
+			cerr<<"No such option: "<<argcnt<<" ("<<argcnt<<")"<<endl;
+			exit(10);
+			//break;
 		}
+		++argcnt;
 	}
+
 
 	ofstream ofs(outFile);
 	ofstream tofs(outFile2);
@@ -410,6 +570,10 @@ int main(int argc, char* argv[])
 		cout<<"[Info: Finish reading "<<inFile<<".]"<<endl;
 
 	while(q.size()>0){}
+
+	if(DEBUG)
+		cout<<"[Info: Queue is empty.]"<<endl;
+
 	f=1;
 	c.notify_all();
 
