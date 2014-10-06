@@ -462,57 +462,53 @@ int main(int argc, char* argv[])
 			"-c min_word_count -g category [-v debug] -l [JP|EN] \n"
 			"Note:\n"
 			" - category is regular expression.\n"
-			" - debug message is shown by setting debug 1."<<endl;
+			" - debug message is shown by setting -v."<<endl;
 		return 0;
 	}
 
 	string inFile,inFile2,outFile,outFile2;
 
-	int argcnt=1;
-	char arg;
-	while(argcnt<argc){
-		arg=argv[argcnt][1];
-		switch(arg){
+	int result;
+	while((result=getopt(argc,argv,"i:d:s:t:m:x:c:g:vl:"))!=-1){
+		switch(result){
 		case 'i':
-			inFile=(string)argv[++argcnt];
+			inFile=(string)optarg;
 			break;
 		case 'd':
-			inFile2=(string)argv[++argcnt];
+			inFile2=(string)optarg;
 			break;
 		case 's':
-			outFile=(string)argv[++argcnt];
+			outFile=(string)optarg;
 			break;
 		case 't':
-			outFile2=(string)argv[++argcnt];
+			outFile2=(string)optarg;
 			break;
 		case 'm':
-			MIN_WORDS = atoi(argv[++argcnt]);
+			MIN_WORDS = atoi(optarg);
 			break;
 		case 'x':
-			MAX_WORDS = atoi(argv[++argcnt]);
+			MAX_WORDS = atoi(optarg);
 			break;
 		case 'c':
-			MIN_WORD_CNT = atoi(argv[++argcnt]);
+			MIN_WORD_CNT = atoi(optarg);
 			break;
 		case 'g':
-			CATEGORY=(string)argv[++argcnt];
+			CATEGORY=(string)optarg;
 			break;
 		case 'v':
-			++argcnt;
 			DEBUG=true;
 			break;
 		case 'l':
-			LANGUAGE=(string)argv[++argcnt];
+			LANGUAGE=(string)optarg;
 			if(!(LANGUAGE=="EN"||LANGUAGE=="JP")){
 				cerr<<"No such language supported."<<endl;
 			}
 			break;
 		default:
-			cerr<<"No such option: "<<argcnt<<" ("<<argcnt<<")"<<endl;
+			cerr<<"No such option: "<<result<<"."<<endl;
 			exit(10);
 			//break;
 		}
-		++argcnt;
 	}
 
 
