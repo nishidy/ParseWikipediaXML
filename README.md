@@ -8,15 +8,17 @@ You need to install boost-{thread/regex}.
 and you need a dictionary for parsing English pages available at http://www.cis.upenn.edu/~xtag/swrelease.html.
 Specifically, please download and uncompress ftp://ftp.cis.upenn.edu/pub/xtag/morph-1.5/morph-1.5.tar.gz and then you'll find data/morph_english.flat.
 It will let this program convert words to original form.
-You also need to put stopwords.text which represents words to be ignored on the same level as this program.
 This tool currently supports parsing Japanese pages, which needs to install R and RMeCab with mecab-ipadic.
+
+Now, you don't need to put stopwords.text which represents words to be ignored.
+They are included in code.
 
 #Compilation
 To compile on Fedora 20 with g++ 4.8.3 and boost-1.54.0:  
-$g++ extWikipediaXml.cpp -std=c++11 -lboost_thread -lboost_regex -o extWikipediaXml
+$g++ ParseWikipediaXML.cpp -std=c++11 -lboost_thread -lboost_regex -o ParseWikipediaXML
 
 #Usage example
-./extWikipediaXml -i enwiki-latest-pages-articles1.xml -d morph_english.flat -s page.out -t title.out -m 1000 -x 5000 -c 2 -g ".*people$" -v 1 -l EN
+./ParseWikipediaXML -i enwiki-latest-pages-articles1.xml -d morph_english.flat -s page.out -t title.out -m 1000 -x 5000 -c 2 -g ".*people$" -v 1 -l EN
 
 Please simply run ./extWikipediaXml to see option usage.
 
