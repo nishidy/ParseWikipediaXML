@@ -115,7 +115,7 @@ class Queue : public Common, public Params
 {
 	private:
 	deque<string> q;
-	mutex mq;
+	mutex mq; // mutex for queue push and pop
 
 	public:
 	static ifstream *ifs;
@@ -214,7 +214,7 @@ class Threads : public Common, public Params
 
 	public:
 	static Queue* qobj;
-	static mutex mf; //mutex for struct f
+	static mutex mf; //mutex for output to ostreams
 
 	static vector<string> st; // stopwords
 	static unordered_map<string,string> dict;
