@@ -166,16 +166,21 @@ void Queue::push(string page)
 }
 
 string Queue::pop(){
-	string s;
+	string page;
 
-	if(q.size()>0){
-		s=q.front();
-		q.pop_front();
-	}else{
-		s="";
+	{
+		mutex::scoped_lock lk(mq);
+		if(q.size()>0){
+			page=q.front();
+			q.pop_front();
+		}else{
+			page="";
+		}
+		if(page=="") c->wait(lk);
 	}
+	c->notify_one();
 
-	return s;
+	return page;
 }
 
 void Queue::finish(){
@@ -263,15 +268,9 @@ void Threads::pop_n_parse(){
 
 	for(;;){
 
-		{
-			mutex::scoped_lock lk(mf);
-			page = qobj->pop();
-			if(page=="") c->wait(lk);
-		}
-		c->notify_one();
-
-		if(page!="")
+		if((page=qobj->pop())!=""){
 			parse_n_save(page);
+		}
 
 		if(finished) break;
 	}
@@ -384,8 +383,6 @@ void Threads::read_stopwords(){
 }
 
 void Threads::read_dict(string dictionary){
-
-	if(Params::debug) cout<<"Read dictionary and stopwords."<<endl;
 
 	read_stopwords();
 
