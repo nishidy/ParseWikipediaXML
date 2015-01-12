@@ -1,5 +1,5 @@
 #Purpose
-Extract each page content and title from Wikipedia database provided in xml under some conditions in order to make [bug-of-words](http://en.wikipedia.org/wiki/Bag-of-words_model).
+To extract the content and the title in pages from Wikipedia database provided in xml under some conditions in order to make [bug-of-words](http://en.wikipedia.org/wiki/Bag-of-words_model) with threads to maximize CPUs.
 Words and their counts how many times they appear in the page contents are extracted together and titles are also saved in separated output file.
 You can specify a name of category to be extracted, maximum/minimum number of words and so on.
 
