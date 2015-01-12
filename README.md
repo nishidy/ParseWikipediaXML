@@ -1,5 +1,5 @@
 #Purpose
-Extract each page content and title from Wikipedia database provided in xml under some conditions in order to make bug-of-words.
+Extract each page content and title from Wikipedia database provided in xml under some conditions in order to make [bug-of-words](http://en.wikipedia.org/wiki/Bag-of-words_model).
 Words and their counts how many times they appear in the page contents are extracted together and titles are also saved in separated output file.
 You can specify a name of category to be extracted, maximum/minimum number of words and so on.
 
@@ -18,9 +18,27 @@ To compile on Fedora 20 with g++ 4.8.3 and boost-1.54.0:
 $g++ ParseWikipediaXML.cpp -std=c++11 -lboost_thread -lboost_regex -o ParseWikipediaXML
 
 #Usage example
-./ParseWikipediaXML -i enwiki-latest-pages-articles1.xml -d morph_english.flat -s page.out -t title.out -m 1000 -x 5000 -c 2 -g ".*people$" -v 1 -l EN
 
-Please simply run ./extWikipediaXml to see option usage.
+```cpp:cpp
+$ ./ParseWikipediaXML
+Usage:./ParseWikipediaXML -i File(Wikipedia) [-d File(dictionary)] -s File(Sentence) -t File(Title) -m min_words -x max_words -c min_word_count -g category [-v debug] -l [JP|EN] 
+Note:
+ - category is regular expression.
+  - debug message is shown by setting -v.
+```
+
+```go:go
+$ ./ParseWikipediaXML_go --help
+Usage of ./ParseWikipediaXML_go:
+  -c=2: min_word_count
+  -d="": Input File(dictionary)
+  -g=".*": Category(regular expression)
+  -i="": Input File(Wikipedia)
+  -m=2: min_word_length
+  -s="": Output File(Contents)
+  -t="": Output File(Title)
+  -x=256: max_word_length
+```
 
 #Note
 This uses cpu_set_t but currently I do not know if Max OS provides it.
