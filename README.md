@@ -34,6 +34,7 @@ Usage of ./ParseWikipediaXML_go:
   -d="": Input File(dictionary)
   -g=".*": Category(regular expression)
   -i="": Input File(Wikipedia)
+  -j=false: Generate bug-of-words in JSON format
   -m=2: min_word_length
   -s="": Output File(Contents)
   -t="": Output File(Title)
