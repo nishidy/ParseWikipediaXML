@@ -15,7 +15,9 @@ import (
 	"strings"
 )
 
-func make_map(text string, minl, maxl int, dict *map[string]string) map[string]int {
+var stopwords string = "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your"
+
+func make_map(text string, minl, maxl int, dict *map[string]string, stop *[]string) map[string]int {
 
 	var re *regexp.Regexp
 
@@ -34,16 +36,25 @@ func make_map(text string, minl, maxl int, dict *map[string]string) map[string]i
 				continue
 			}
 
-			_, _err := (*dict)[word]
-			if _err == true {
+			flag := false
+			for _, sp := range *stop {
+				if sp == word {
+					flag = true
+					break
+				}
+			}
+			if flag {
+				continue
+			}
+
+			if _, err := (*dict)[word]; err {
 				word = (*dict)[word]
 			}
 
-			_, err := words_cnt[word]
-			if err == false {
-				words_cnt[word] = 1
-			} else {
+			if _, err := words_cnt[word]; err {
 				words_cnt[word]++
+			} else {
+				words_cnt[word] = 1
 			}
 		}
 	}
@@ -200,8 +211,13 @@ func main() {
 	dict := make(map[string]string)
 	read_dictionary(*ifdict, &dict)
 
+	stop := make([]string, 0, 256)
+	for _, word := range strings.Split(stopwords, ",") {
+		stop = append(stop, word)
+	}
+
 	for i := 0; i < cpu; i++ {
-		go func(cp chan []string, cf chan int, minl, maxl, mic *int, ft, fc *os.File, cat *string, dict *map[string]string) {
+		go func(cp chan []string, cf chan int, minl, maxl, mic *int, ft, fc *os.File, cat *string, dict *map[string]string, stop *[]string) {
 			for {
 				str := strings.Join(<-cp, "")
 				var regstr string
@@ -221,7 +237,7 @@ func main() {
 				ft.WriteString(fmt.Sprintf("%s\n", title))
 
 				k := 0
-				for key, val := range make_map(text, *minl, *maxl, dict) {
+				for key, val := range make_map(text, *minl, *maxl, dict, stop) {
 					if val < *minc {
 						continue
 					}
@@ -236,7 +252,7 @@ func main() {
 
 				_ = <-cf
 			}
-		}(cp, cf, minl, maxl, minc, ft, fc, cat, &dict)
+		}(cp, cf, minl, maxl, minc, ft, fc, cat, &dict, &stop)
 	}
 
 	var page []string
