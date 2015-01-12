@@ -93,10 +93,10 @@ func category_check(catreg, text string) bool {
 
 func read_dictionary(ifdict string, dict *map[string]string) {
 	file, err := os.Open(ifdict)
-	defer file.Close()
 	if err != nil {
 		os.Exit(10)
 	}
+	defer file.Close()
 
 	var line string
 	scanner := bufio.NewScanner(file)

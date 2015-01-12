@@ -17,14 +17,14 @@ They are included in code.
 To compile on Fedora 20 with g++ 4.8.3 and boost-1.54.0:  
 $g++ ParseWikipediaXML.cpp -std=c++11 -lboost_thread -lboost_regex -o ParseWikipediaXML
 
-#Usage example
+#Usage
 
 ```cpp:cpp
 $ ./ParseWikipediaXML
 Usage:./ParseWikipediaXML -i File(Wikipedia) [-d File(dictionary)] -s File(Sentence) -t File(Title) -m min_words -x max_words -c min_word_count -g category [-v debug] -l [JP|EN] 
 Note:
  - category is regular expression.
-  - debug message is shown by setting -v.
+ - debug message is shown by setting -v.
 ```
 
 ```go:go
