@@ -1,5 +1,4 @@
 import scala.io.Source
-import scala.collection.mutable
 
 object test{
 
@@ -11,7 +10,6 @@ object test{
 
 
 	def main(args: Array[String]) = {
-
 
 		val parser = new scopt.OptionParser[Args]("ParseWikipediaXML"){
 			opt[String]('i',"input-file") action { (x,c) =>
@@ -38,12 +36,10 @@ object test{
 						val allwords = line.split(Array(' ',',','.')).
 									   filter(x=>x.size>1&&(!stopword(x))&&allAlnum(x))
 									   //.map(_.filter(x=>allAlnum(_.toString)))
-						val onewords = allwords.toSet.toArray
+						val onewords = allwords.toSet.toList
 
-						val m = mutable.Map.empty[String, Int]
-						m ++= ( for( word <- onewords ) yield ( word, allwords.filter( _ == word ).size ) )
-
-						val zipped = ( for( z <- m.keys zip m.values.map(_.toString) ) yield List(z._1,z._2) )
+						val listWords = for( word <- onewords ) yield ( word, allwords.filter( _ == word ).size )
+						val zipped = for( z <- listWords.toMap.keys zip listWords.toMap.values.map(_.toString) ) yield List(z._1,z._2)
 
 						if(zipped.size>0)
 							// zipped is Set(), so it needs toList
