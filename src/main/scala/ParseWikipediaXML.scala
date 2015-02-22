@@ -1,4 +1,6 @@
 import scala.io.Source
+import scala.xml.XML
+import scala.language.postfixOps
 
 object test{
 
@@ -30,22 +32,35 @@ object test{
 		parser.parse(args, Args()) match {
 			case Some(c) => {
 				val s = Source.fromFile(c.ifwiki)
+				val page = new StringBuilder
 				try{
 					for( line <- s.getLines ) {
 
-						val allwords = line.split(Array(' ',',','.')).
-									   filter(x=>x.size>1&&(!stopword(x))&&allAlnum(x))
-									   //.map(_.filter(x=>allAlnum(_.toString)))
-						val onewords = allwords.toSet.toList
+						if( line.contains("<page>") || page.size > 0 ){
+							page.append(line)
+						}
 
-						val listWords = for( word <- onewords ) yield ( word, allwords.filter( _ == word ).size )
-						val zipped = for( z <- listWords.toMap.keys zip listWords.toMap.values.map(_.toString) ) yield List(z._1,z._2)
+						if( line.contains("</page>") ){
 
-						if(zipped.size>0)
-							// zipped is Set(), so it needs toList
-							println(zipped.toList.flatten.mkString(" "))
-						else
-							()
+							for{ node <- XML.loadString( page.toString ) \ "revision" \ "text"
+								 text = node text }{
+
+								// allwords is list
+								// exclude stopwords and words that include symbols
+								val allwords = text.split( Array(' ',',','.') ).filter( x=>x.size>1 && (!stopword(x)) && allAlnum(x) )
+
+								// onewords is list in which redundant words are excluded
+								val onewords = allwords.toSet.toList
+
+								val zipped = for( word <- onewords ) yield List( word, allwords.filter( _ == word ).size.toString )
+
+								if(zipped.size>0) println(zipped.flatten.mkString(" "))
+								else ()
+							}
+
+							page.clear
+						}
+
 					}
 				} finally {
 					s.close
