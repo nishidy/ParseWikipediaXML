@@ -9,17 +9,20 @@ object test{
 
 	case class Args(
 		ifwiki: String = "",
+		ifdict: String = "",
 		ofcont: String = "",
 		oftitle: String = ""
 	)
 
+	case class Text(text:String, mapDict:Map[String,String])
+
 	class bowActor extends Actor {
 		def receive = {
-			case text:String =>
+			case Text(text,mapDict) =>
 
 				// allwords is list
 				// exclude stopwords and words that include symbols
-				val allwords = text.split( Array(' ',',','.') ).filter( x=>x.size>1 && (!stopword(x)) && allAlnum(x) )
+				val allwords = text.split( Array(' ',',','.') ).filter( x=>x.size>1 && (!stopword(x)) && allAlnum(x) ).map( x => if( mapDict.get(x)==None ){ x }else{ mapDict.get(x).get } )
 
 				// onewords is list in which redundant words are excluded
 				val onewords = allwords.toSet.toList
@@ -41,6 +44,7 @@ object test{
 		def allAlnum(x:String): Boolean = {
 			val reg = """^([a-z0-9-]+)$""".r
 			x match{
+				case reg("""^[-]+$""") => false
 				case reg(_) => true
 				case _ => false
 			}
@@ -54,6 +58,10 @@ object test{
 			opt[String]('i',"input-file") action { (x,c) =>
 				c.copy(ifwiki = x)
 			} text ("Input File(Wikipedia)")
+
+			opt[String]('d',"dict-file") action { (x,c) =>
+				c.copy(ifdict = x)
+			} text ("Input File(Dictionary)")
 
 			opt[String]('s',"output-cont-file") action { (x,c) =>
 				c.copy(ofcont = x)
@@ -71,8 +79,11 @@ object test{
 
 		parser.parse(args, Args()) match {
 			case Some(c) => {
-				val s = Source.fromFile(c.ifwiki)
+
+				val dictionary = readDict(c.ifdict)
+
 				val page = new StringBuilder
+				val s = Source.fromFile(c.ifwiki)
 				try{
 					for( line <- s.getLines ) {
 
@@ -84,7 +95,7 @@ object test{
 
 							for{ node <- XML.loadString( page.toString ) \ "revision" \ "text"
 								 text = node text }{
-								actor ! text
+								actor ! new Text(text,dictionary)
 							}
 							page.clear
 						}
@@ -99,6 +110,18 @@ object test{
 				println("Failed to parse.")
 				sys.exit(1)
 			}
+		}
+
+		def readDict(ifdict:String): Map[String,String]= {
+			var mapDict = Map.empty[String,String]
+			val s = Source.fromFile(ifdict)
+			for( line <- s.getLines ){
+				val lineSp = line.split("[ \t]+")
+				if( ! lineSp.exists(_==";;;") ){
+					mapDict += (lineSp(0)->lineSp(1))
+				}
+			}
+			mapDict
 		}
 
 	}
