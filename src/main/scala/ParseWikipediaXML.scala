@@ -11,25 +11,28 @@ object test{
 		ifwiki: String = "",
 		ifdict: String = "",
 		ofcont: String = "",
-		oftitle: String = ""
+		oftitle: String = "",
+		minl: Int = 2,
+		maxl: Int = 64,
+		minc: Int = 1
 	)
 
-	case class Text(text:String, mapDict:Map[String,String])
+	case class Text(text:String, mapDict:Map[String,String], minl:Int, maxl:Int, minc:Int)
 
 	class bowActor extends Actor {
 		def receive = {
-			case Text(text,mapDict) =>
+			case Text(text,mapDict,minl,maxl,minc) =>
 
 				// allwords is list
 				// exclude stopwords and words that include symbols
-				val allwords = text.split( Array(' ',',','.') ).filter( x=>x.size>1 && (!stopword(x)) && allAlnum(x) ).map( x => if( mapDict.get(x)==None ){ x }else{ mapDict.get(x).get } )
+				val allwords = text.split( Array(' ',',','.') ).filter( x => x.size>=minl && x.size<=maxl && (!stopword(x)) && allAlnum(x) ).map( x => if( mapDict.get(x)==None ){ x }else{ mapDict.get(x).get } )
 
 				// onewords is list in which redundant words are excluded
 				val onewords = allwords.toSet.toList
 
-				val zipped = for( word <- onewords ) yield List( word, allwords.filter( _ == word ).size.toString )
+				val zipped = for( word <- onewords ) yield ( word, allwords.filter( _==word ).size.toString )
 
-				if(zipped.size>0) println(zipped.flatten.mkString(" "))
+				if( zipped.size>0 ) println(zipped.filter( _._2.toInt>=minc ).map( x => List(x._1,x._2) ).flatten.mkString(" "))
 				else ()
 
 			case _ =>
@@ -55,6 +58,7 @@ object test{
 	def main(args: Array[String]) = {
 
 		val parser = new scopt.OptionParser[Args]("ParseWikipediaXML"){
+
 			opt[String]('i',"input-file") action { (x,c) =>
 				c.copy(ifwiki = x)
 			} text ("Input File(Wikipedia)")
@@ -70,6 +74,18 @@ object test{
 			opt[String]('t',"output-title-file") action { (x,c) =>
 				c.copy(oftitle = x)
 			} text ("Output File(Title)")
+
+			opt[Int]('m',"min-word-length") action { (x,c) =>
+				c.copy(minl = x.toInt)
+			} text ("Minimum word length")
+
+			opt[Int]('x',"max-word-length") action { (x,c) =>
+				c.copy(maxl = x.toInt)
+			} text ("Maximum word length")
+
+			opt[Int]('c',"min-word-count") action { (x,c) =>
+				c.copy(minc = x.toInt)
+			} text ("Minimum word count")
 
 			help("help") text("print this usage text.")
 		}
@@ -95,7 +111,7 @@ object test{
 
 							for{ node <- XML.loadString( page.toString ) \ "revision" \ "text"
 								 text = node text }{
-								actor ! new Text(text,dictionary)
+								actor ! new Text(text,dictionary,c.minl,c.maxl,c.minc)
 							}
 							page.clear
 						}
