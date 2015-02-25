@@ -7,6 +7,8 @@ import akka.actor.Props
 
 object test{
 
+	import java.io.{ FileOutputStream=>FileStream, OutputStreamWriter=>StreamWriter }
+
 	case class Args(
 		ifwiki: String = "",
 		ifdict: String = "",
@@ -17,22 +19,22 @@ object test{
 		minc: Int = 1
 	)
 
-	case class Text(text:String, mapDict:Map[String,String], minl:Int, maxl:Int, minc:Int)
+	case class Text(text:String, mapDict:Map[String,String], minl:Int, maxl:Int, minc:Int, writer:StreamWriter)
 
 	class bowActor extends Actor {
 		def receive = {
-			case Text(text,mapDict,minl,maxl,minc) =>
+			case Text(text,mapDict,minl,maxl,minc,writer) =>
 
 				// allwords is list
 				// exclude stopwords and words that include symbols
-				val allwords = text.split( Array(' ',',','.') ).filter( x => x.size>=minl && x.size<=maxl && (!stopword(x)) && allAlnum(x) ).map( x => if( mapDict.get(x)==None ){ x }else{ mapDict.get(x).get } )
+				val allwords = text.split( Array(' ',',','.') ).filter( x => x.size>=minl && x.size<=maxl && (!stopword(x)) && allAlnum(x) ).map( x => mapDict.get(x) match { case None =>  x; case Some(v) => v } )
 
 				// onewords is list in which redundant words are excluded
 				val onewords = allwords.toSet.toList
 
 				val zipped = for( word <- onewords ) yield ( word, allwords.filter( _==word ).size.toString )
 
-				if( zipped.size>0 ) println(zipped.filter( _._2.toInt>=minc ).map( x => List(x._1,x._2) ).flatten.mkString(" "))
+				if( zipped.size>0 ) synchronized { writer.write( zipped.filter( _._2.toInt>=minc ).map( x => List(x._1,x._2) ).flatten.mkString(""," ","\n") ) }
 				else ()
 
 			case _ =>
@@ -59,15 +61,15 @@ object test{
 
 		val parser = new scopt.OptionParser[Args]("ParseWikipediaXML"){
 
-			opt[String]('i',"input-file") action { (x,c) =>
+			opt[String]('i',"input-file") required() action { (x,c) =>
 				c.copy(ifwiki = x)
 			} text ("Input File(Wikipedia)")
 
-			opt[String]('d',"dict-file") action { (x,c) =>
+			opt[String]('d',"dict-file") required() action { (x,c) =>
 				c.copy(ifdict = x)
 			} text ("Input File(Dictionary)")
 
-			opt[String]('s',"output-cont-file") action { (x,c) =>
+			opt[String]('s',"output-cont-file") required() action { (x,c) =>
 				c.copy(ofcont = x)
 			} text ("Output File(Contents)")
 
@@ -93,10 +95,14 @@ object test{
 		val system = ActorSystem("system")
 		val actor = system.actorOf(Props[bowActor],"bow")
 
+
 		parser.parse(args, Args()) match {
 			case Some(c) => {
 
 				val dictionary = readDict(c.ifdict)
+
+				val fs = new FileStream( c.ofcont, true )
+				val writer = new StreamWriter( fs, "UTF-8" )
 
 				val page = new StringBuilder
 				val s = Source.fromFile(c.ifwiki)
@@ -111,7 +117,7 @@ object test{
 
 							for{ node <- XML.loadString( page.toString ) \ "revision" \ "text"
 								 text = node text }{
-								actor ! new Text(text,dictionary,c.minl,c.maxl,c.minc)
+								actor ! new Text(text,dictionary,c.minl,c.maxl,c.minc,writer)
 							}
 							page.clear
 						}
