@@ -13,9 +13,9 @@ class BOW implements Runnable {
 	private final static Object lock = new Object();
 
 	String pageStr;
-	Integer minl;
-	Integer maxl;
-	Integer minc;
+	Integer minl = 2;
+	Integer maxl = 64;
+	Integer minc = 1;
 
 	public BOW(String pageStr, Integer... margs){
 		this.pageStr = pageStr;
