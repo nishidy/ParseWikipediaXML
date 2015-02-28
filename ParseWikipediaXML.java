@@ -71,7 +71,7 @@ class BOW implements Runnable {
 
 		if(bowStr.length()>1){
 			try{
-				synchronized(lock){ bw.write(bowStr.toString()); }
+				synchronized(lock){ bw.write(bowBuf.toString()); bw.flush(); }
 			} catch (IOException e){
 				System.exit(12);
 			}
