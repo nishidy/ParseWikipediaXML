@@ -27,14 +27,24 @@ object test{
 
 				// allwords is list
 				// exclude stopwords and words that include symbols
-				val allwords = text.split( Array(' ',',','.') ).filter( x => x.size>=minl && x.size<=maxl && (!stopword(x)) && allAlnum(x) ).map( x => mapDict.get(x) match { case None =>  x; case Some(v) => v } )
+				val allwords =
+					text.split( Array(' ',',','.') ).
+					filter( x => x.size>=minl && x.size<=maxl && (!stopword(x)) && allAlnum(x) ).
+					map( x => mapDict.get(x) match { case None =>  x; case Some(v) => v } )
 
 				// onewords is list in which redundant words are excluded
 				val onewords = allwords.toSet.toList
 
-				val zipped = for( word <- onewords ) yield ( word, allwords.filter( _==word ).size.toString )
+				val zipped =
+					for( word <- onewords )
+						yield ( word, allwords.filter( _==word ).size.toString )
 
-				if( zipped.size>0 ) synchronized { writer.write( zipped.filter( _._2.toInt>=minc ).map( x => List(x._1,x._2) ).flatten.mkString(""," ","\n") ) }
+				if( zipped.size>0 )
+					synchronized {
+						writer.write( zipped.filter( _._2.toInt>=minc ).
+						map( x => List(x._1,x._2) ).
+						flatten.mkString(""," ","\n") )
+					}
 				else ()
 
 			case _ =>
@@ -124,6 +134,7 @@ object test{
 
 					}
 				} finally {
+					system.shutdown()
 					s.close
 				}
 			}

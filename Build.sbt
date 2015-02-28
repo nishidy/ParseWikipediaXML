@@ -13,3 +13,5 @@ resolvers += Resolver.sonatypeRepo("public")
 resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/"
 
 libraryDependencies += "com.typesafe.akka" %% "akka-actor" % "2.1.1"
+
+excludeFilter in unmanagedSources := HiddenFileFilter || "*.java"
