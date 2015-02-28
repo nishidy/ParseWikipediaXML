@@ -14,12 +14,14 @@ class BOW implements Runnable {
 	private final static Object lock = new Object();
 
 	String pageStr;
+	String categoryRe;
 	Integer minl = 2;
 	Integer maxl = 64;
 	Integer minc = 1;
 
-	public BOW(String pageStr, Integer... margs){
+	public BOW(String pageStr, String categoryRe, Integer... margs){
 		this.pageStr = pageStr;
+		this.categoryRe = categoryRe;
 		this.minl = margs[0];
 		this.maxl = margs[1];
 		this.minc = margs[2];
@@ -29,15 +31,15 @@ class BOW implements Runnable {
 
 		Map<String,Integer> mapBow = new HashMap<String,Integer>();
 
-		Pattern p = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$");
+		Pattern pattern = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$");
 		List<String> notWord = new ArrayList<String>();
 
 		for(String word: text.split(" ")){
 
 			if(notWord.contains(word)) continue;
 
-			Matcher m = p.matcher(word);
-			if(!m.find()){
+			Matcher matcher = pattern.matcher(word);
+			if(!matcher.find()){
 				notWord.add(word);
 				continue;
 			}
@@ -60,16 +62,16 @@ class BOW implements Runnable {
 		}
 		
 		int count=0;
-		StringBuffer bowStr = new StringBuffer("");
+		StringBuffer bowBuf = new StringBuffer("");
 		for(Map.Entry<String,Integer> entry: mapBow.entrySet()){
 			if(entry.getValue()<minc) continue;
-			if(count>0) bowStr.append(" ");
-			bowStr.append(String.format("%s %d",entry.getKey(),entry.getValue()));
+			if(count>0) bowBuf.append(" ");
+			bowBuf.append(String.format("%s %d",entry.getKey(),entry.getValue()));
 			count+=1;
 		}
-		bowStr.append("\n");
+		bowBuf.append("\n");
 
-		if(bowStr.length()>1){
+		if(bowBuf.length()>1){
 			try{
 				synchronized(lock){ bw.write(bowBuf.toString()); bw.flush(); }
 			} catch (IOException e){
@@ -80,11 +82,27 @@ class BOW implements Runnable {
 	}
 
 	public void run(){
-		Pattern p = Pattern.compile("<text[^<>]*>([^<>]+)</text>");
-		Matcher m = p.matcher(pageStr);
+		Pattern cpattern = Pattern.compile("\\[\\[:*Category:([^\\[\\]\\|]+)\\|*[^\\[\\]]*\\]\\]");
+		Matcher cmatcher = cpattern.matcher(pageStr);
+
+		Boolean categoryMatch = false;
+		while(cmatcher.find()){
+			String categoryStr = cmatcher.group(1);
+			Pattern patternCategory = Pattern.compile(categoryRe);
+			Matcher matcherCategory = patternCategory.matcher(categoryStr);
+			if(matcherCategory.find()){
+				categoryMatch = true;
+				break;
+			}
+		}
+		if(!categoryMatch) return;
+
+		Pattern pattern = Pattern.compile("<text[^<>]*>([^<>]+)</text>");
+		Matcher matcher = pattern.matcher(pageStr);
+
 		String text = "";
-		if(m.find()){
-			text = m.group(1);
+		if(matcher.find()){
+			text = matcher.group(1);
 			bowCreater(text);
 		}
 	}
@@ -104,11 +122,12 @@ public class ParseWikipediaXML {
 		options.addOption("m","min-word-len",true,"Minimum word length");
 		options.addOption("x","max-word-len",true,"Maxmum word length");
 		options.addOption("c","min-word-count",true,"Minimum word count");
+		options.addOption("g","category-regex",true,"Category in regular expression");
 
 		HelpFormatter help = new HelpFormatter();
 
-		String ifwiki,ifdict,ofcont,oftitle;
-		ifwiki=ifdict=ofcont=oftitle="";
+		String ifwiki,ifdict,ofcont,oftitle,categoryRe;
+		ifwiki=ifdict=ofcont=oftitle=categoryRe="";
 
 		Integer minl,maxl,minc;
 		minl=maxl=minc=0;
@@ -133,6 +152,9 @@ public class ParseWikipediaXML {
 			if(cl.hasOption("x")) maxl = Integer.parseInt(cl.getOptionValue("x"));
 			if(cl.hasOption("c")) minc = Integer.parseInt(cl.getOptionValue("c"));
 
+			if(cl.hasOption("g")) categoryRe = cl.getOptionValue("g");
+			else categoryRe = ".*";
+
 		} catch (ParseException e){
 			help.printHelp("ParseWikipediaXML",options);
 			System.exit(1);
@@ -153,7 +175,7 @@ public class ParseWikipediaXML {
 				String cols[] = line.split("\\t\\t");
 				BOW.mapDict.put(cols[0],cols[1]);
 			}
-		}catch (IOException e){
+		} catch (IOException e){
 			System.exit(11);
 		}
 
@@ -175,7 +197,7 @@ public class ParseWikipediaXML {
 				if(startFlag){
 					pageBuf.append(line);
 					if(endFlag){
-						ex.execute(new BOW(pageBuf.toString(),minl,maxl,minc));
+						ex.execute(new BOW(pageBuf.toString(),categoryRe,minl,maxl,minc));
 						startFlag=endFlag=false;
 						pageBuf.delete(0, pageBuf.length());
 					}
