@@ -41,6 +41,9 @@ class BOW implements Runnable {
 				continue;
 			}
 
+			if(word.length()<minl) continue;
+			if(word.length()>maxl) continue;
+
 			String bowWord;
 			if(mapDict.containsKey(word)){
 				bowWord=mapDict.get(word);
@@ -58,6 +61,7 @@ class BOW implements Runnable {
 		int count=0;
 		StringBuffer bowStr = new StringBuffer("");
 		for(Map.Entry<String,Integer> entry: mapBow.entrySet()){
+			if(entry.getValue()<minc) continue;
 			if(count>0) bowStr.append(" ");
 			bowStr.append(String.format("%s %d",entry.getKey(),entry.getValue()));
 			count+=1;
