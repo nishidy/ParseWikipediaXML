@@ -184,6 +184,8 @@ public class ParseWikipediaXML {
 
 		} catch (IOException e){
 			System.exit(10);
+		} finally {
+			ex.shutdown();
 		}
 
 	}
