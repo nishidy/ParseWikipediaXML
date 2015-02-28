@@ -10,6 +10,7 @@ import org.apache.commons.cli.*;
 class BOW implements Runnable {
 
 	static Map<String,String> mapDict = new HashMap<String,String>();
+	static BufferedWriter bw;
 	private final static Object lock = new Object();
 
 	String pageStr;
@@ -69,7 +70,11 @@ class BOW implements Runnable {
 		bowStr.append("\n");
 
 		if(bowStr.length()>1){
-			synchronized(lock){ System.out.print(bowStr); }
+			try{
+				synchronized(lock){ bw.write(bowStr.toString()); }
+			} catch (IOException e){
+				System.exit(12);
+			}
 		}
 
 	}
@@ -119,7 +124,7 @@ public class ParseWikipediaXML {
 			else throw new ParseException("d is not specified.");
 
 			if(cl.hasOption("s")) ofcont = cl.getOptionValue("s");
-			//else throw new ParseException("s is not specified.");
+			else throw new ParseException("s is not specified.");
 
 			if(cl.hasOption("t")) oftitle= cl.getOptionValue("t");
 			//else throw new ParseException("t is not specified.");
@@ -131,6 +136,12 @@ public class ParseWikipediaXML {
 		} catch (ParseException e){
 			help.printHelp("ParseWikipediaXML",options);
 			System.exit(1);
+		}
+
+		try{
+			BOW.bw = new BufferedWriter(new FileWriter(ofcont));
+		} catch (IOException e){
+			System.exit(13);
 		}
 
 		ExecutorService ex = Executors.newFixedThreadPool(2);
