@@ -29,7 +29,7 @@ object test{
 				// exclude stopwords and words that include symbols
 				val allwords =
 					text.split( Array(' ',',','.') )
-					.filter( x => (!stopword(x)) && allAlnum(x) )
+					.filter( x => x.size>1 && (!stopword(x)) && allAlnum(x) )
 					.map( x => mapDict.get(x) match { case None =>  x; case Some(v) => v } )
 
 				// onewords is list in which redundant words are excluded
