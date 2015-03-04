@@ -146,6 +146,11 @@ func main() {
 	flag.Parse()
 
 	if len(os.Args[1:]) == 0 {
+		fmt.Println("Run with -h to show help.")
+		os.Exit(1)
+	}
+
+	if *ifwiki == "" {
 
 		fmt.Println("Dowload the latest list of wikipedia databases for articles.")
 
