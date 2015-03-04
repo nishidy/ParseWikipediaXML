@@ -36,6 +36,7 @@ class BOW implements Runnable {
 		Pattern pattern = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$");
 		List<String> notWord = new ArrayList<String>();
 
+		int wordcount = 0;
 		for(String word: text.split(" ")){
 
 			if(stopwords.contains(word)) continue;
@@ -63,7 +64,10 @@ class BOW implements Runnable {
 			}else{
 				mapBow.put(bowWord,1);
 			}
+			wordcount+=1;
+			if(wordcount>maxl) return;
 		}
+		if(wordcount<minl) return;
 
 		int count=0;
 		StringBuffer bowBuf = new StringBuffer("");
@@ -123,9 +127,9 @@ public class ParseWikipediaXML {
 		options.addOption("d","dict-file",true,"Input File(Dictionary)");
 		options.addOption("s","cont-file",true,"Output File(Contents)");
 		options.addOption("t","title-file",true,"Output File(Title)");
-		options.addOption("m","min-word-len",true,"Minimum word length");
-		options.addOption("x","max-word-len",true,"Maxmum word length");
-		options.addOption("c","min-word-count",true,"Minimum word count");
+		options.addOption("m","min-page-words",true,"Minimum number of words that a page should have");
+		options.addOption("x","max-page-words",true,"Maxmum number of words that a page should have");
+		options.addOption("c","min-word-count",true,"Minimum number that a word should have");
 		options.addOption("g","category-regex",true,"Category in regular expression");
 
 		HelpFormatter help = new HelpFormatter();
