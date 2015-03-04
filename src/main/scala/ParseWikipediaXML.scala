@@ -4,6 +4,11 @@ import scala.language.postfixOps
 import akka.actor.Actor
 import akka.actor.ActorSystem
 import akka.actor.Props
+import akka.pattern.ask
+import akka.util.Timeout
+import scala.concurrent.Await
+import scala.concurrent.duration._
+import java.util.concurrent._
 
 object test{
 
@@ -49,6 +54,8 @@ object test{
 						}
 					else ()
 				}
+
+			case "Finished" => sender ! "Finished"
 
 			case _ =>
 
@@ -103,6 +110,7 @@ object test{
 			} text ("Minimum number that a word should have")
 
 			help("help") text("print this usage text.")
+
 		}
 
 		val system = ActorSystem("system")
@@ -137,6 +145,15 @@ object test{
 
 					}
 				} finally {
+					println("Finished to read from the input file.")
+					try {
+						implicit val timeout = Timeout(10,MINUTES)
+						val future = Await.result( actor ? "Finished", timeout.duration )
+					} catch {
+						case e :TimeoutException => println("Too long to wait. Timeout happened.")
+					}
+
+					println("Finished to write to the output file.")
 					system.shutdown()
 					s.close
 				}
