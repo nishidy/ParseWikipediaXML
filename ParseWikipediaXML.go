@@ -213,13 +213,13 @@ func main() {
 	}
 
 	cpu := runtime.NumCPU()
-	//fmt.Printf("# of CPU is %d\n", cpu)
+	fmt.Printf("# of CPU is %d\n", cpu)
 	if cpu > 1 {
 		cpu--
 	}
 	runtime.GOMAXPROCS(cpu)
 
-	cp := make(chan []string, cpu)
+	cp := make(chan []string, cpu*1000) // Make channel as big as possible
 	defer close(cp)
 
 	cf := make(chan int, 1) // Use this as mutex to lock writting
@@ -345,4 +345,13 @@ func main() {
 			eflag = false
 		}
 	}
+
+	fmt.Println("Finished reading from the input file.")
+
+	for len(cp) > 0 {
+	}
+	for len(cf) > 0 {
+	}
+
+	fmt.Println("Finished writing to the output file.")
 }
