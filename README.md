@@ -1,7 +1,7 @@
 #Purpose
 This is to extract the content of pages from Wikipedia database provided in XML and make [bag-of-words](http://en.wikipedia.org/wiki/Bag-of-words_model).
 
-You can give your own conditions, such as the number of words that a page should have and/or the search word that should be found in title of a page etc.
+You can give your own conditions, such as the number of words that a page should have and/or the searching regular expression that should be found in a category tag of a page, etc.
 
 #Compilation
 
