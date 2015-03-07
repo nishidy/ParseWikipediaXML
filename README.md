@@ -1,25 +1,29 @@
 #Purpose
-To extract the content and the title in pages from Wikipedia database provided in xml under some conditions in order to make [bug-of-words](http://en.wikipedia.org/wiki/Bag-of-words_model) with threads to maximize CPUs.
-Words and their counts how many times they appear in the page contents are extracted together and titles are also saved in separated output file.
-You can specify a name of category to be extracted, maximum/minimum number of words and so on.
+This is to extract the content of pages from Wikipedia database provided in XML and make [bag-of-words](http://en.wikipedia.org/wiki/Bag-of-words_model).
 
-#Requirement
-You need to install boost-{thread/regex}.
-and you need a dictionary for parsing English pages available at http://www.cis.upenn.edu/~xtag/swrelease.html.
-Specifically, please download and uncompress ftp://ftp.cis.upenn.edu/pub/xtag/morph-1.5/morph-1.5.tar.gz and then you'll find data/morph_english.flat.
-It will let this program convert words to original form.
-This tool currently supports parsing Japanese pages, which needs to install R and RMeCab with mecab-ipadic.
-
-Now, you don't need to put stopwords.text which represents words to be ignored.
-They are included in code.
+You can give your own conditions, such as the number of words that a page should have and/or the search word that should be found in title of a page etc.
 
 #Compilation
-To compile on Fedora 20 with g++ 4.8.3 and boost-1.54.0:  
-$g++ ParseWikipediaXML.cpp -std=c++11 -lboost_thread -lboost_regex -o ParseWikipediaXML
+```
+$ g++ ParseWikipediaXML.cpp -std=c++11 -lboost_thread-mt -lboost_regex -o ParseWikipediaXML
+```
+
+```
+$ javac -cp "/usr/share/java/commons-cli-1.2.jar" ParseWikipediaXML.java
+```
+
+```
+$ go build -o ParseWikipediaXML_go ParseWikipediaXML.go
+```
+
+```
+$ sbt compile
+```
 
 #Usage
+Note that only C++ can handle Japanese database.
 
-```cpp:cpp
+```
 $ ./ParseWikipediaXML
 Usage:./ParseWikipediaXML -i File(Wikipedia) [-d File(dictionary)] -s File(Sentence) -t File(Title) -m min_words -x max_words -c min_word_count -g category [-v debug] -l [JP|EN] 
 Note:
@@ -27,20 +31,17 @@ Note:
  - debug message is shown by setting -v.
 ```
 
-```go:go
-$ ./ParseWikipediaXML_go --help
+```
+$ ./ParseWikipediaXML_go -h
 Usage of ./ParseWikipediaXML_go:
-  -c=2: min_word_count
+  -c=2: Minimum number that a word should have
   -d="": Input File(dictionary)
   -g=".*": Category(regular expression)
   -i="": Input File(Wikipedia)
   -j=false: Generate bug-of-words in JSON format
-  -m=2: min_word_length
+  -m=1: Minimum number of words that a page should have
   -s="": Output File(Contents)
   -t="": Output File(Title)
-  -x=256: max_word_length
+  -x=65535: Maximum number of words that a page should have
 ```
-
-#Note
-This uses cpu_set_t but currently I do not know if Max OS provides it.
 
