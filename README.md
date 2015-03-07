@@ -3,6 +3,8 @@ This is to extract the content of pages from Wikipedia database provided in XML 
 
 You can give your own conditions, such as the number of words that a page should have and/or the searching regular expression that should be found in a category tag of a page, etc.
 
+This can work on multiple CPUs effectively.
+
 #Compilation
 
 ```
