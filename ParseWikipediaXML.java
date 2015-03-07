@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.concurrent.*;
 import org.apache.commons.cli.*;
+import java.lang.Runtime;
 
 class BOW implements Runnable {
 
@@ -174,7 +175,9 @@ public class ParseWikipediaXML {
 			System.exit(13);
 		}
 
-		ExecutorService ex = Executors.newFixedThreadPool(2);
+		int cpu = Runtime.getRuntime().availableProcessors();
+		System.out.printf("# of CPU is %d.\n",cpu);
+		ExecutorService ex = Executors.newFixedThreadPool(cpu);
 
 		String line;
 		try( BufferedReader br = new BufferedReader(new FileReader(ifdict)) ){
