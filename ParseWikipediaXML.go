@@ -212,14 +212,16 @@ func main() {
 		stop = append(stop, word)
 	}
 
+	var numgor = runtime.NumGoroutine()
+
 	cpu := runtime.NumCPU()
 	fmt.Printf("# of CPU is %d\n", cpu)
-	if cpu > 1 {
-		cpu--
+	if cpu <= nmgor {
+		cpu = numgor + 1
 	}
 	runtime.GOMAXPROCS(cpu)
 
-	cp := make(chan []string, cpu)
+	cp := make(chan []string, cpu-numgor)
 	//defer close(cp)
 
 	cf := make(chan int, 1) // Use this as mutex to lock writting
@@ -238,7 +240,6 @@ func main() {
 		}()
 	}
 
-	var numgor = runtime.NumGoroutine()
 	for i := 0; i < cpu; i++ {
 		go func() {
 			for {
