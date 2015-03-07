@@ -4,6 +4,7 @@ This is to extract the content of pages from Wikipedia database provided in XML 
 You can give your own conditions, such as the number of words that a page should have and/or the search word that should be found in title of a page etc.
 
 #Compilation
+
 ```
 $ g++ ParseWikipediaXML.cpp -std=c++11 -lboost_thread-mt -lboost_regex -o ParseWikipediaXML
 ```
@@ -13,6 +14,7 @@ $ javac -cp "/usr/share/java/commons-cli-1.2.jar" ParseWikipediaXML.java
 ```
 
 ```
+$ go get github.com/PuerkitoBio/goquery
 $ go build -o ParseWikipediaXML_go ParseWikipediaXML.go
 ```
 
