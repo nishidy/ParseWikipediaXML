@@ -220,13 +220,10 @@ func main() {
 	runtime.GOMAXPROCS(cpu)
 
 	cp := make(chan []string, cpu)
-	defer close(cp)
+	//defer close(cp)
 
 	cf := make(chan int, 1) // Use this as mutex to lock writting
 	defer close(cf)
-
-	var read bool = false
-	var finished int = 0
 
 	//var m sync.Mutex // No need to lock for channel
 
@@ -246,6 +243,10 @@ func main() {
 			for {
 
 				str := strings.Join(<-cp, "")
+				if str == "" {
+					break
+				}
+
 				var regstr string
 
 				regstr = "<title>(.*)</title>"
@@ -310,9 +311,6 @@ func main() {
 				}
 				_ = <-cf
 
-				if read && len(cp) == 0 {
-					finished++
-				}
 			}
 		}()
 	}
@@ -355,9 +353,12 @@ func main() {
 
 	fmt.Println("Finished reading from the input file.")
 
-	read = true
+	for len(cp) > 0 {
+	}
 
-	for finished < cpu {
+	close(cp)
+
+	for runtime.NumGoroutine() > 0 {
 	}
 
 	fmt.Println("Finished writing to the output file.")
