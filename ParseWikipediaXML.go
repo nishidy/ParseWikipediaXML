@@ -238,6 +238,7 @@ func main() {
 		}()
 	}
 
+	var numgor = runtime.NumGoroutine
 	for i := 0; i < cpu; i++ {
 		go func() {
 			for {
@@ -358,7 +359,7 @@ func main() {
 
 	close(cp)
 
-	for runtime.NumGoroutine() > 0 {
+	for runtime.NumGoroutine() > numgor {
 	}
 
 	fmt.Println("Finished writing to the output file.")
