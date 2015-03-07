@@ -216,7 +216,7 @@ func main() {
 
 	cpu := runtime.NumCPU()
 	fmt.Printf("# of CPU is %d\n", cpu)
-	if cpu <= nmgor {
+	if cpu <= numgor {
 		cpu = numgor + 1
 	}
 	runtime.GOMAXPROCS(cpu)
