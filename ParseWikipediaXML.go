@@ -238,7 +238,7 @@ func main() {
 		}()
 	}
 
-	var numgor = runtime.NumGoroutine
+	var numgor = runtime.NumGoroutine()
 	for i := 0; i < cpu; i++ {
 		go func() {
 			for {
