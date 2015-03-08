@@ -27,6 +27,7 @@ using namespace boost;
 #include <sys/syscall.h>
 #include <sys/types.h>
 
+#include <mecab.h>
 
 pid_t gettid(void)
 {
@@ -236,12 +237,13 @@ class Threads : public Common, public Params
 	static void read_stopwords();
 	static void read_dict(string);
 
-	string convert_text(string,string);
+	string convert_text(string);
 	string convert_text_en(string);
-	string convert_text_jp(string,string);
+	string convert_text_jp(string);
+	string convert_text_jp_r(string,string);
 	string count_words(string,int*);
-	string count_words_en(string,int*);
-	string count_words_jp(string,int*);
+	string count_words_comm(string,int*);
+	string count_words_jp_r(string,int*);
 
 	bool category_check(string);
 	bool title_check(string);
@@ -324,7 +326,7 @@ string Threads::parse_text(string title, string page){
 		return "";
 	}
 
-	text=convert_text(text,title);
+	text=convert_text(text);
 	if(text.size()==0){
 		if(Params::debug)
 			cerr<<"[Info: No content after convert. "<<title<<" ]"<<endl;
@@ -413,11 +415,11 @@ void Threads::read_dict(string dictionary){
 	}
 }
 
-string Threads::convert_text(string text,string title){
+string Threads::convert_text(string text){
 	if(Params::lang=="EN"){
 		return convert_text_en(text);
 	}else if(Params::lang=="JP"){
-		return convert_text_jp(text,title);
+		return convert_text_jp(text);
 	}else{
 		return  "";
 	}
@@ -458,7 +460,33 @@ string Threads::convert_text_en(string text){
 	return res;
 }
 
-string Threads::convert_text_jp(string text,string title){
+string Threads::convert_text_jp(string text){
+
+	MeCab::Tagger *tagger = MeCab::createTagger("");
+	char *result = (char*)tagger->parse(text.c_str());
+
+	char *line;
+	string first,res;
+	char second[255] = "";
+
+	stringstream ss;
+
+	line = strtok(result,"\n");
+	while(line != NULL){
+		ss<<line;
+		ss>>first>>second;
+		if(strcmp(second,"助詞")<0){
+			res+=first+" ";
+		}
+		line = strtok(NULL,"\n");
+		ss.str(""); ss.clear();
+	}
+
+	return res;
+
+}
+
+string Threads::convert_text_jp_r(string text,string title){
 
 	string res="";
 
@@ -492,6 +520,8 @@ string Threads::convert_text_jp(string text,string title){
 }
 
 string Threads::count_words(string text, int* n){
+	return count_words_comm(text,n);
+	/*
 	if(Params::lang=="EN"){
 		return count_words_en(text,n);
 	}else if(Params::lang=="JP"){
@@ -499,9 +529,10 @@ string Threads::count_words(string text, int* n){
 	}else{
 		return  "";
 	}
+	*/
 }
 
-string Threads::count_words_en(string text,int* n){
+string Threads::count_words_comm(string text,int* n){
 
 	unordered_map<string,int> words;
 	stringstream ss(text);
@@ -530,7 +561,7 @@ string Threads::count_words_en(string text,int* n){
 	return res;
 }
 
-string Threads::count_words_jp(string text,int* n){
+string Threads::count_words_jp_r(string text,int* n){
 
 	unordered_map<string,int> words;
 	stringstream ss(text);

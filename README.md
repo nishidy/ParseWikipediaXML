@@ -8,7 +8,7 @@ This can work on multiple CPUs effectively.
 #Compilation
 
 ```
-$ g++ ParseWikipediaXML.cpp -std=c++11 -lboost_thread-mt -lboost_regex -o ParseWikipediaXML
+$ g++ ParseWikipediaXML.cpp -std=c++11 -lboost_thread-mt -lboost_regex -lmecab -o ParseWikipediaXML
 ```
 
 ```
