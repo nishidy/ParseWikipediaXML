@@ -465,21 +465,41 @@ string Threads::convert_text_jp(string text){
 	MeCab::Tagger *tagger = MeCab::createTagger("");
 	char *result = (char*)tagger->parse(text.c_str());
 
-	char *line;
+	char *line, *word;
 	string first,res;
 	char second[255] = "";
 
 	stringstream ss;
 
-	line = strtok(result,"\n");
-	while(line != NULL){
+	char *ptr1, *ptr2;
+	while((line=strtok_r(result,"\n",&ptr1))!=NULL){
+
 		ss<<line;
 		ss>>first>>second;
-		if(strcmp(second,"助詞")<0){
+
+		if(strstr(second,"動詞")==second){
+			int c = 1;
+			while((word=strtok_r(line,",",&ptr2))!=NULL){
+				if( c==7 ){
+					res+=(string)word+" ";
+				}
+				c++;
+				line = NULL;
+			}
+		}
+
+		else if(strstr(second,"形容詞")==second){
 			res+=first+" ";
 		}
-		line = strtok(NULL,"\n");
+
+		else if(strstr(second,"名詞")==second){
+			res+=first+" ";
+		}
+
+		line = strtok(line,"\n");
 		ss.str(""); ss.clear();
+
+		result = NULL;
 	}
 
 	return res;
