@@ -56,11 +56,11 @@ class bowThread(threading.Thread):
 			if docCount < args.minw or docCount > args.maxw:
 				pass
 			else:
-				f = open(args.ofcont,'a')
 				cont = reduce(lambda i,t: i+t[0]+" "+str(t[1])+" " if t[1] >= args.minc else i+"", docDict.iteritems(), "").rstrip()
 				if len(cont) > 1:
 					lock.acquire()
-					f.write(cont+"\n")
+					with open(args.ofcont,'a') as f:
+						f.write(cont+"\n")
 					lock.release()
 
 			# put() counts up and task_done() counts down
