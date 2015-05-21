@@ -3,6 +3,8 @@ use warnings;
 use Getopt::ArgParse;
 use List::Util qw/reduce/;
 use Data::Dumper;
+use threads;
+use Thread::Queue;
 
 my $ap = Getopt::ArgParse->new_parser(
 	prog => 'ParseWikipediaXML',
@@ -36,8 +38,24 @@ while(<$fh>){
 
 close $fh;
 
+
+my $queue = new Thread::Queue;
+my $outmtx :shared;
+my $finish :shared = 0;
+
 open $fh, '<', $args->ifwiki or die "Cannot open $args->ifwiki:$!";
-open OUT, '>', $args->ofcont or die "Cannot open $args->ofcont:$!";
+open my $fout, '>', $args->ofcont or die "Cannot open $args->ofcont:$!";
+
+my @threads;
+
+my $cpus = `cat /proc/cpuinfo | grep processor | wc -l`;
+$cpus = chomp($cpus) == 1 ? 1 : chomp($cpus)-1;
+for(my $c=0;$c<$cpus;$c++){
+	my $th = threads->create(\&bowCreate);
+	push(@threads, $th);
+}
+#my $nthread = @threads;
+
 my $sflag=0;
 my $eflag=0;
 my $page="";
@@ -46,53 +64,69 @@ while(<$fh>){
 	$eflag=1 if index($_, "</page>") > -1;
 	$page.=$_ if $sflag;
 	if($eflag){
-		&bowCreate;
+		$queue->enqueue($page);
 		$sflag=$eflag=0;
 		$page="";
 	}
 }
+$finish = 1;
+
+$_->join() foreach @threads;
 
 sub bowCreate {
 
-	#my $recateg = qr/<title[^<>]*>($args->recateg)<\/title>/;
-	my $recateg = "<title[^<>]*>(".$args->recateg.")<\/title>";
-	return unless $page =~ /$recateg/;
+	for(;;){
 
-	my $text;
-	if( $page =~ /<text[^<>]*>([^<>]+)<\/text>/ ){
-		$text = $1;
-	}else{
-		return;
-	}
-
-	my %hashDoc;
-	my $docCount=0;
-	my @words = split(/ /,$text);
-	foreach my $word ( map { chomp($_); lc($_) } @words ) {
-		next unless $word =~ "^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]\$";
-		next if grep { $_ eq $word } @stopwords;
-
-		my $dword;
-		if(exists $hashDict{$word}){
-			$dword = $hashDict{$word};
-		}else{
-			$dword = $word;
+		if($finish){
+			last unless $queue->pending;
 		}
 
-		if(exists $hashDoc{$dword}){
-			$hashDoc{$dword}++;
+		my $_page = $queue->dequeue();
+
+		#my $recateg = qr/<title[^<>]*>($args->recateg)<\/title>/;
+		my $recateg = "<title[^<>]*>(".$args->recateg.")<\/title>";
+		next unless $_page =~ /$recateg/;
+
+		my $text;
+		if( $_page =~ /<text[^<>]*>([^<>]+)<\/text>/ ){
+			$text = $1;
 		}else{
-			$hashDoc{$dword}=1;
+			next;
 		}
-		$docCount++;
+
+		my %hashDoc;
+		my $docCount=0;
+		my @words = split(/ /,$text);
+		foreach my $word ( map { chomp($_); lc($_) } @words ) {
+			next unless $word =~ "^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]\$";
+			next if grep { $_ eq $word } @stopwords;
+
+			my $dword;
+			if(exists $hashDict{$word}){
+				$dword = $hashDict{$word};
+			}else{
+				$dword = $word;
+			}
+
+			if(exists $hashDoc{$dword}){
+				$hashDoc{$dword}++;
+			}else{
+				$hashDoc{$dword}=1;
+			}
+			$docCount++;
+		}
+		next if $docCount < $args->minw or $docCount > $args->maxw;
+
+		my $output = reduce { $hashDoc{$b} >= $args->minc ? defined($a) ? $a." ".$b." ".$hashDoc{$b} : $b." ".$hashDoc{$b} : $a } undef, sort{ $hashDoc{$b} <=> $hashDoc{$a} } keys %hashDoc;
+
+		{
+			lock($outmtx);
+			print $fout $output."\n" if defined($output);
+		}
+
 	}
-	return if $docCount < $args->minw or $docCount > $args->maxw;
-
-	my $output = reduce { $hashDoc{$b} >= $args->minc ? defined($a) ? $a." ".$b." ".$hashDoc{$b} : $b." ".$hashDoc{$b} : $a } undef, sort{ $hashDoc{$b} <=> $hashDoc{$a} } keys %hashDoc;
-	print OUT $output."\n" if defined($output);
-
 }
 
-close OUT;
+close $fout;
 close $fh;
 
