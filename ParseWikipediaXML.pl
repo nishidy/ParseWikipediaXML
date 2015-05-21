@@ -26,7 +26,8 @@ my $stopword="a,able,about,across,after,all,almost,also,am,among,an,and,any,are,
 my @stopwords=split(/,/,$stopword);
 
 my %hashDict;
-open my $fh, '<', $args->ifdict or die "Cannot open $args->ifdict :$!";
+my $fh;
+open $fh, '<', $args->ifdict or die "Cannot open $args->ifdict :$!";
 
 while(<$fh>){
 	if( index($_,";;;") == -1 ){
@@ -38,13 +39,13 @@ while(<$fh>){
 
 close $fh;
 
+my $fout;
+open $fout, '>', $args->ofcont or die "Cannot open $args->ofcont:$!";
+open $fh, '<', $args->ifwiki or die "Cannot open $args->ifwiki:$!";
 
 my $queue = new Thread::Queue;
 my $outmtx :shared;
 my $finish :shared = 0;
-
-open $fh, '<', $args->ifwiki or die "Cannot open $args->ifwiki:$!";
-open my $fout, '>', $args->ofcont or die "Cannot open $args->ofcont:$!";
 
 my @threads;
 
@@ -73,6 +74,9 @@ $finish = 1;
 
 $_->join() foreach @threads;
 
+close $fout;
+close $fh;
+
 sub bowCreate {
 
 	for(;;){
@@ -81,14 +85,15 @@ sub bowCreate {
 			last unless $queue->pending;
 		}
 
-		my $_page = $queue->dequeue();
+		# "my" creates another $page in this scope
+		my $page = $queue->dequeue();
 
 		#my $recateg = qr/<title[^<>]*>($args->recateg)<\/title>/;
 		my $recateg = "<title[^<>]*>(".$args->recateg.")<\/title>";
-		next unless $_page =~ /$recateg/;
+		next unless $page =~ /$recateg/;
 
 		my $text;
-		if( $_page =~ /<text[^<>]*>([^<>]+)<\/text>/ ){
+		if( $page =~ /<text[^<>]*>([^<>]+)<\/text>/ ){
 			$text = $1;
 		}else{
 			next;
@@ -119,14 +124,12 @@ sub bowCreate {
 
 		my $output = reduce { $hashDoc{$b} >= $args->minc ? defined($a) ? $a." ".$b." ".$hashDoc{$b} : $b." ".$hashDoc{$b} : $a } undef, sort{ $hashDoc{$b} <=> $hashDoc{$a} } keys %hashDoc;
 
-		{
+		if(defined($output)){
 			lock($outmtx);
-			print $fout $output."\n" if defined($output);
+			print $fout $output."\n";
 		}
 
 	}
 }
 
-close $fout;
-close $fh;
 
