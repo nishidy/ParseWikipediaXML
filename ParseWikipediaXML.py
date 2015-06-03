@@ -3,6 +3,7 @@ import argparse
 import re
 import threading
 import Queue
+from collections import defaultdict
 
 parser = argparse.ArgumentParser(description="Parse WikipediaXML to make bag-of-words.")
 parser.add_argument('-i','--ifwiki',required=True)
@@ -38,21 +39,14 @@ class bowThread(threading.Thread):
 			match = re.search("<text[^<>]*>([^<>]+)</text>",page)
 			text = match.group(1)
 		
-			docDict={}
-			docCount=0
-		
+			docDict=defaultdict(int)
 			for word in text.split():
 				if len(word)==1: continue
 				if word in stopwords: continue
 				if re.search("^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$",word) is None: continue
-				if word in dictMap: word = dictMap[word]
+				docDict[dictMap.get(word,word)] += 1
 		
-				if word in docDict:
-					docDict[word] += 1
-				else:
-					docDict[word] = 1
-				docCount+=1
-		
+			docCount=sum(docDict.values())
 			if docCount < args.minw or docCount > args.maxw:
 				pass
 			else:
