@@ -7,26 +7,36 @@ This can work on multiple CPUs effectively.
 
 #Compilation
 
+## C++
 ```
 $ g++ ParseWikipediaXML.cpp -std=c++11 -lboost_thread-mt -lboost_regex -lmecab -o ParseWikipediaXML
 ```
 
+## Java
 ```
 $ javac -cp "/usr/share/java/commons-cli-1.2.jar" ParseWikipediaXML.java
 ```
 
+## Go
 ```
 $ go get github.com/PuerkitoBio/goquery
 $ go build -o ParseWikipediaXML_go ParseWikipediaXML.go
 ```
 
+## Scala
 ```
 $ sbt compile
 ```
 
-#Usage
-Note that only C++ can handle Japanese database.
+## Erlang
+```
+$ erlc parseWikipediaXML.erl 
+```
 
+#Usage
+Note that only C++ can handle Japanese database as of now.
+
+##C++
 ```
 $ ./ParseWikipediaXML
 Usage:./ParseWikipediaXML -i File(Wikipedia) [-d File(dictionary)] -s File(Sentence) -t File(Title) -m min_words -x max_words -c min_word_count -g category [-v debug] -l [JP|EN] 
@@ -35,6 +45,7 @@ Note:
  - debug message is shown by setting -v.
 ```
 
+##Go
 ```
 $ ./ParseWikipediaXML_go -h
 Usage of ./ParseWikipediaXML_go:
@@ -49,3 +60,7 @@ Usage of ./ParseWikipediaXML_go:
   -x=65535: Maximum number of words that a page should have
 ```
 
+##Erlang
+```
+$ erl -noshell -s parseWikipediaXML main -s init stop
+```
