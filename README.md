@@ -5,7 +5,7 @@ You can give your own conditions, such as the number of words that a page should
 
 This can work on multiple CPUs effectively.
 
-#Compilation
+#Installation & Compilation
 
 ## C++
 ```
@@ -26,6 +26,11 @@ $ go build -o ParseWikipediaXML_go ParseWikipediaXML.go
 ## Scala
 ```
 $ sbt compile
+```
+
+## Perl
+```
+$ sudo cpan install Getopt::ArgParse
 ```
 
 ## Erlang
@@ -58,6 +63,33 @@ Usage of ./ParseWikipediaXML_go:
   -s="": Output File(Contents)
   -t="": Output File(Title)
   -x=65535: Maximum number of words that a page should have
+```
+
+###Perl
+```
+$ perl ParseWikipediaXML.pl --help
+usage: ParseWikipediaXML --ofcont|-s --ifdict|-d --ifwiki|-i [--help|-h]
+[--ngram|-n] [--recateg|-g] [--minc|-c] [--maxw|-x] [--minw|-m] [--oftitle|-t]
+
+required named arguments:
+  --ofcont, -s OFCONT      Output file with bag-of-words of each page
+  --ifdict, -d IFDICT      Dictionary file as input 
+  --ifwiki, -i IFWIKI      Wikipedia XML file as input
+
+optional named arguments:
+  --help, -h               ? show this help message and exit
+  --ngram, -n NGRAM        ? The N number for N-gram
+                               Default: 1
+  --recateg, -g RECATEG    ? Regular expresion which each page should match with its
+                               category title
+                               Default: .*
+  --minc, -c MINC          ? Minimum number which each word should have in each page
+                               Default: 2
+  --maxw, -x MAXW          ? Maximum number of words which each page should contain
+                               Default: 65535
+  --minw, -m MINW          ? Minimum number of words which each page should contain
+                               Default: 1
+  --oftitle, -t OFTITLE    ? Output file with title of each page
 ```
 
 ##Erlang
