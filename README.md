@@ -65,7 +65,7 @@ Usage of ./ParseWikipediaXML_go:
   -x=65535: Maximum number of words that a page should have
 ```
 
-###Perl
+##Perl
 ```
 $ perl ParseWikipediaXML.pl --help
 usage: ParseWikipediaXML --ofcont|-s --ifdict|-d --ifwiki|-i [--help|-h]

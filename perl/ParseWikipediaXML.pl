@@ -5,6 +5,7 @@ use List::Util qw/reduce/;
 use Data::Dumper;
 use threads;
 use Thread::Queue;
+use DBI;
 
 my $ap = Getopt::ArgParse->new_parser(
 	prog => 'ParseWikipediaXML',
@@ -23,6 +24,7 @@ $ap->add_arg('--recateg','-g',default=>".*",help=>"Regular expresion which each 
 $ap->add_arg('--ngram','-n',default=>1, help=>"The N number for N-gram");
 my $args = $ap->parse_args();
 
+my $dbh = DBI->
 my $stopword="a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your";
 my @stopwords=split(/,/,$stopword);
 
@@ -114,7 +116,6 @@ sub bowCreate {
 		my $docCount=0;
 		my @ngrams;
 		my @words = split(/ /,$text);
-		#foreach my $word ( map { chomp($_); lc($_) } @words ) {
 		foreach my $word ( map { chomp; lc } @words ) {
 			next unless $word =~ "^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]\$";
 			next if grep { $_ eq $word } @stopwords;
@@ -152,6 +153,7 @@ sub bowCreate {
 
 		if(defined($output)){
 			lock($outmtx);
+			# INSERT HERE
 			print $fout $output."\n";
 		}
 
