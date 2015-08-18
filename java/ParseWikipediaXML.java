@@ -1,3 +1,5 @@
+package com.github.nishidy8;
+
 import java.io.*;
 import java.util.regex.*;
 import java.util.Arrays;
@@ -8,6 +10,9 @@ import java.util.HashMap;
 import java.util.concurrent.*;
 import org.apache.commons.cli.*;
 import java.lang.Runtime;
+
+import org.atilika.kuromoji.Token;
+import org.atilika.kuromoji.Tokenizer;
 
 class BOW implements Runnable {
 
