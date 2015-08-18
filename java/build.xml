@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project name="ParseWikipediaXML" default="compile" xmlns:ivy="antlib:org.apache.ivy.ant">
+
+	<property name="src" value="."/>
+	<property name="build" value="build"/>
+	<property name="ivy.lib" value="lib"/>
+
+	<path id="ivy.path">
+		<fileset dir="${ivy.lib}">
+			<include name="*jar"/>
+		</fileset>
+	</path>
+
+	<target name="compile" depends="resolve">
+		<mkdir dir="${build}"/>
+		<javac srcdir="${src}" destdir="${build}" classpathref="ivy.path"/>
+	</target>
+
+	<target name="resolve">
+		<ivy:retrieve/>
+	</target>
+
+	<target name="clean">
+		<delete dir="${build}"/>
+	</target>
+
+</project>
