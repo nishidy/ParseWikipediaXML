@@ -263,8 +263,8 @@ public class ParseWikipediaXML {
 		options.addOption("x","max-page-words",true,"Maxmum number of words that a page should have");
 		options.addOption("c","min-word-count",true,"Minimum number that a word should have");
 		options.addOption("g","category-regex",true,"Category in regular expression");
-		options.addOption("j","japanese",true,"Flag for Japanese");
-		options.addOption("v","verbose",true,"Verbose");
+		options.addOption("j","japanese",false,"Flag for Japanese");
+		options.addOption("v","verbose",false,"Verbose");
 
 		HelpFormatter help = new HelpFormatter();
 
