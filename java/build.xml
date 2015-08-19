@@ -17,6 +17,10 @@
 		<javac srcdir="${src}" destdir="${build}" classpathref="ivy.path"/>
 	</target>
 
+	<target name="run" depends="compile">
+		<java classname="${ant.project.name}" classpath="${build}" classpathref="ivy.path"/>
+	</target>
+
 	<target name="resolve">
 		<ivy:retrieve/>
 	</target>

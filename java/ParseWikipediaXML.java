@@ -1,4 +1,4 @@
-package com.github.nishidy8;
+//package com.github.nishidy8;
 
 import java.io.*;
 import java.util.regex.*;
