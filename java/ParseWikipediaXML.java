@@ -272,6 +272,7 @@ public class ParseWikipediaXML {
 		try{
 			CommandLine cl = parser.parse(options, args);
 			argstore= new ArgStore(cl);
+
 		} catch (ParseException e){
 			help.printHelp("ParseWikipediaXML",options);
 			System.exit(1);
@@ -309,7 +310,7 @@ public class ParseWikipediaXML {
 
 		try( BufferedReader br = new BufferedReader(new FileReader(argstore.ifwiki)) ){
 
-			StringBuffer buf = null;
+			StringBuffer buf = new StringBuffer("");
 			String line;
 			boolean sflag=false, eflag=false;
 
