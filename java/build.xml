@@ -5,6 +5,7 @@
 	<property name="src" value="."/>
 	<property name="build" value="build"/>
 	<property name="ivy.lib" value="lib"/>
+	<!--<property name="output" value="output.txt"/>-->
 
 	<path id="ivy.path">
 		<fileset dir="${ivy.lib}">
@@ -14,11 +15,15 @@
 
 	<target name="compile" depends="resolve">
 		<mkdir dir="${build}"/>
-		<javac srcdir="${src}" destdir="${build}" classpathref="ivy.path"/>
+		<javac includeantruntime="false" srcdir="${src}" destdir="${build}" classpathref="ivy.path"/>
 	</target>
 
 	<target name="run" depends="compile">
-		<java classname="${ant.project.name}" classpath="${build}" classpathref="ivy.path"/>
+		<java classname="${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
+			<arg line="-i enwiki-test-5000"/>
+			<arg line="-d ../share/morph_english.flat"/>
+			<!--<arg line="-s output"/>-->
+		</java>
 	</target>
 
 	<target name="resolve">
@@ -27,6 +32,7 @@
 
 	<target name="clean">
 		<delete dir="${build}"/>
+		<!--<delete file="${output}"/>-->
 	</target>
 
 </project>
