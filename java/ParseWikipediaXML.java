@@ -36,7 +36,8 @@ class ArgStore {
 		else throw new ParseException("d is not specified.");
 
 		if(cl.hasOption("s")) ofcont = cl.getOptionValue("s");
-		else throw new ParseException("s is not specified.");
+		else ofcont = null;
+		//else throw new ParseException("t is not specified.");
 
 		if(cl.hasOption("t")) oftitle= cl.getOptionValue("t");
 		//else throw new ParseException("t is not specified.");
@@ -218,6 +219,7 @@ class RunParse implements Runnable {
 			try{
 				synchronized(lock){ bw.write(bowBuf.toString()); bw.flush(); }
 			} catch (IOException e){
+				System.err.println("BufferedWriter error.");
 				System.exit(12);
 			}
 		}
@@ -288,7 +290,11 @@ public class ParseWikipediaXML {
 
 		BufferedWriter bw = null;
 		try{
-			bw = new BufferedWriter(new FileWriter(argstore.ofcont));
+			if(argstore.ofcont!=null){
+				bw = new BufferedWriter(new FileWriter(argstore.ofcont));
+			}else{
+				bw = new BufferedWriter(new OutputStreamWriter(System.out));
+			}
 		} catch (IOException e){
 			System.exit(13);
 		}
@@ -330,6 +336,7 @@ public class ParseWikipediaXML {
 			}
 
 		} catch (IOException e){
+			System.err.println("BufferedReader error "+e);
 			System.exit(10);
 		} finally {
 			ex.shutdown();
