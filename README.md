@@ -5,7 +5,7 @@ You can give your own conditions, such as the number of words that a page should
 
 This can work on multiple CPUs effectively.
 
-#Installation & Compilation
+#Installation, Compilation and Test (if possible)
 
 ## C++
 ```
@@ -14,7 +14,8 @@ $ g++ ParseWikipediaXML.cpp -std=c++11 -lboost_thread-mt -lboost_regex -lmecab -
 
 ## Java
 ```
-$ javac -cp "/usr/share/java/commons-cli-1.2.jar" ParseWikipediaXML.java
+$ ant compile
+$ ant run
 ```
 
 ## Go
