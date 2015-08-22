@@ -26,6 +26,7 @@
 			<arg line="-i enwiki-test-5000"/>
 			<arg line="-d ../share/morph_english.flat"/>
 			<!--<arg line="-s output"/>-->
+			<!--<arg line="-v"/>-->
 		</java>
 	</target>
 
