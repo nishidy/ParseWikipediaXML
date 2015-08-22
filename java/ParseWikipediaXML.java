@@ -8,6 +8,8 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.concurrent.*;
+import java.util.Collections;
+import java.util.Comparator;
 import org.apache.commons.cli.*;
 import java.lang.Runtime;
 
@@ -37,7 +39,6 @@ class ArgStore {
 
 		if(cl.hasOption("s")) ofcont = cl.getOptionValue("s");
 		else ofcont = null;
-		//else throw new ParseException("t is not specified.");
 
 		if(cl.hasOption("t")) oftitle= cl.getOptionValue("t");
 		//else throw new ParseException("t is not specified.");
@@ -205,9 +206,18 @@ class RunParse implements Runnable {
 		}
 		if(wordcnt<argstore.minl) return;
 
+		//List<Map.Entry<String,Integer>> listmapbow = new ArrayList<Map.Entry<String,Integer>>(mapbow.entrySet())
+		List<Map.Entry<String,Integer>> entries= new ArrayList<>(mapbow.entrySet());
+		Collections.sort(entries, new Comparator<Map.Entry>(){
+			@Override
+			public int compare(Map.Entry o1, Map.Entry o2){
+				return ((Integer)o2.getValue()).compareTo((Integer)o1.getValue());
+			}
+		});
+
 		int cnt=0;
 		StringBuffer bowBuf = new StringBuffer("");
-		for(Map.Entry<String,Integer> entry: mapbow.entrySet()){
+		for(Map.Entry<String,Integer> entry: entries){
 			if(entry.getValue()<argstore.minc) continue;
 			if(cnt>0) bowBuf.append(" ");
 			bowBuf.append(String.format("%s %d",entry.getKey(),entry.getValue()));
