@@ -15,7 +15,10 @@
 
 	<target name="compile" depends="resolve">
 		<mkdir dir="${build}"/>
-		<javac includeantruntime="false" srcdir="${src}" destdir="${build}" classpathref="ivy.path"/>
+		<javac includeantruntime="false" srcdir="${src}" destdir="${build}">
+			<classpath refid="ivy.path"/>
+			<compilerarg value="-Xlint:unchecked"/>
+		</javac>
 	</target>
 
 	<target name="run" depends="compile">
