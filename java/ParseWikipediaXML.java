@@ -31,11 +31,14 @@ class ArgStore {
 
 	static void init(CommandLine cl) throws ParseException {
 
+		if(cl.hasOption("j")) isJap= true;
+		else isJap= false;
+
 		if(cl.hasOption("i")) ifwiki = cl.getOptionValue("i");
 		else throw new ParseException("i is not specified.");
 
 		if(cl.hasOption("d")) ifdict = cl.getOptionValue("d");
-		else throw new ParseException("d is not specified.");
+		else if(!isJap) throw new ParseException("d is not specified.");
 
 		if(cl.hasOption("s")) ofcont = cl.getOptionValue("s");
 		else ofcont = null;
@@ -47,16 +50,13 @@ class ArgStore {
 		else minl=2;
 
 		if(cl.hasOption("x")) maxl = Integer.parseInt(cl.getOptionValue("x"));
-		else maxl=64;
+		else maxl=65535;
 
 		if(cl.hasOption("c")) minc = Integer.parseInt(cl.getOptionValue("c"));
 		else minc=1;
 
 		if(cl.hasOption("g")) recateg = cl.getOptionValue("g");
 		else recateg = ".*";
-
-		if(cl.hasOption("j")) isJap= true;
-		else isJap= false;
 
 		if(cl.hasOption("v")) isVerb = true;
 		else isVerb = false;
@@ -66,10 +66,24 @@ class ArgStore {
 
 abstract class AbstParse {
 
+	List<String> stopwords= null;
+	List<String> notwords= new ArrayList<String>();
+
 	abstract void createBaseWords(String file) throws IOException;
 	abstract String convertToBaseWord(String line);
 	abstract boolean isJap();
-	abstract boolean isCommonWord(String word);
+	abstract String[] getWordList(String text);
+	abstract boolean isWordAndUpdateList(String word);
+
+	boolean isCommonWord(String word){
+		if(stopwords.contains(word)) return true;
+		return false;
+	}
+
+	boolean isInNotWordList(String word){
+		if(notwords.contains(word)) return true;
+		return false;
+	}
 
 	boolean ifPageStart(String line){
 		return line.indexOf("<page")>=0;
@@ -91,17 +105,10 @@ class EngParse extends AbstParse {
 	private static final EngParse instance = new EngParse();
 	public static EngParse getInstance(){ return instance; }
 
-	List<String> stopwords = null;
 	Map<String,String> mapDict = new HashMap<String,String>();
 
 	@Override
 	boolean isJap(){ return false; }
-
-	@Override
-	boolean isCommonWord(String word){
-		if(stopwords.contains(word)) return true;
-		return false;
-	}
 
 	@Override
 	void createBaseWords(String file) throws IOException {
@@ -128,12 +135,36 @@ class EngParse extends AbstParse {
 		}
 	}
 
+	@Override
+	String[] getWordList(String text){
+		return text.split(" ");
+	}
+
+	@Override
+	boolean isWordAndUpdateList(String word){
+		Pattern wpat= Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$");
+		Matcher wmat= wpat.matcher(word);
+		if(wmat.find()){
+			return true;
+		}else{
+			notwords.add(word);
+			return false;
+		}
+	}
+
 }
 
 // Singleton
 class JapParse extends AbstParse {
 
-	private JapParse(){}
+	Tokenizer tokenizer;
+
+	private JapParse(){
+		stopwords= Arrays.asList( "の,に,は,を,た,が,で,て,と,し,れ,さ,ある,いる,も,する,から,な,こと,として,い,や,れる,など,なっ,ない,この,ため,その,あっ,よう,また,もの,という,あり,まで,られ,なる,へ,か,だ,これ,によって,により,おり,より,による,ず,なり,られる,において,ば,なかっ,なく,しかし,について,せ,だっ,その後,できる,それ,う,ので,なお,のみ,でき,き,つ,における,および,いう,さらに,でも,ら,たり,その他,に関する,たち,ます,ん,なら,に対して,特に,せる,及び,これら,とき,では,にて,ほか,ながら,うち,そして,とともに,ただし,かつて,それぞれ,または,お,ほど,ものの,に対する,ほとんど,と共に,といった,です,とも,ところ,ここ".split(",") );
+
+		tokenizer=Tokenizer.builder().build();
+
+	}
 
 	private static final JapParse instance = new JapParse();
 	public static JapParse getInstance(){ return instance; }
@@ -147,10 +178,39 @@ class JapParse extends AbstParse {
 	}
 
 	@Override
-	boolean isCommonWord(String word){ return false; }
+	void createBaseWords(String file) { }
 
 	@Override
-	void createBaseWords(String file) { }
+	String[] getWordList(String text){
+		List<Token> tokens = tokenizer.tokenize(text);
+		List<String> words = new ArrayList<>();
+
+		for (Token token : tokens) {
+			String baseword= token.getBaseForm();
+			if(baseword!=null){
+				words.add(baseword);
+			}else{
+				baseword=token.getSurfaceForm();
+				String[] features= token.getAllFeaturesArray();
+				if(features[0].equals("動詞") ||
+				   ( features[0].equals("名詞") &&
+					 !features[1].equals("サ変接続") ) ||
+				   features[0].equals("形容詞") ||
+				   features[0].equals("副詞")){
+					words.add(baseword);
+				}
+			}
+			if(ArgStore.isVerb && isJap()){
+				System.out.printf("%s: %s\n",token.getSurfaceForm(),token.getAllFeatures());
+			}
+		}
+		return words.toArray(new String[words.size()]);
+	}
+
+	@Override
+	boolean isWordAndUpdateList(String word){
+		return true;
+	}
 
 }
 
@@ -162,7 +222,6 @@ class RunParse implements Runnable {
 	BufferedWriter bw;
 	AbstParse parse;
 
-	List<String> notwords= new ArrayList<String>();
 
 	private final static Object lock = new Object();
 
@@ -177,32 +236,16 @@ class RunParse implements Runnable {
 		return false;
 	}
 
-	boolean isInNotWordList(String word){
-		if(notwords.contains(word)) return true;
-		return false;
-	}
-
-	boolean isWordAndUpdateList(String word){
-		Pattern wpat= Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$");
-		Matcher wmat= wpat.matcher(word);
-		if(wmat.find()){
-			return true;
-		}else{
-			notwords.add(word);
-			return false;
-		}
-	}
-
 	void bowCreator(String text){
 
 		Map<String,Integer> mapbow = new HashMap<String,Integer>();
 
 		int wordcnt= 0;
-		for(String word: text.split(" ")){
+		for(String word: parse.getWordList(text)){
 
 			if(isNotWord(word)) continue;
-			if(isInNotWordList(word)) continue;
-			if(!isWordAndUpdateList(word)) continue;
+			if(parse.isInNotWordList(word)) continue;
+			if(!parse.isWordAndUpdateList(word)) continue;
 			if(parse.isCommonWord(word)) continue;
 
 			String bowWord= parse.convertToBaseWord(word);
@@ -214,7 +257,7 @@ class RunParse implements Runnable {
 			}
 			wordcnt+=1;
 
-			if(ArgStore.isVerb){
+			if(ArgStore.isVerb && !parse.isJap()){
 				System.out.printf("%s -> %s.\n",word,bowWord);
 			}
 
