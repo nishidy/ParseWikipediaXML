@@ -31,6 +31,7 @@ class ArgStore {
 	static int ngram;
 	static boolean isJap;
 	static boolean isVerb;
+	static boolean preferListNgram; // make ngram like list or set
 
 	static void init(CommandLine cl) throws ParseException {
 
@@ -66,6 +67,9 @@ class ArgStore {
 
 		if(cl.hasOption("v")) isVerb = true;
 		else isVerb = false;
+
+		if(cl.hasOption("l")) preferListNgram = true;
+		else preferListNgram = false;
 
 	}
 }
@@ -221,6 +225,9 @@ class RunParse implements Runnable {
 	BufferedWriter bw;
 	AbstParse parse;
 
+	//Collection<String> ngrams; /* list can manipulate set with sort */
+	List<String> ngrams = new ArrayList<>();
+
 	private final static Object lock = new Object();
 
 	public RunParse(String page, BufferedWriter bw, AbstParse parse){
@@ -229,34 +236,50 @@ class RunParse implements Runnable {
 		this.parse= parse;
 	}
 
-	boolean isNotWord(String word){
+	boolean isTooShortWord(String word){
 		if(word.length()==1) return true;
+		return false;
+	}
+
+	boolean isDupInNgram(String word){
+		if(ngrams.size()==0) return false;
+
+		//if( ngrams instanceof Set<String> )
+		if( ArgStore.preferListNgram ){
+			if(ngrams.get(ngrams.size()-1).equals(word)) return true;
+		}else{
+			if(ngrams.contains(word)) return true;
+		}
+
 		return false;
 	}
 
 	void bowCreator(String text){
 
 		Map<String,Integer> mapbow = new HashMap<String,Integer>();
-		List<String> ngramlist = new ArrayList<>();
+		List<String> ngramsorder = new ArrayList<>();
 
 		int wordcnt= 0;
 		for(String word: parse.getWordList(text)){
 
-			if(isNotWord(word)) continue;
+			if(isTooShortWord(word)) continue;
 			if(!parse.isWord(word)) continue;
 			if(parse.isCommonWord(word)) continue;
 
-			if(ngramlist.size()>0 &&
-				ngramlist.get(ngramlist.size()-1).equals(word))
-			{ continue; }
+			if(isDupInNgram(word)) continue;
 
-			ngramlist.add(word);
+			ngrams.add(word);
+			ngramsorder.add(word);
+			if(!ArgStore.preferListNgram) Collections.sort(ngrams);
 
-			if(ngramlist.size()<ArgStore.ngram) continue;
-			if(ngramlist.size()>ArgStore.ngram) ngramlist.remove(0);
+			if(ngrams.size()<ArgStore.ngram) continue;
+			if(ngrams.size()>ArgStore.ngram){
+				ngrams.remove(ngramsorder.get(0));
+				ngramsorder.remove(0);
+			}
 
-			String ngrams= StringUtils.join(ngramlist,":");
-			String bowWord= parse.convertToBaseWord(ngrams);
+			String ngramstr= StringUtils.join(ngrams,":");
+			String bowWord= parse.convertToBaseWord(ngramstr);
 
 			if(mapbow.containsKey(bowWord)){
 				mapbow.put(bowWord,mapbow.get(bowWord)+1);
@@ -266,7 +289,7 @@ class RunParse implements Runnable {
 			wordcnt+=1;
 
 			if(ArgStore.isVerb && !parse.isJap()){
-				System.out.printf("%s -> %s.\n",ngrams,bowWord);
+				System.out.printf("%s -> %s.\n",ngramstr,bowWord);
 			}
 
 			if(wordcnt>ArgStore.maxl) return;
