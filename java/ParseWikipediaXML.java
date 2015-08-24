@@ -16,6 +16,8 @@ import java.lang.Runtime;
 import org.atilika.kuromoji.Token;
 import org.atilika.kuromoji.Tokenizer;
 
+import org.apache.commons.lang.*;
+
 class ArgStore {
 
 	static String ifwiki;
@@ -26,6 +28,7 @@ class ArgStore {
 	static int minl;
 	static int maxl;
 	static int minc;
+	static int ngram;
 	static boolean isJap;
 	static boolean isVerb;
 
@@ -58,6 +61,9 @@ class ArgStore {
 		if(cl.hasOption("g")) recateg = cl.getOptionValue("g");
 		else recateg = ".*";
 
+		if(cl.hasOption("n")) ngram = Integer.parseInt(cl.getOptionValue("n"));
+		else ngram=1;
+
 		if(cl.hasOption("v")) isVerb = true;
 		else isVerb = false;
 
@@ -67,21 +73,15 @@ class ArgStore {
 abstract class AbstParse {
 
 	List<String> stopwords= null;
-	List<String> notwords= new ArrayList<String>();
 
 	abstract void createBaseWords(String file) throws IOException;
 	abstract String convertToBaseWord(String line);
 	abstract boolean isJap();
 	abstract String[] getWordList(String text);
-	abstract boolean isWordAndUpdateList(String word);
+	abstract boolean isWord(String word);
 
 	boolean isCommonWord(String word){
 		if(stopwords.contains(word)) return true;
-		return false;
-	}
-
-	boolean isInNotWordList(String word){
-		if(notwords.contains(word)) return true;
 		return false;
 	}
 
@@ -141,13 +141,12 @@ class EngParse extends AbstParse {
 	}
 
 	@Override
-	boolean isWordAndUpdateList(String word){
+	boolean isWord(String word){
 		Pattern wpat= Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$");
 		Matcher wmat= wpat.matcher(word);
 		if(wmat.find()){
 			return true;
 		}else{
-			notwords.add(word);
 			return false;
 		}
 	}
@@ -208,7 +207,7 @@ class JapParse extends AbstParse {
 	}
 
 	@Override
-	boolean isWordAndUpdateList(String word){
+	boolean isWord(String word){
 		return true;
 	}
 
@@ -221,7 +220,6 @@ class RunParse implements Runnable {
 	String page;
 	BufferedWriter bw;
 	AbstParse parse;
-
 
 	private final static Object lock = new Object();
 
@@ -239,16 +237,26 @@ class RunParse implements Runnable {
 	void bowCreator(String text){
 
 		Map<String,Integer> mapbow = new HashMap<String,Integer>();
+		List<String> ngramlist = new ArrayList<>();
 
 		int wordcnt= 0;
 		for(String word: parse.getWordList(text)){
 
 			if(isNotWord(word)) continue;
-			if(parse.isInNotWordList(word)) continue;
-			if(!parse.isWordAndUpdateList(word)) continue;
+			if(!parse.isWord(word)) continue;
 			if(parse.isCommonWord(word)) continue;
 
-			String bowWord= parse.convertToBaseWord(word);
+			if(ngramlist.size()>0 &&
+				ngramlist.get(ngramlist.size()-1).equals(word))
+			{ continue; }
+
+			ngramlist.add(word);
+
+			if(ngramlist.size()<ArgStore.ngram) continue;
+			if(ngramlist.size()>ArgStore.ngram) ngramlist.remove(0);
+
+			String ngrams= StringUtils.join(ngramlist,":");
+			String bowWord= parse.convertToBaseWord(ngrams);
 
 			if(mapbow.containsKey(bowWord)){
 				mapbow.put(bowWord,mapbow.get(bowWord)+1);
@@ -258,14 +266,13 @@ class RunParse implements Runnable {
 			wordcnt+=1;
 
 			if(ArgStore.isVerb && !parse.isJap()){
-				System.out.printf("%s -> %s.\n",word,bowWord);
+				System.out.printf("%s -> %s.\n",ngrams,bowWord);
 			}
 
 			if(wordcnt>ArgStore.maxl) return;
 		}
 		if(wordcnt<ArgStore.minl) return;
 
-		//List<Map.Entry<String,Integer>> listmapbow = new ArrayList<Map.Entry<String,Integer>>(mapbow.entrySet())
 		List<Map.Entry<String,Integer>> entries= new ArrayList<>(mapbow.entrySet());
 		Collections.sort(entries, new Comparator<Map.Entry>(){
 			@Override
@@ -334,6 +341,8 @@ public class ParseWikipediaXML {
 		options.addOption("x","max-page-words",true,"Maxmum number of words that a page should have");
 		options.addOption("c","min-word-count",true,"Minimum number that a word should have");
 		options.addOption("g","category-regex",true,"Category in regular expression");
+		options.addOption("n","n-gram",true,"Enables N-gram on N>1");
+
 		options.addOption("j","japanese",false,"Flag for Japanese");
 		options.addOption("v","verbose",false,"Verbose");
 

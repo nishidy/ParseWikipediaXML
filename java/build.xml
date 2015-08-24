@@ -30,6 +30,8 @@
 		</java>
 		<java classname="${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
 			<arg line="-i jawiki-test-5000"/>
+			<arg line="-c 2"/>
+			<arg line="-n 2"/>
 			<arg line="-j"/>
 			<!--<arg line="-v"/>-->
 		</java>
