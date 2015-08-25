@@ -68,6 +68,20 @@ class ArgStore {
 		if(cl.hasOption("v")) isVerb = true;
 		else isVerb = false;
 
+		/* Note for preferListNgram.
+		 * true : Ngrams are managed like List.
+		 * false: Ngrams are managed like Set.
+		 *
+		 * How to deal with duplicated words when the word is
+		 * about to be added to ngrams?
+		 * List: Ignored if a word appears twice in a row.
+		 * Set : Ignored if a word appears twice regardless of the place.
+		 *
+		 * When is the number of Ngrams counted?
+		 * List: Words in Ngram and the emergence order are same.
+		 * Set : Words in Ngram is same. (Represented by sorted list)
+		 *
+		 */
 		if(cl.hasOption("l")) preferListNgram = true;
 		else preferListNgram = false;
 
