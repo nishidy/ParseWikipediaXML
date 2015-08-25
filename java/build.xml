@@ -25,14 +25,17 @@
 		<java classname="${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
 			<arg line="-i enwiki-test-5000"/>
 			<arg line="-d ../share/morph_english.flat"/>
+			<arg line="-n 2"/>
+			<arg line="-l"/>
 			<!--<arg line="-s output"/>-->
 			<!--<arg line="-v"/>-->
 		</java>
 		<java classname="${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
 			<arg line="-i jawiki-test-5000"/>
-			<arg line="-c 2"/>
-			<arg line="-n 2"/>
+			<arg line="-c 3"/>
+			<arg line="-n 3"/>
 			<arg line="-j"/>
+			<arg line="-e"/>
 			<!--<arg line="-v"/>-->
 		</java>
 	</target>

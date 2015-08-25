@@ -32,6 +32,7 @@ class ArgStore {
 	static boolean isJap;
 	static boolean isVerb;
 	static boolean preferListNgram; // make ngram like list or set
+	static boolean ngramsCollection;
 
 	static void init(CommandLine cl) throws ParseException {
 
@@ -64,6 +65,13 @@ class ArgStore {
 
 		if(cl.hasOption("n")) ngram = Integer.parseInt(cl.getOptionValue("n"));
 		else ngram=1;
+
+		/* If set, the parameter ngram is regarded as maximum number.
+		 * For example, if ngram=3, all the words with ngram=1,2,3 will be collected.
+		 * If not set, it will collect words only with ngram=3.
+		 */
+		if(cl.hasOption("e")) ngramsCollection= true;
+		else ngramsCollection= false;
 
 		if(cl.hasOption("v")) isVerb = true;
 		else isVerb = false;
@@ -260,9 +268,15 @@ class RunParse implements Runnable {
 
 		//if( ngrams instanceof Set<String> )
 		if( ArgStore.preferListNgram ){
-			if(ngrams.get(ngrams.size()-1).equals(word)) return true;
+			if(ngrams.get(ngrams.size()-1).equals(word)){
+				if(ArgStore.isVerb) System.out.printf("%s is duplicated.\n",word);
+				return true;
+			}
 		}else{
-			if(ngrams.contains(word)) return true;
+			if(ngrams.contains(word)){
+				if(ArgStore.isVerb) System.out.printf("%s is duplicated.\n",word);
+				return true;
+			}
 		}
 
 		return false;
@@ -274,41 +288,54 @@ class RunParse implements Runnable {
 		List<String> ngramsorder = new ArrayList<>();
 
 		int wordcnt= 0;
-		for(String word: parse.getWordList(text)){
 
-			if(isTooShortWord(word)) continue;
-			if(!parse.isWord(word)) continue;
-			if(parse.isCommonWord(word)) continue;
-
-			if(isDupInNgram(word)) continue;
-
-			ngrams.add(word);
-			ngramsorder.add(word);
-			if(!ArgStore.preferListNgram) Collections.sort(ngrams);
-
-			if(ngrams.size()<ArgStore.ngram) continue;
-			if(ngrams.size()>ArgStore.ngram){
-				ngrams.remove(ngramsorder.get(0));
-				ngramsorder.remove(0);
-			}
-
-			String ngramstr= StringUtils.join(ngrams,":");
-			String bowWord= parse.convertToBaseWord(ngramstr);
-
-			if(mapbow.containsKey(bowWord)){
-				mapbow.put(bowWord,mapbow.get(bowWord)+1);
-			}else{
-				mapbow.put(bowWord,1);
-			}
-			wordcnt+=1;
-
-			if(ArgStore.isVerb && !parse.isJap()){
-				System.out.printf("%s -> %s.\n",ngramstr,bowWord);
-			}
-
-			if(wordcnt>ArgStore.maxl) return;
+		int ngramcountinit;
+		if(ArgStore.ngramsCollection){
+			ngramcountinit=1;
+		}else{
+			ngramcountinit=ArgStore.ngram;
 		}
-		if(wordcnt<ArgStore.minl) return;
+
+		for(int ngramcnt=(ArgStore.ngramsCollection?1:ArgStore.ngram);
+				ngramcnt<=ArgStore.ngram;
+				ngramcnt++){
+
+			for(String word: parse.getWordList(text)){
+
+				if(isTooShortWord(word)) continue;
+				if(!parse.isWord(word)) continue;
+				if(parse.isCommonWord(word)) continue;
+
+				if(isDupInNgram(word)) continue;
+
+				ngrams.add(word);
+				ngramsorder.add(word);
+				if(!ArgStore.preferListNgram) Collections.sort(ngrams);
+
+				if(ngrams.size()<ngramcnt) continue;
+				if(ngrams.size()>ngramcnt){
+					ngrams.remove(ngramsorder.get(0));
+					ngramsorder.remove(0);
+				}
+
+				String ngramstr= StringUtils.join(ngrams,":");
+				String bowWord= parse.convertToBaseWord(ngramstr);
+
+				if(mapbow.containsKey(bowWord)){
+					mapbow.put(bowWord,mapbow.get(bowWord)+1);
+				}else{
+					mapbow.put(bowWord,1);
+				}
+				wordcnt+=1;
+
+				if(ArgStore.isVerb && !parse.isJap()){
+					System.out.printf("%s -> %s.\n",ngramstr,bowWord);
+				}
+
+				if(wordcnt>ArgStore.maxl) return;
+			}
+			if(wordcnt<ArgStore.minl) return;
+		}
 
 		List<Map.Entry<String,Integer>> entries= new ArrayList<>(mapbow.entrySet());
 		Collections.sort(entries, new Comparator<Map.Entry>(){
@@ -381,6 +408,8 @@ public class ParseWikipediaXML {
 		options.addOption("n","n-gram",true,"Enables N-gram on N>1");
 
 		options.addOption("j","japanese",false,"Flag for Japanese");
+		options.addOption("l","ngram-list",false,"Flag for Ngram as list");
+		options.addOption("e","ngram-collection",false,"Flag for Ngram collection");
 		options.addOption("v","verbose",false,"Verbose");
 
 		HelpFormatter help = new HelpFormatter();
