@@ -405,7 +405,7 @@ public class ParseWikipediaXML {
 		options.addOption("x","max-page-words",true,"Maxmum number of words that a page should have");
 		options.addOption("c","min-word-count",true,"Minimum number that a word should have");
 		options.addOption("g","category-regex",true,"Category in regular expression");
-		options.addOption("n","n-gram",true,"Enables N-gram on N>1");
+		options.addOption("n","ngram",true,"Enables Ngram on N>1");
 
 		options.addOption("j","japanese",false,"Flag for Japanese");
 		options.addOption("l","ngram-list",false,"Flag for Ngram as list");

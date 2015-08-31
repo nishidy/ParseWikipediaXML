@@ -21,9 +21,9 @@
 		</javac>
 	</target>
 
-	<target name="run" depends="compile">
+	<target name="test" depends="compile">
 		<java classname="${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
-			<arg line="-i enwiki-test-5000"/>
+			<arg line="-i ../share/enwiki-test-5000"/>
 			<arg line="-d ../share/morph_english.flat"/>
 			<arg line="-n 2"/>
 			<arg line="-l"/>
@@ -31,7 +31,7 @@
 			<!--<arg line="-v"/>-->
 		</java>
 		<java classname="${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
-			<arg line="-i jawiki-test-5000"/>
+			<arg line="-i ../share/jawiki-test-5000"/>
 			<arg line="-c 3"/>
 			<arg line="-n 3"/>
 			<arg line="-j"/>
