@@ -33,6 +33,7 @@ defmodule Main do
       end
     )
     |> Enum.filter( fn {_,v} -> v>=minc end)
+    |> Enum.sort( fn {_,v1},{_,v2} -> v1 > v2 end)
     |> Enum.map( fn {k,v} -> k <> " " <> Integer.to_string v end)
     |> Enum.join( " ")
     |> output
