@@ -3,9 +3,12 @@ defmodule Main do
   def start(argv) do
     path = hd argv
 
+    pid = spawn fn -> read_dict end
+    Process.register(pid,:dict)
+
     File.stream!(Path.absname(path),[:read],:line)
     |> Enum.reduce( "",
-      fn x, t ->
+      fn x,t ->
         text = String.rstrip(t,?\n)
         if String.contains?(x,"</page>"),
         do: parse(text <> x),
@@ -25,6 +28,14 @@ defmodule Main do
     |> Enum.map( &(String.rstrip &1,?\n))
     |> Enum.filter( &(tokenizer &1))
     |> Enum.filter( &(! Enum.any?(stopwords, fn x -> x==&1 end)))
+    |> Enum.map(
+      fn x ->
+        send :dict, {:get, x, self()}
+        receive do
+          {:return, trans} -> trans
+        end
+      end
+    )
     |> Enum.reduce( HashDict.new,
       fn x, bofw ->
         if Dict.has_key?(bofw,x),
@@ -49,6 +60,27 @@ defmodule Main do
   def tokenizer(word) do
     {:ok,exp}=Regex.compile("^[a-z0-9][a-z0-9-]*$")
     Regex.match?(exp,word)
+  end
+
+  def read_dict do
+    File.stream!(Path.absname("../share/morph_english.flat"),[:read],:line)
+    |> Enum.reduce( HashDict.new,
+      fn line,dict ->
+        terms= String.split(String.rstrip(line,?\n),["\t"," "])
+        from= Enum.at(terms,0)
+        trans= Enum.at(terms,3)
+        Dict.put(dict,from,trans)
+      end
+    )
+    |> loop
+  end
+
+  def loop(dict) do
+    receive do
+      {:get, from, pid} ->
+        send pid, {:return, Dict.get(dict,from,from)}
+        loop(dict)
+    end
   end
 
 end
