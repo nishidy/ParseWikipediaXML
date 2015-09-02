@@ -27,7 +27,7 @@
 			<arg line="-d ../share/morph_english.flat"/>
 			<arg line="-n 2"/>
 			<arg line="-l"/>
-			<!--<arg line="-s output"/>-->
+			<!--<arg line="-s ../share/enwiki-test-5000-bow"/>-->
 			<!--<arg line="-v"/>-->
 		</java>
 		<java classname="${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
@@ -37,6 +37,10 @@
 			<arg line="-j"/>
 			<arg line="-e"/>
 			<!--<arg line="-v"/>-->
+		</java>
+		<java classname="${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
+			<arg line="-f ../share/enwiki-test-5000-bow-tfidf"/>
+			<arg line="-s ../share/enwiki-test-5000-bow"/>
 		</java>
 	</target>
 

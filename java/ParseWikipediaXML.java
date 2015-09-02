@@ -33,17 +33,22 @@ class ArgStore {
 	static boolean isVerb;
 	static boolean preferListNgram; // make ngram like list or set
 	static boolean ngramsCollection;
+	static String oftfidf;
 
 	static void init(CommandLine cl) throws ParseException {
 
 		if(cl.hasOption("j")) isJap= true;
 		else isJap= false;
 
+		/* If set, option c (ofcont) will be read-only value */
+		if(cl.hasOption("f")) oftfidf = cl.getOptionValue("f");
+		else oftfidf = "";
+
 		if(cl.hasOption("i")) ifwiki = cl.getOptionValue("i");
-		else throw new ParseException("i is not specified.");
+		else if(oftfidf.equals("")) throw new ParseException("i is not specified.");
 
 		if(cl.hasOption("d")) ifdict = cl.getOptionValue("d");
-		else if(!isJap) throw new ParseException("d is not specified.");
+		else if(oftfidf.equals("") && !isJap) throw new ParseException("d is not specified.");
 
 		if(cl.hasOption("s")) ofcont = cl.getOptionValue("s");
 		else ofcont = null;
@@ -411,6 +416,7 @@ public class ParseWikipediaXML {
 		options.addOption("l","ngram-list",false,"Flag for Ngram as list");
 		options.addOption("e","ngram-collection",false,"Flag for Ngram collection");
 		options.addOption("v","verbose",false,"Verbose");
+		options.addOption("f","tf-idf",true,"TF-IDF");
 
 		HelpFormatter help = new HelpFormatter();
 
@@ -430,6 +436,91 @@ public class ParseWikipediaXML {
 		}else{
 			parse = EngParse.getInstance();
 		}
+
+		if(ArgStore.oftfidf.equals("")){
+			outputBofw(parse);
+		}else{
+			inputBofwForTfidf(parse);
+		}
+
+	}
+
+	private static void inputBofwForTfidf(AbstParse parse) {
+
+		BufferedWriter bw = null;
+		try{
+			bw = new BufferedWriter(new FileWriter(ArgStore.oftfidf));
+		} catch (IOException e){
+			System.err.println("BufferedWriter error "+e);
+			System.exit(13);
+		}
+
+		List<Integer> numTermsInDoc = new ArrayList<>();
+		Map<String,Integer> docFreq = new HashMap<String,Integer>();
+		String line;
+		int numDocInFile = 0;
+
+		try( BufferedReader br = new BufferedReader(new FileReader(ArgStore.ofcont)) ){
+
+			while((line=br.readLine())!=null){
+				String terms[] = line.split(" ");
+				int num=0;
+				boolean b=false;
+				for( String term : terms ){
+					if(b=!b){
+						docFreq.putIfAbsent(term,1);
+						docFreq.compute(term,(k,v) -> v+1); // Java 8 needed
+					}else{
+						num += Integer.parseInt(term);
+					}
+				}
+				numTermsInDoc.add(num);
+			}
+			numDocInFile++;
+
+		} catch (IOException e){
+			System.err.println("BufferedReader error "+e);
+			System.exit(11);
+		}
+
+		int cntDoc = 0;
+		try( BufferedReader br = new BufferedReader(new FileReader(ArgStore.ofcont)) ){
+			while((line=br.readLine())!=null){
+				String terms[] = line.split(" ");
+				StringBuffer bowBuf = new StringBuffer("");
+				boolean b=false;
+				int freqDocInFile=0;
+				for( String term : terms ){
+					if(b=!b){
+						if(!term.equals(terms[0])) bowBuf.append(" ");
+						bowBuf.append(term);
+						bowBuf.append(" ");
+						freqDocInFile = docFreq.get(term);
+					}else{
+						int tf = Integer.parseInt(term)/numTermsInDoc.get(cntDoc);
+						int idf = (int)Math.log10(numDocInFile/freqDocInFile)+1;
+						bowBuf.append(String.format("%d",tf*idf));
+					}
+				}
+				cntDoc++;
+
+				try{
+					bw.write(bowBuf.toString());
+					bw.flush();
+				} catch (IOException e){
+					System.err.println("BufferedWriter error.");
+					System.exit(12);
+				}
+
+			}
+		} catch (IOException e){
+			System.err.println("BufferedReader error "+e);
+			System.exit(12);
+		}
+
+	}
+
+	private static void outputBofw(AbstParse parse) {
 
 		BufferedWriter bw = null;
 		try{
