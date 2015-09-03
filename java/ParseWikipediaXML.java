@@ -475,8 +475,8 @@ public class ParseWikipediaXML {
 					}
 				}
 				numTermsInDoc.add(num);
+				numDocInFile++;
 			}
-			numDocInFile++;
 
 		} catch (IOException e){
 			System.err.println("BufferedReader error "+e);
@@ -485,7 +485,9 @@ public class ParseWikipediaXML {
 
 		int cntDoc = 0;
 		try( BufferedReader br = new BufferedReader(new FileReader(ArgStore.ofcont)) ){
+
 			while((line=br.readLine())!=null){
+
 				String terms[] = line.split(" ");
 				StringBuffer bowBuf = new StringBuffer("");
 				boolean b=false;
@@ -503,6 +505,7 @@ public class ParseWikipediaXML {
 					}
 				}
 				cntDoc++;
+				bowBuf.append("\n");
 
 				try{
 					bw.write(bowBuf.toString());
