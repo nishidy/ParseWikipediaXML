@@ -491,7 +491,7 @@ public class ParseWikipediaXML {
 				String terms[] = line.split(" ");
 				StringBuffer bowBuf = new StringBuffer("");
 				boolean isTerm=false;
-				String currentTerm;
+				String currentTerm="";
 
 				for( String term : terms ){
 
