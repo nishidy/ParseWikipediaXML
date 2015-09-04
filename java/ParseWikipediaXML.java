@@ -456,7 +456,7 @@ public class ParseWikipediaXML {
 		}
 
 		List<Integer> numTermsInDoc = new ArrayList<>();
-		Map<String,Integer> docFreq = new HashMap<String,Integer>();
+		Map<String,Integer> numDocForTerms = new HashMap<String,Integer>();
 		String line;
 		int numDocInFile = 0;
 
@@ -468,8 +468,8 @@ public class ParseWikipediaXML {
 				boolean b=false;
 				for( String term : terms ){
 					if(b=!b){
-						docFreq.putIfAbsent(term,1);
-						docFreq.compute(term,(k,v) -> v+1); // Java 8 needed
+						numDocForTerms.putIfAbsent(term,1);
+						numDocForTerms.compute(term,(k,v) -> v+1); // Require Java 8
 					}else{
 						num += Integer.parseInt(term);
 					}
@@ -490,18 +490,31 @@ public class ParseWikipediaXML {
 
 				String terms[] = line.split(" ");
 				StringBuffer bowBuf = new StringBuffer("");
-				boolean b=false;
-				int freqDocInFile=0;
+				boolean isTerm=false;
+				String currentTerm;
+
 				for( String term : terms ){
-					if(b=!b){
+
+					// term
+					if(isTerm=!isTerm){
+
 						if(!term.equals(terms[0])) bowBuf.append(" ");
 						bowBuf.append(term);
 						bowBuf.append(" ");
-						freqDocInFile = docFreq.get(term);
+						currentTerm = term;
+
+					// number of the term
 					}else{
-						int tf = Integer.parseInt(term)/numTermsInDoc.get(cntDoc);
-						int idf = (int)Math.log10(numDocInFile/freqDocInFile)+1;
+
+						int numTermInDoc = Integer.parseInt(term);
+						int numTermsInCurrentDoc = numTermsInDoc.get(cntDoc);
+						int tf = numTermInDoc / numTermsInCurrentDoc;
+
+						int numDocForTerm = numDocForTerms.get(currentTerm);
+						int idf = (int)Math.log10(numDocInFile/numDocForTerm)+1;
+
 						bowBuf.append(String.format("%d",tf*idf));
+
 					}
 				}
 				cntDoc++;
