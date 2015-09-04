@@ -3,16 +3,31 @@ defmodule Main do
   def start(argv) do
     path = hd argv
 
-    pid = spawn fn -> read_dict end
+    ppid = self()
+    pid = spawn fn -> read_dict ppid end
     Process.register(pid,:dict)
+
+    receive do
+      {:finish, sender} when sender == pid ->
+        IO.puts "Finished reading dictionary. Let's go in 2 sec."
+        :timer.sleep(2000)
+        IO.puts ""
+    after
+      60_000_000 ->
+        IO.puts "Timed out..."
+        exit(1)
+    end
 
     File.stream!(Path.absname(path),[:read],:line)
     |> Enum.reduce( "",
       fn x,t ->
         text = String.rstrip(t,?\n)
-        if String.contains?(x,"</page>"),
-        do: parse(text <> x),
-      else: text <> x
+        if String.contains?(x,"</page>") do
+          _ = spawn fn -> parse(text <> x) end
+          ""
+        else
+          text <> x
+        end
       end
     )
   end
@@ -49,7 +64,6 @@ defmodule Main do
     |> Enum.join( " ")
     |> output
 
-    ""
   end
 
   def output(text) do
@@ -62,7 +76,7 @@ defmodule Main do
     Regex.match?(exp,word)
   end
 
-  def read_dict do
+  def read_dict(ppid) do
     File.stream!(Path.absname("../share/morph_english.flat"),[:read],:line)
     |> Enum.reduce( HashDict.new,
       fn line,dict ->
@@ -72,7 +86,13 @@ defmodule Main do
         Dict.put(dict,from,trans)
       end
     )
+    |> return_trigger(ppid)
     |> loop
+  end
+
+  def return_trigger(dict,ppid) do
+    send ppid, {:finish, self()}
+    dict
   end
 
   def loop(dict) do
