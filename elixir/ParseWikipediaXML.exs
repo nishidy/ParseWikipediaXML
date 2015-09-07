@@ -109,6 +109,10 @@ defmodule Main do
 
   end
 
+  def listup_ngram([h|t],[h1|t1],len,ngram_list) when h == h1 do
+    listup_ngram(t,[h1|t1],len,ngram_list)
+  end
+
   def listup_ngram([h|t],ngram,len,ngram_list) when length(ngram) < len do
     listup_ngram(t,[h|ngram],len,ngram_list)
   end
