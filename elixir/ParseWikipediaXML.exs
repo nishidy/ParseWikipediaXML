@@ -7,19 +7,31 @@ defmodule Main do
     pid = spawn fn -> read_dict ppid end
     Process.register(pid,:dict)
 
+    # To wait until reading dictionary finishes
     receive do
       {:finish, sender} when sender == pid ->
-        IO.puts "Finished reading dictionary. Let's go in 2 sec."
-        :timer.sleep(2000)
+        IO.write "Finished reading dictionary. Let's go in 3 sec."
+
+        :timer.sleep(1000)
+        IO.write "."
+        :timer.sleep(1000)
+        IO.write "."
+        :timer.sleep(1000)
         IO.puts ""
+
     after
-      60_000_000 ->
+      60_000 ->
         IO.puts "Timed out..."
         exit(1)
+
     end
 
+    # To avoid conflict on stdio
     pid_ = spawn fn -> receive_output end
     Process.register(pid_, :output)
+
+    counter_p = spawn fn -> counter ppid, 0, false end
+    Process.register(counter_p, :counter)
 
     File.stream!(Path.absname(path),[:read],:line)
     |> Enum.reduce( "",
@@ -27,6 +39,7 @@ defmodule Main do
         text = String.rstrip(t,?\n)
         if String.contains?(x,"</page>") do
           _ = spawn fn -> parse(text <> x) end
+          send :counter, {:add}
           ""
         else
           text <> x
@@ -34,7 +47,25 @@ defmodule Main do
       end
     )
 
-    :timer.sleep(1000)
+    # To mark as reading WikipediaXML finished
+    send :counter,{:mark}
+
+    # This will be noticed when parsing text finishes
+    receive do
+      {:finish, pid} when pid == counter_p -> IO.puts "Finished."
+    after
+      60_000 -> IO.puts "Timed out..."
+    end
+
+  end
+
+  def counter(ppid,cnt,mark) do
+    receive do
+      {:add} -> counter(ppid,cnt+1,mark)
+      {:sub} when cnt == 1 and mark -> send ppid,{:finish,self()}
+      {:sub} -> counter(ppid,cnt-1,mark)
+      {:mark} -> counter(ppid,cnt,true)
+    end
   end
 
   def parse(text) do
@@ -71,6 +102,8 @@ defmodule Main do
     |> Enum.join( " ")
     |> output
 
+    send :counter, {:sub}
+
   end
 
   def listup_ngram([h|t],ngram,len,ngram_list) when length(ngram) < len do
@@ -96,7 +129,6 @@ defmodule Main do
     end
   end
 
-  # To avoid conflict on stdio
   def receive_output do
     receive do
       {:put, text} ->
