@@ -1,0 +1,54 @@
+apply plugin: 'java'
+
+repositories {
+	jcenter()
+	//mavenCentral()
+	maven {
+		url "http://www.atilika.org/nexus/content/repositories/atilika"
+	}
+}
+
+dependencies {
+	// For Library
+	compile(
+		'org.slf4j:slf4j-api:1.7.7'
+	)
+	testCompile 'junit:junit:4.12'
+
+	// For ParseWikipediaXML
+	compile(
+		'commons-cli:commons-cli:1.2',
+		'commons-lang:commons-lang:2.6',
+		'org.atilika.kuromoji:kuromoji:0.7.7',
+	)
+}
+
+apply plugin: 'application'
+
+
+task runTestEng(type: JavaExec) {
+	main = 'ParseWikipediaXML'
+	classpath = sourceSets.main.runtimeClasspath
+	args = [
+		"-i", "../../share/enwiki-test-5000",
+		"-d", "../../share/morph_english.flat",
+		"-n", "2",
+		"-l",
+	]
+}
+
+task runTestJap(type: JavaExec) {
+	main = 'ParseWikipediaXML'
+	classpath = sourceSets.main.runtimeClasspath
+	args = [
+		"-i", "../../share/jawiki-test-5000",
+		"-c", "3",
+		"-n", "3",
+		"-j",
+		"-e",
+	]
+}
+
+task runTest(dependsOn: [ runTestEng, runTestJap ]) << {
+	println "Test done."
+}

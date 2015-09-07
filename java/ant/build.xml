@@ -23,14 +23,14 @@
 
 	<target name="test" depends="compile">
 		<java classname="${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
-			<arg line="-i ../share/enwiki-test-5000"/>
-			<arg line="-d ../share/morph_english.flat"/>
+			<arg line="-i ../../share/enwiki-test-5000"/>
+			<arg line="-d ../../share/morph_english.flat"/>
 			<arg line="-n 2"/>
 			<arg line="-l"/>
 			<!--<arg line="-v"/>-->
 		</java>
 		<java classname="${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
-			<arg line="-i ../share/jawiki-test-5000"/>
+			<arg line="-i ../../share/jawiki-test-5000"/>
 			<arg line="-c 3"/>
 			<arg line="-n 3"/>
 			<arg line="-j"/>
@@ -41,13 +41,13 @@
 
 	<target name="tfidf" depends="compile">
 		<java classname="${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
-			<arg line="-i ../share/enwiki-test-50000"/>
-			<arg line="-s ../share/enwiki-test-50000-bow"/>
-			<arg line="-d ../share/morph_english.flat"/>
+			<arg line="-i ../../share/enwiki-test-50000"/>
+			<arg line="-s ../../share/enwiki-test-50000-bow"/>
+			<arg line="-d ../../share/morph_english.flat"/>
 		</java>
 		<java classname="${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
-			<arg line="-s ../share/enwiki-test-50000-bow"/>
-			<arg line="-f ../share/enwiki-test-50000-bow-tfidf"/>
+			<arg line="-s ../../share/enwiki-test-50000-bow"/>
+			<arg line="-f ../../share/enwiki-test-50000-bow-tfidf"/>
 		</java>
 	</target>
 
