@@ -30,6 +30,7 @@ defmodule Main do
     pid_ = spawn fn -> receive_output end
     Process.register(pid_, :output)
 
+    # counter ( self_pid, count, mark )
     counter_p = spawn fn -> counter ppid, 0, false end
     Process.register(counter_p, :counter)
 
