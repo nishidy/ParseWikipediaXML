@@ -18,6 +18,9 @@ defmodule Main do
         exit(1)
     end
 
+    pid_ = spawn fn -> receive_output end
+    Process.register(pid_, :output)
+
     File.stream!(Path.absname(path),[:read],:line)
     |> Enum.reduce( "",
       fn x,t ->
@@ -30,6 +33,8 @@ defmodule Main do
         end
       end
     )
+
+    :timer.sleep(1000)
   end
 
   def parse(text) do
@@ -86,8 +91,18 @@ defmodule Main do
   end
 
   def output(text) do
-    if String.length(text) > 0,
-    do: IO.puts text
+    if String.length(text) > 0 do
+      send :output, {:put, text}
+    end
+  end
+
+  # To avoid conflict on stdio
+  def receive_output do
+    receive do
+      {:put, text} ->
+        IO.puts text
+        receive_output
+    end
   end
 
   def tokenizer(word) do
