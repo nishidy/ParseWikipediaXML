@@ -18,7 +18,8 @@ import (
 
 var stopwords string = "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your"
 
-func make_map(text string, dict map[string]string, stop []string) (int, map[string]int) {
+// The name of this function should be changed
+func MakeMap(text string, dict map[string]string, stopWords []string) (int, map[string]int) {
 
 	var re *regexp.Regexp
 
@@ -38,8 +39,9 @@ func make_map(text string, dict map[string]string, stop []string) (int, map[stri
 				continue
 			}
 
+			// Should create Any function
 			flag := false
-			for _, sp := range stop {
+			for _, sp := range stopWords {
 				if sp == word {
 					flag = true
 					break
@@ -65,7 +67,7 @@ func make_map(text string, dict map[string]string, stop []string) (int, map[stri
 	return wc, words_cnt
 }
 
-func parse(str, regstr string) string {
+func GetMatchWord(str, regstr string) string {
 	re, err := regexp.Compile(regstr)
 	if err != nil {
 		panic(err)
@@ -83,7 +85,7 @@ func parse(str, regstr string) string {
 	return res
 }
 
-func category_check(catreg, text string) bool {
+func CategoryCheck(catreg, text string) bool {
 
 	var re *regexp.Regexp
 
@@ -106,14 +108,15 @@ func category_check(catreg, text string) bool {
 
 }
 
-func read_dictionary(ifdict string, dict map[string]string) {
+func ReadDictionary(ifdict string, dict map[string]string) {
+
 	file, err := os.Open(ifdict)
 	if err != nil {
 		os.Exit(10)
 	}
 	defer file.Close()
 
-	var line string
+	var line, from, trans string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line = scanner.Text()
@@ -121,17 +124,75 @@ func read_dictionary(ifdict string, dict map[string]string) {
 		if len(splitline) != 2 {
 			continue
 		}
-		//fmt.Println(splitline[0])
 		words := strings.Split(splitline[1], "\t")
-		_, _err := dict[splitline[0]]
-		if _err == false {
-			dict[splitline[0]] = words[0]
-		}
+
+		from = splitline[0]
+		trans = words[0]
+		dict[from] = trans
 	}
 
 }
 
+func DownloadXml() {
+
+	fmt.Println("Dowload the latest list of wikipedia databases for articles.")
+
+	re, _ := regexp.Compile("^enwiki-latest-pages-articles[^-].*bz2$")
+
+	doc, err := goquery.NewDocument("http://dumps.wikimedia.org/enwiki/latest/")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(10)
+	}
+
+	urls := make([]string, 0, 100)
+	doc.Find("tr").Each(func(_ int, s *goquery.Selection) {
+		url, _ := s.Find("a").Attr("href")
+		var size string
+		if re.MatchString(url) {
+			//text := s.Find("a").Text()
+			s.Find("td").Each(func(_ int, st *goquery.Selection) {
+				class, _ := st.Attr("class")
+				if class == "s" {
+					size = st.Text()
+					fmt.Printf("%d %s, %s\n", len(urls)+1, url, size)
+					urls = append(urls, url)
+				}
+			})
+		}
+
+	})
+
+	var num int
+	fmt.Print("Please select one of them. : ")
+	fmt.Scanf("%d", &num)
+	fmt.Println(urls[num-1])
+
+	resp, _ := http.Get("http://dumps.wikimedia.org/enwiki/latest/" + urls[num-1])
+	defer resp.Body.Close()
+
+	//cont, _ := ioutil.ReadAll(resp.Body)
+	//file.Write(cont)
+
+	//file, _ := os.OpenFile(urls[num-1], os.O_CREATE|os.O_WRONLY, 0666)
+
+	file, _ := os.Create(urls[num-1])
+	io.Copy(file, resp.Body)
+
+	// XXX: Tried but could not read them as scanner without uncompressing the bzip2 file
+	// FIXME: Uncompress and give it the arg to keep running
+
+	// This should be automated
+	fmt.Println("Please uncompress it and give it the uncompressed file to thig program for -i option.")
+
+}
+
 func main() {
+
+	if len(os.Args[1:]) == 0 {
+		fmt.Println("Run with -h to show help.")
+		os.Exit(1)
+	}
 
 	var ifwiki = flag.String("i", "", "Input File(Wikipedia)")
 	var ifdict = flag.String("d", "", "Input File(dictionary)")
@@ -145,72 +206,18 @@ func main() {
 
 	flag.Parse()
 
-	if len(os.Args[1:]) == 0 {
-		fmt.Println("Run with -h to show help.")
-		os.Exit(1)
-	}
-
 	if *ifwiki == "" {
-
-		fmt.Println("Dowload the latest list of wikipedia databases for articles.")
-
-		re, _ := regexp.Compile("^enwiki-latest-pages-articles[^-].*bz2$")
-
-		doc, err := goquery.NewDocument("http://dumps.wikimedia.org/enwiki/latest/")
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(10)
-		}
-
-		urls := make([]string, 0, 100)
-		doc.Find("tr").Each(func(_ int, s *goquery.Selection) {
-			url, _ := s.Find("a").Attr("href")
-			var size string
-			if re.MatchString(url) {
-				//text := s.Find("a").Text()
-				s.Find("td").Each(func(_ int, st *goquery.Selection) {
-					class, _ := st.Attr("class")
-					if class == "s" {
-						size = st.Text()
-						fmt.Printf("%d %s, %s\n", len(urls)+1, url, size)
-						urls = append(urls, url)
-					}
-				})
-			}
-
-		})
-
-		var num int
-		fmt.Print("Please select one of them. : ")
-		fmt.Scanf("%d", &num)
-		fmt.Println(urls[num-1])
-
-		resp, _ := http.Get("http://dumps.wikimedia.org/enwiki/latest/" + urls[num-1])
-		defer resp.Body.Close()
-
-		//cont, _ := ioutil.ReadAll(resp.Body)
-		//file.Write(cont)
-
-		//file, _ := os.OpenFile(urls[num-1], os.O_CREATE|os.O_WRONLY, 0666)
-
-		file, _ := os.Create(urls[num-1])
-		io.Copy(file, resp.Body)
-
-		// XXX: Tried but could not read them as scanner without uncompressing the bzip2 file
-
-		// FIXME: Uncompress and give it the arg to keep running
-
-		fmt.Println("Please uncompress it and give it the uncompressed file to thig program for -i option.")
+		DownloadXml()
 		os.Exit(0)
 	}
 
-	dict := make(map[string]string)
-	read_dictionary(*ifdict, dict)
-
-	stop := make([]string, 0, 256)
+	stopWords := make([]string, 0, 256)
 	for _, word := range strings.Split(stopwords, ",") {
-		stop = append(stop, word)
+		stopWords = append(stopWords, word)
 	}
+
+	dict := make(map[string]string)
+	ReadDictionary(*ifdict, dict)
 
 	var numgor = runtime.NumGoroutine()
 
@@ -221,13 +228,12 @@ func main() {
 	}
 	runtime.GOMAXPROCS(cpu)
 
-	cp := make(chan []string, cpu-numgor)
+	cp := make(chan []string)
 	//defer close(cp)
 
-	cf := make(chan int, 1) // Use this as mutex to lock writting
+	// Mutex for write
+	cf := make(chan int, 1)
 	defer close(cf)
-
-	//var m sync.Mutex // No need to lock for channel
 
 	ft, _ := os.Create(*oftitle)
 	fc, _ := os.Create(*ofcont)
@@ -241,7 +247,10 @@ func main() {
 	}
 
 	for i := 0; i < cpu; i++ {
+
+		// Take this goroutine out of this main routine
 		go func() {
+
 			for {
 
 				str := strings.Join(<-cp, "")
@@ -252,18 +261,18 @@ func main() {
 				var regstr string
 
 				regstr = "<title>(.*)</title>"
-				title := parse(str, regstr)
+				title := GetMatchWord(str, regstr)
 
 				regstr = "<text[^>]*>(.*)</text>"
-				text := parse(str, regstr)
+				text := GetMatchWord(str, regstr)
 
-				if !category_check(*cat, text) {
+				if !CategoryCheck(*cat, text) {
 					continue
 				}
 
 				var text_map = make(map[string]int)
 				var wc = 0
-				if wc, text_map = make_map(text, dict, stop); wc < *minl || wc > *maxl {
+				if wc, text_map = MakeMap(text, dict, stopWords); wc < *minl || wc > *maxl {
 					continue
 				}
 
@@ -317,14 +326,10 @@ func main() {
 		}()
 	}
 
-	var page []string
-	page = make([]string, 0, 65535)
+	var page = make([]string, 0, 65535)
 
-	var sflag, eflag bool
+	var beginAppend, finishAppend = false, false
 	var str string
-
-	sflag = false
-	eflag = false
 
 	filein, err := os.Open(*ifwiki)
 	if err != nil {
@@ -337,19 +342,19 @@ func main() {
 		str = scanner.Text()
 
 		if strings.Contains(str, "<page>") {
-			sflag = true
+			beginAppend = true
 		}
 		if strings.Contains(str, "</page>") {
-			eflag = true
+			finishAppend = true
 		}
-		if sflag {
+		if beginAppend {
 			page = append(page, str)
 		}
-		if eflag {
+		if finishAppend {
 			cp <- page
 			page = make([]string, 0, 65535)
-			sflag = false
-			eflag = false
+			beginAppend = false
+			finishAppend = false
 		}
 	}
 
