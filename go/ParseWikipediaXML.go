@@ -209,6 +209,19 @@ func DownloadXml() {
 
 }
 
+type Args struct {
+	inWikiFile    string
+	inDictFile    string
+	outBofwFile   string
+	outTitleFile  string
+	minWordsInDoc int
+	maxWordsInDoc int
+	minWord       int
+	matchCategory string
+	outFormatJson bool
+	isJapanese    bool
+}
+
 func main() {
 
 	if len(os.Args[1:]) == 0 {
@@ -216,20 +229,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	var ifwiki = flag.String("i", "", "Input File(Wikipedia)")
-	var ifdict = flag.String("d", "", "Input File(dictionary)")
-	var ofcont = flag.String("s", "", "Output File(Contents)")
-	var oftitle = flag.String("t", "", "Output File(Title)")
-	var minl = flag.Int("m", 1, "Minimum number of words that a page should have")
-	var maxl = flag.Int("x", 65535, "Maximum number of words that a page should have")
-	var minc = flag.Int("c", 2, "Minimum number that a word should have")
-	var cat = flag.String("g", ".*", "Category(regular expression)")
-	var json = flag.Bool("j", false, "Generate bug-of-words in JSON format")
-	var jp = flag.Bool("p", false, "If this is for Japanese text")
+	var args = new(Args)
+
+	args.inWikiFile = *(flag.String("i", "", "Input File(Wikipedia)"))
+	args.inDictFile = *(flag.String("d", "", "Input File(dictionary)"))
+	args.outBofwFile = *(flag.String("s", "", "Output File(Contents)"))
+	args.outTitleFile = *(flag.String("t", "", "Output File(Title)"))
+	args.minWordsInDoc = *(flag.Int("m", 1, "Minimum number of words that a page should have"))
+	args.maxWordsInDoc = *(flag.Int("x", 65535, "Maximum number of words that a page should have"))
+	args.minWord = *(flag.Int("c", 2, "Minimum number that a word should have"))
+	args.matchCategory = *(flag.String("g", ".*", "Category(regular expression)"))
+	args.outFormatJson = *(flag.Bool("j", false, "Generate bug-of-words in JSON format"))
+	args.isJapanese = *(flag.Bool("p", false, "If this is for Japanese text"))
 
 	flag.Parse()
 
-	if *ifwiki == "" {
+	if args.inWikiFile == "" {
 		DownloadXml()
 		os.Exit(0)
 	}
@@ -240,7 +255,7 @@ func main() {
 	}
 
 	dict := make(map[string]string)
-	ReadDictionary(*ifdict, dict)
+	ReadDictionary(args.inWikiFile, dict)
 
 	var numgor = runtime.NumGoroutine()
 
@@ -258,12 +273,12 @@ func main() {
 	cf := make(chan int, 1)
 	defer close(cf)
 
-	ft, _ := os.Create(*oftitle)
-	fc, _ := os.Create(*ofcont)
+	ft, _ := os.Create(args.outTitleFile)
+	fc, _ := os.Create(args.outBofwFile)
 	defer ft.Close()
 	defer fc.Close()
 
-	if *json {
+	if args.outFormatJson {
 		defer func() {
 			fc.WriteString("\n]")
 		}()
@@ -289,19 +304,19 @@ func main() {
 				regstr = "<text[^>]*>(.*)</text>"
 				text := GetMatchWord(str, regstr)
 
-				if !CategoryCheck(*cat, text) {
+				if !CategoryCheck(args.matchCategory, text) {
 					continue
 				}
 
 				var text_map = make(map[string]int)
 				var wc = 0
 
-				if *jp {
-					if wc, text_map = MakeMap(text, dict, stopWords); wc < *minl || wc > *maxl {
+				if args.isJapanese {
+					if wc, text_map = MakeMap(text, dict, stopWords); wc < args.minWordsInDoc || wc > args.maxWordsInDoc {
 						continue
 					}
 				} else {
-					if wc, text_map = MakeMapJP(text, dict, stopWords); wc < *minl || wc > *maxl {
+					if wc, text_map = MakeMapJP(text, dict, stopWords); wc < args.minWordsInDoc || wc > args.maxWordsInDoc {
 						continue
 					}
 				}
@@ -311,7 +326,7 @@ func main() {
 
 				ft.WriteString(fmt.Sprintf("%s\n", title))
 
-				if *json {
+				if args.outFormatJson {
 					st, err := fc.Stat()
 					if err != nil {
 						fmt.Println(err)
@@ -326,18 +341,18 @@ func main() {
 
 				k := 0
 				for key, val := range text_map {
-					if val < *minc {
+					if val < args.minWord {
 						continue
 					}
 
 					if k > 0 {
-						if *json {
+						if args.outFormatJson {
 							fc.WriteString(", ")
 						} else {
 							fc.WriteString(" ")
 						}
 					}
-					if *json {
+					if args.outFormatJson {
 						fc.WriteString(fmt.Sprintf("%s:%d", key, val))
 					} else {
 						fc.WriteString(fmt.Sprintf("%s %d", key, val))
@@ -345,7 +360,7 @@ func main() {
 					k++
 				}
 
-				if *json {
+				if args.outFormatJson {
 					fc.WriteString(" }")
 				} else {
 					fc.WriteString("\n")
@@ -361,7 +376,7 @@ func main() {
 	var beginAppend, finishAppend = false, false
 	var str string
 
-	filein, err := os.Open(*ifwiki)
+	filein, err := os.Open(args.inWikiFile)
 	if err != nil {
 		os.Exit(1)
 	}
