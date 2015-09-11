@@ -209,6 +209,98 @@ func DownloadXml() {
 
 }
 
+type routineArgs struct {
+	chanData      chan []string
+	chanMutex     chan int
+	mapDict       map[string]string
+	stopWords     []string
+	hOutTitleFile *os.File
+	hOutBofwFile  *os.File
+}
+
+func ParseAndWriteRoutine(args Args, rargs routineArgs) {
+
+	for {
+
+		str := strings.Join(<-rargs.chanData, "")
+		if str == "" {
+			break
+		}
+
+		var regstr string
+
+		regstr = "<title>(.*)</title>"
+		title := GetMatchWord(str, regstr)
+
+		regstr = "<text[^>]*>(.*)</text>"
+		text := GetMatchWord(str, regstr)
+
+		if !CategoryCheck(args.matchCategory, text) {
+			continue
+		}
+
+		var text_map = make(map[string]int)
+		var wc = 0
+
+		if args.isJapanese {
+			if wc, text_map = MakeMap(text, rargs.mapDict, rargs.stopWords); wc < args.minWordsInDoc || wc > args.maxWordsInDoc {
+				continue
+			}
+		} else {
+			if wc, text_map = MakeMapJP(text, rargs.mapDict, rargs.stopWords); wc < args.minWordsInDoc || wc > args.maxWordsInDoc {
+				continue
+			}
+		}
+
+		/* Only one thread can write the result into file at once */
+		rargs.chanMutex <- 1
+
+		rargs.hOutTitleFile.WriteString(fmt.Sprintf("%s\n", title))
+
+		if args.outFormatJson {
+			st, err := rargs.hOutBofwFile.Stat()
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(11)
+			}
+			if st.Size() == 0 {
+				rargs.hOutBofwFile.WriteString("[\n    { ")
+			} else {
+				rargs.hOutBofwFile.WriteString(",\n    { ")
+			}
+		}
+
+		k := 0
+		for key, val := range text_map {
+			if val < args.minWord {
+				continue
+			}
+
+			if k > 0 {
+				if args.outFormatJson {
+					rargs.hOutBofwFile.WriteString(", ")
+				} else {
+					rargs.hOutBofwFile.WriteString(" ")
+				}
+			}
+			if args.outFormatJson {
+				rargs.hOutBofwFile.WriteString(fmt.Sprintf("%s:%d", key, val))
+			} else {
+				rargs.hOutBofwFile.WriteString(fmt.Sprintf("%s %d", key, val))
+			}
+			k++
+		}
+
+		if args.outFormatJson {
+			rargs.hOutBofwFile.WriteString(" }")
+		} else {
+			rargs.hOutBofwFile.WriteString("\n")
+		}
+		_ = <-rargs.chanMutex
+
+	}
+}
+
 type Args struct {
 	inWikiFile    string
 	inDictFile    string
@@ -229,7 +321,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	var args = new(Args)
+	args := new(Args)
 
 	args.inWikiFile = *(flag.String("i", "", "Input File(Wikipedia)"))
 	args.inDictFile = *(flag.String("d", "", "Input File(dictionary)"))
@@ -254,8 +346,8 @@ func main() {
 		stopWords = append(stopWords, word)
 	}
 
-	dict := make(map[string]string)
-	ReadDictionary(args.inWikiFile, dict)
+	mapDict := make(map[string]string)
+	ReadDictionary(args.inWikiFile, mapDict)
 
 	var numgor = runtime.NumGoroutine()
 
@@ -266,123 +358,49 @@ func main() {
 	}
 	runtime.GOMAXPROCS(cpu)
 
-	cp := make(chan []string)
+	chanData := make(chan []string)
 	//defer close(cp)
 
 	// Mutex for write
-	cf := make(chan int, 1)
-	defer close(cf)
+	chanMutex := make(chan int, 1)
+	defer close(chanMutex)
 
-	ft, _ := os.Create(args.outTitleFile)
-	fc, _ := os.Create(args.outBofwFile)
-	defer ft.Close()
-	defer fc.Close()
+	hOutTitleFile, _ := os.Create(args.outTitleFile)
+	hOutBofwFile, _ := os.Create(args.outBofwFile)
+	defer hOutTitleFile.Close()
+	defer hOutBofwFile.Close()
 
 	if args.outFormatJson {
 		defer func() {
-			fc.WriteString("\n]")
+			hOutBofwFile.WriteString("\n]")
 		}()
+	}
+
+	rargs := routineArgs{
+		chanData,
+		chanMutex,
+		mapDict,
+		stopWords,
+		hOutTitleFile,
+		hOutBofwFile,
 	}
 
 	for i := 0; i < cpu; i++ {
+		go ParseAndWriteRoutine(*args, rargs)
 
-		// Take this goroutine out of this main routine
-		go func() {
-
-			for {
-
-				str := strings.Join(<-cp, "")
-				if str == "" {
-					break
-				}
-
-				var regstr string
-
-				regstr = "<title>(.*)</title>"
-				title := GetMatchWord(str, regstr)
-
-				regstr = "<text[^>]*>(.*)</text>"
-				text := GetMatchWord(str, regstr)
-
-				if !CategoryCheck(args.matchCategory, text) {
-					continue
-				}
-
-				var text_map = make(map[string]int)
-				var wc = 0
-
-				if args.isJapanese {
-					if wc, text_map = MakeMap(text, dict, stopWords); wc < args.minWordsInDoc || wc > args.maxWordsInDoc {
-						continue
-					}
-				} else {
-					if wc, text_map = MakeMapJP(text, dict, stopWords); wc < args.minWordsInDoc || wc > args.maxWordsInDoc {
-						continue
-					}
-				}
-
-				/* Only one thread can write the result into file at once */
-				cf <- 1
-
-				ft.WriteString(fmt.Sprintf("%s\n", title))
-
-				if args.outFormatJson {
-					st, err := fc.Stat()
-					if err != nil {
-						fmt.Println(err)
-						os.Exit(11)
-					}
-					if st.Size() == 0 {
-						fc.WriteString("[\n    { ")
-					} else {
-						fc.WriteString(",\n    { ")
-					}
-				}
-
-				k := 0
-				for key, val := range text_map {
-					if val < args.minWord {
-						continue
-					}
-
-					if k > 0 {
-						if args.outFormatJson {
-							fc.WriteString(", ")
-						} else {
-							fc.WriteString(" ")
-						}
-					}
-					if args.outFormatJson {
-						fc.WriteString(fmt.Sprintf("%s:%d", key, val))
-					} else {
-						fc.WriteString(fmt.Sprintf("%s %d", key, val))
-					}
-					k++
-				}
-
-				if args.outFormatJson {
-					fc.WriteString(" }")
-				} else {
-					fc.WriteString("\n")
-				}
-				_ = <-cf
-
-			}
-		}()
 	}
 
 	var page = make([]string, 0, 65535)
-
 	var beginAppend, finishAppend = false, false
 	var str string
 
-	filein, err := os.Open(args.inWikiFile)
+	hInWikiFile, err := os.Open(args.inWikiFile)
 	if err != nil {
 		os.Exit(1)
 	}
-	defer filein.Close()
+	defer hInWikiFile.Close()
 
-	scanner := bufio.NewScanner(filein)
+	scanner := bufio.NewScanner(hInWikiFile)
 	for scanner.Scan() {
 		str = scanner.Text()
 
@@ -396,7 +414,7 @@ func main() {
 			page = append(page, str)
 		}
 		if finishAppend {
-			cp <- page
+			chanData <- page
 			page = make([]string, 0, 65535)
 			beginAppend = false
 			finishAppend = false
@@ -405,10 +423,10 @@ func main() {
 
 	fmt.Println("Finished reading from the input file.")
 
-	for len(cp) > 0 {
+	for len(chanData) > 0 {
 	}
 
-	close(cp)
+	close(chanData)
 
 	for runtime.NumGoroutine() > numgor {
 	}
