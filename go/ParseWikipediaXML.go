@@ -20,16 +20,16 @@ import (
 
 var stopwords string = "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your"
 
-type countWordArgs struct {
+type countWordType struct {
 	text      string
 	mapDict   map[string]string
 	stopWords []string
 }
 
-func CountWordJp(cargs countWordArgs) (int, map[string]int) {
+func (ctype *countWordType) CountWordJp() (int, map[string]int) {
 
 	tkn := kagome.NewTokenizer()
-	morphs := tkn.Tokenize(cargs.text)
+	morphs := tkn.Tokenize(ctype.text)
 
 	var wc = 0
 	var mapWordCnt = make(map[string]int)
@@ -45,12 +45,12 @@ func CountWordJp(cargs countWordArgs) (int, map[string]int) {
 	return wc, mapWordCnt
 }
 
-func CountWord(cargs countWordArgs) (int, map[string]int) {
+func (ctype *countWordType) CountWord() (int, map[string]int) {
 
 	var re *regexp.Regexp
 
 	re = regexp.MustCompile("[" + regexp.QuoteMeta("[[]]();|") + "(, )(. )( -)]")
-	text := re.ReplaceAllString(cargs.text, " ")
+	text := re.ReplaceAllString(ctype.text, " ")
 
 	var words_cnt = make(map[string]int)
 	re, _ = regexp.Compile("^[0-9a-z][-|0-9a-z]+$")
@@ -67,7 +67,7 @@ func CountWord(cargs countWordArgs) (int, map[string]int) {
 
 			// Should create Any function
 			flag := false
-			for _, sp := range cargs.stopWords {
+			for _, sp := range ctype.stopWords {
 				if sp == word {
 					flag = true
 					break
@@ -77,8 +77,8 @@ func CountWord(cargs countWordArgs) (int, map[string]int) {
 				continue
 			}
 
-			if _, err := cargs.mapDict[word]; err {
-				word = cargs.mapDict[word]
+			if _, err := ctype.mapDict[word]; err {
+				word = ctype.mapDict[word]
 			}
 
 			if _, err := words_cnt[word]; err {
@@ -134,9 +134,9 @@ func CategoryCheck(catreg, text string) bool {
 
 }
 
-func ReadDictionary(ifdict string, dict map[string]string) {
+func ReadDictionary(inWifiFile string, mapDict map[string]string) {
 
-	file, err := os.Open(ifdict)
+	file, err := os.Open(inWifiFile)
 	if err != nil {
 		os.Exit(10)
 	}
@@ -154,7 +154,7 @@ func ReadDictionary(ifdict string, dict map[string]string) {
 
 		from = splitline[0]
 		trans = words[0]
-		dict[from] = trans
+		mapDict[from] = trans
 	}
 
 }
@@ -213,7 +213,7 @@ func DownloadXml() {
 
 }
 
-type routineArgs struct {
+type routineType struct {
 	chanData      chan []string
 	chanMutex     chan int
 	mapDict       map[string]string
@@ -222,11 +222,11 @@ type routineArgs struct {
 	hOutBofwFile  *os.File
 }
 
-func ParseAndWriteRoutine(args Args, rargs routineArgs) {
+func (rtype *routineType) ParseAndWriteRoutine(args Args) {
 
 	for {
 
-		str := strings.Join(<-rargs.chanData, "")
+		str := strings.Join(<-rtype.chanData, "")
 		if str == "" {
 			break
 		}
@@ -246,37 +246,37 @@ func ParseAndWriteRoutine(args Args, rargs routineArgs) {
 		var mapWordFreq = make(map[string]int)
 		var wc = 0
 
-		cargs := countWordArgs{
+		ctype := countWordType{
 			text,
-			rargs.mapDict,
-			rargs.stopWords,
+			rtype.mapDict,
+			rtype.stopWords,
 		}
 
 		if args.isJapanese {
-			if wc, mapWordFreq = CountWordJp(cargs); wc == 0 {
+			if wc, mapWordFreq = ctype.CountWordJp(); wc == 0 {
 				continue
 			}
 		} else {
-			if wc, mapWordFreq = CountWord(cargs); wc == 0 {
+			if wc, mapWordFreq = ctype.CountWord(); wc == 0 {
 				continue
 			}
 		}
 
 		/* Only one thread can write the result into file at once */
-		rargs.chanMutex <- 1
+		rtype.chanMutex <- 1
 
-		rargs.hOutTitleFile.WriteString(fmt.Sprintf("%s\n", title))
+		rtype.hOutTitleFile.WriteString(fmt.Sprintf("%s\n", title))
 
 		if args.outFormatJson {
-			st, err := rargs.hOutBofwFile.Stat()
+			st, err := rtype.hOutBofwFile.Stat()
 			if err != nil {
 				fmt.Println(err)
 				os.Exit(11)
 			}
 			if st.Size() == 0 {
-				rargs.hOutBofwFile.WriteString("[\n    { ")
+				rtype.hOutBofwFile.WriteString("[\n    { ")
 			} else {
-				rargs.hOutBofwFile.WriteString(",\n    { ")
+				rtype.hOutBofwFile.WriteString(",\n    { ")
 			}
 		}
 
@@ -288,25 +288,26 @@ func ParseAndWriteRoutine(args Args, rargs routineArgs) {
 
 			if k > 0 {
 				if args.outFormatJson {
-					rargs.hOutBofwFile.WriteString(", ")
+					rtype.hOutBofwFile.WriteString(", ")
 				} else {
-					rargs.hOutBofwFile.WriteString(" ")
+					rtype.hOutBofwFile.WriteString(" ")
 				}
 			}
 			if args.outFormatJson {
-				rargs.hOutBofwFile.WriteString(fmt.Sprintf("%s:%d", word, freq))
+				rtype.hOutBofwFile.WriteString(fmt.Sprintf("%s:%d", word, freq))
 			} else {
-				rargs.hOutBofwFile.WriteString(fmt.Sprintf("%s %d", word, freq))
+				rtype.hOutBofwFile.WriteString(fmt.Sprintf("%s %d", word, freq))
 			}
 			k++
 		}
 
 		if args.outFormatJson {
-			rargs.hOutBofwFile.WriteString(" }")
+			rtype.hOutBofwFile.WriteString(" }")
 		} else {
-			rargs.hOutBofwFile.WriteString("\n")
+			rtype.hOutBofwFile.WriteString("\n")
 		}
-		_ = <-rargs.chanMutex
+
+		_ = <-rtype.chanMutex
 
 	}
 }
@@ -386,7 +387,7 @@ func main() {
 		}()
 	}
 
-	rargs := routineArgs{
+	rtype := routineType{
 		chanData,
 		chanMutex,
 		mapDict,
@@ -396,7 +397,7 @@ func main() {
 	}
 
 	for i := 0; i < cpu; i++ {
-		go ParseAndWriteRoutine(*args, rargs)
+		go rtype.ParseAndWriteRoutine(*args)
 	}
 
 	var page = make([]string, 0, 65535)
