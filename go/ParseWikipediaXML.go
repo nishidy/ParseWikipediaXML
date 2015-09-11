@@ -20,11 +20,16 @@ import (
 
 var stopwords string = "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your"
 
-// The name of this function should be changed
-func MakeMapJP(text string, dict map[string]string, stopWords []string) (int, map[string]int) {
+type countWordArgs struct {
+	text      string
+	mapDict   map[string]string
+	stopWords []string
+}
+
+func CountWordJp(cargs countWordArgs) (int, map[string]int) {
 
 	tkn := kagome.NewTokenizer()
-	morphs := tkn.Tokenize(text)
+	morphs := tkn.Tokenize(cargs.text)
 
 	var wc = 0
 	var mapWordCnt = make(map[string]int)
@@ -40,13 +45,12 @@ func MakeMapJP(text string, dict map[string]string, stopWords []string) (int, ma
 	return wc, mapWordCnt
 }
 
-// The name of this function should be changed
-func MakeMap(text string, dict map[string]string, stopWords []string) (int, map[string]int) {
+func CountWord(cargs countWordArgs) (int, map[string]int) {
 
 	var re *regexp.Regexp
 
 	re = regexp.MustCompile("[" + regexp.QuoteMeta("[[]]();|") + "(, )(. )( -)]")
-	text = re.ReplaceAllString(text, " ")
+	text := re.ReplaceAllString(cargs.text, " ")
 
 	var words_cnt = make(map[string]int)
 	re, _ = regexp.Compile("^[0-9a-z][-|0-9a-z]+$")
@@ -63,7 +67,7 @@ func MakeMap(text string, dict map[string]string, stopWords []string) (int, map[
 
 			// Should create Any function
 			flag := false
-			for _, sp := range stopWords {
+			for _, sp := range cargs.stopWords {
 				if sp == word {
 					flag = true
 					break
@@ -73,8 +77,8 @@ func MakeMap(text string, dict map[string]string, stopWords []string) (int, map[
 				continue
 			}
 
-			if _, err := dict[word]; err {
-				word = dict[word]
+			if _, err := cargs.mapDict[word]; err {
+				word = cargs.mapDict[word]
 			}
 
 			if _, err := words_cnt[word]; err {
@@ -239,15 +243,21 @@ func ParseAndWriteRoutine(args Args, rargs routineArgs) {
 			continue
 		}
 
-		var text_map = make(map[string]int)
+		var mapWordFreq = make(map[string]int)
 		var wc = 0
 
+		cargs := countWordArgs{
+			text,
+			rargs.mapDict,
+			rargs.stopWords,
+		}
+
 		if args.isJapanese {
-			if wc, text_map = MakeMap(text, rargs.mapDict, rargs.stopWords); wc < args.minWordsInDoc || wc > args.maxWordsInDoc {
+			if wc, mapWordFreq = CountWordJp(cargs); wc == 0 {
 				continue
 			}
 		} else {
-			if wc, text_map = MakeMapJP(text, rargs.mapDict, rargs.stopWords); wc < args.minWordsInDoc || wc > args.maxWordsInDoc {
+			if wc, mapWordFreq = CountWord(cargs); wc == 0 {
 				continue
 			}
 		}
@@ -271,8 +281,8 @@ func ParseAndWriteRoutine(args Args, rargs routineArgs) {
 		}
 
 		k := 0
-		for key, val := range text_map {
-			if val < args.minWord {
+		for word, freq := range mapWordFreq {
+			if freq < args.minWord {
 				continue
 			}
 
@@ -284,9 +294,9 @@ func ParseAndWriteRoutine(args Args, rargs routineArgs) {
 				}
 			}
 			if args.outFormatJson {
-				rargs.hOutBofwFile.WriteString(fmt.Sprintf("%s:%d", key, val))
+				rargs.hOutBofwFile.WriteString(fmt.Sprintf("%s:%d", word, freq))
 			} else {
-				rargs.hOutBofwFile.WriteString(fmt.Sprintf("%s %d", key, val))
+				rargs.hOutBofwFile.WriteString(fmt.Sprintf("%s %d", word, freq))
 			}
 			k++
 		}
@@ -387,7 +397,6 @@ func main() {
 
 	for i := 0; i < cpu; i++ {
 		go ParseAndWriteRoutine(*args, rargs)
-
 	}
 
 	var page = make([]string, 0, 65535)
