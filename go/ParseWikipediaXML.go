@@ -317,16 +317,16 @@ func main() {
 
 	args := new(Args)
 
-	args.inWikiFile = *(flag.String("i", "", "Input File(Wikipedia)"))
-	args.inDictFile = *(flag.String("d", "", "Input File(dictionary)"))
-	args.outBofwFile = *(flag.String("s", "", "Output File(Contents)"))
-	args.outTitleFile = *(flag.String("t", "", "Output File(Title)"))
-	args.minWordsInDoc = *(flag.Int("m", 1, "Minimum number of words that a page should have"))
-	args.maxWordsInDoc = *(flag.Int("x", 65535, "Maximum number of words that a page should have"))
-	args.minWord = *(flag.Int("c", 2, "Minimum number that a word should have"))
-	args.matchCategory = *(flag.String("g", ".*", "Category(regular expression)"))
-	args.outFormatJson = *(flag.Bool("j", false, "Generate bug-of-words in JSON format"))
-	args.isJapanese = *(flag.Bool("p", false, "If this is for Japanese text"))
+	flag.StringVar(&args.inWikiFile, "i", "", "Input File(Wikipedia)")
+	flag.StringVar(&args.inDictFile, "d", "", "Input File(dictionary)")
+	flag.StringVar(&args.outBofwFile, "s", "", "Output File(Contents)")
+	flag.StringVar(&args.outTitleFile, "t", "", "Output File(Title)")
+	flag.IntVar(&args.minWordsInDoc, "m", 1, "Minimum number of words that a page should have")
+	flag.IntVar(&args.maxWordsInDoc, "x", 65535, "Maximum number of words that a page should have")
+	flag.IntVar(&args.minWord, "c", 2, "Minimum number that a word should have")
+	flag.StringVar(&args.matchCategory, "g", ".*", "Category(regular expression)")
+	flag.BoolVar(&args.outFormatJson, "j", false, "Generate bug-of-words in JSON format")
+	flag.BoolVar(&args.isJapanese, "p", false, "If this is for Japanese text")
 
 	flag.Parse()
 
