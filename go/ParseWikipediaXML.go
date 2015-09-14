@@ -11,6 +11,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	//"sync"
 
@@ -21,38 +22,56 @@ import (
 var stopwords string = "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your"
 
 type countWordType struct {
-	text      string
-	mapDict   map[string]string
-	stopWords []string
+	text        string
+	mapDict     map[string]string
+	stopWords   []string
+	mapWordFreq map[string]int
 }
 
-func (ctype *countWordType) CountWordJp() (int, map[string]int) {
+type Entry struct {
+	word string
+	freq int
+}
+
+type List []Entry
+
+func (l List) Len() int {
+	return len(l)
+}
+
+func (l List) Less(i, j int) bool {
+	return l[i].freq > l[j].freq
+}
+
+func (l List) Swap(i, j int) {
+	l[i], l[j] = l[j], l[i]
+}
+
+func (ctype *countWordType) CountWordJp() int {
 
 	tkn := kagome.NewTokenizer()
 	morphs := tkn.Tokenize(ctype.text)
 
 	var wc = 0
-	var mapWordCnt = make(map[string]int)
 
 	for _, m := range morphs {
 		f := m.Features()
 		if strings.Contains(f[0], "名詞") {
-			mapWordCnt[m.Surface] = 1
+			ctype.mapWordFreq[m.Surface] = 1
 		}
 
 	}
 
-	return wc, mapWordCnt
+	return wc
 }
 
-func (ctype *countWordType) CountWord() (int, map[string]int) {
+func (ctype *countWordType) CountWord() int {
 
 	var re *regexp.Regexp
 
 	re = regexp.MustCompile("[" + regexp.QuoteMeta("[[]]();|") + "(, )(. )( -)]")
 	text := re.ReplaceAllString(ctype.text, " ")
 
-	var words_cnt = make(map[string]int)
 	re, _ = regexp.Compile("^[0-9a-z][-|0-9a-z]+$")
 	words := strings.Split(text, " ")
 
@@ -81,16 +100,16 @@ func (ctype *countWordType) CountWord() (int, map[string]int) {
 				word = ctype.mapDict[word]
 			}
 
-			if _, err := words_cnt[word]; err {
-				words_cnt[word]++
+			if _, err := ctype.mapWordFreq[word]; err {
+				ctype.mapWordFreq[word]++
 			} else {
-				words_cnt[word] = 1
+				ctype.mapWordFreq[word] = 1
 			}
 
 			wc++
 		}
 	}
-	return wc, words_cnt
+	return wc
 }
 
 func GetMatchWord(str, regstr string) string {
@@ -206,14 +225,13 @@ type routineType struct {
 }
 
 func (rtype *routineType) ParseAndWriteRoutine(args Args, data []string) {
-	rtype.RoutineRun(args, data)
+	// strings.Join is fast enough to concat strings
+	str := strings.Join(data, "")
+	rtype.RoutineRun(args, str)
 	<-rtype.chanSem
 }
 
-func (rtype *routineType) RoutineRun(args Args, data []string) {
-
-	// strings.Join is fast enough to concat strings
-	str := strings.Join(data, "")
+func (rtype *routineType) RoutineRun(args Args, str string) {
 
 	var regstr string
 	regstr = "<title>(.*)</title>"
@@ -226,24 +244,31 @@ func (rtype *routineType) RoutineRun(args Args, data []string) {
 		return
 	}
 
-	var mapWordFreq = make(map[string]int)
 	var wc = 0
 
 	ctype := countWordType{
 		text,
 		rtype.mapDict,
 		rtype.stopWords,
+		make(map[string]int),
 	}
 
 	if args.isJapanese {
-		if wc, mapWordFreq = ctype.CountWordJp(); wc == 0 {
+		if wc = ctype.CountWordJp(); wc == 0 {
 			return
 		}
 	} else {
-		if wc, mapWordFreq = ctype.CountWord(); wc == 0 {
+		if wc = ctype.CountWord(); wc == 0 {
 			return
 		}
 	}
+
+	structWordFreq := List{}
+	for k, v := range ctype.mapWordFreq {
+		e := Entry{k, v}
+		structWordFreq = append(structWordFreq, e)
+	}
+	sort.Sort(structWordFreq)
 
 	/* Only one thread can write the result into file at the same time */
 	rtype.chanMutex <- 1
@@ -264,7 +289,9 @@ func (rtype *routineType) RoutineRun(args Args, data []string) {
 	}
 
 	k := 0
-	for word, freq := range mapWordFreq {
+	for _, entry := range structWordFreq {
+		word := entry.word
+		freq := entry.freq
 		if freq < args.minWord {
 			continue
 		}
