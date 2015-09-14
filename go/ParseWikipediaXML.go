@@ -134,9 +134,9 @@ func CategoryCheck(catreg, text string) bool {
 
 }
 
-func ReadDictionary(inWifiFile string, mapDict map[string]string) {
+func ReadDictionary(inDictFile string, mapDict map[string]string) {
 
-	file, err := os.Open(inWifiFile)
+	file, err := os.Open(inDictFile)
 	if err != nil {
 		os.Exit(10)
 	}
@@ -197,102 +197,100 @@ func DownloadXml() {
 }
 
 type routineType struct {
-	chanData      chan []string
 	chanMutex     chan int
+	chanSem       chan int
 	mapDict       map[string]string
 	stopWords     []string
 	hOutTitleFile *os.File
 	hOutBofwFile  *os.File
 }
 
-func (rtype *routineType) ParseAndWriteRoutine(args Args) {
+func (rtype *routineType) ParseAndWriteRoutine(args Args, data []string) {
+	rtype.RoutineRun(args, data)
+	<-rtype.chanSem
+}
 
-	for {
+func (rtype *routineType) RoutineRun(args Args, data []string) {
 
-		str := strings.Join(<-rtype.chanData, "")
-		if str == "" {
-			break
+	// strings.Join is fast enough to concat strings
+	str := strings.Join(data, "")
+
+	var regstr string
+	regstr = "<title>(.*)</title>"
+	title := GetMatchWord(str, regstr)
+
+	regstr = "<text[^>]*>(.*)</text>"
+	text := GetMatchWord(str, regstr)
+
+	if !CategoryCheck(args.matchCategory, text) {
+		return
+	}
+
+	var mapWordFreq = make(map[string]int)
+	var wc = 0
+
+	ctype := countWordType{
+		text,
+		rtype.mapDict,
+		rtype.stopWords,
+	}
+
+	if args.isJapanese {
+		if wc, mapWordFreq = ctype.CountWordJp(); wc == 0 {
+			return
 		}
+	} else {
+		if wc, mapWordFreq = ctype.CountWord(); wc == 0 {
+			return
+		}
+	}
 
-		var regstr string
+	/* Only one thread can write the result into file at the same time */
+	rtype.chanMutex <- 1
 
-		regstr = "<title>(.*)</title>"
-		title := GetMatchWord(str, regstr)
+	rtype.hOutTitleFile.WriteString(fmt.Sprintf("%s\n", title))
 
-		regstr = "<text[^>]*>(.*)</text>"
-		text := GetMatchWord(str, regstr)
+	if args.outFormatJson {
+		st, err := rtype.hOutBofwFile.Stat()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(11)
+		}
+		if st.Size() == 0 {
+			rtype.hOutBofwFile.WriteString("[\n    { ")
+		} else {
+			rtype.hOutBofwFile.WriteString(",\n    { ")
+		}
+	}
 
-		if !CategoryCheck(args.matchCategory, text) {
+	k := 0
+	for word, freq := range mapWordFreq {
+		if freq < args.minWord {
 			continue
 		}
 
-		var mapWordFreq = make(map[string]int)
-		var wc = 0
-
-		ctype := countWordType{
-			text,
-			rtype.mapDict,
-			rtype.stopWords,
-		}
-
-		if args.isJapanese {
-			if wc, mapWordFreq = ctype.CountWordJp(); wc == 0 {
-				continue
-			}
-		} else {
-			if wc, mapWordFreq = ctype.CountWord(); wc == 0 {
-				continue
-			}
-		}
-
-		/* Only one thread can write the result into file at once */
-		rtype.chanMutex <- 1
-
-		rtype.hOutTitleFile.WriteString(fmt.Sprintf("%s\n", title))
-
-		if args.outFormatJson {
-			st, err := rtype.hOutBofwFile.Stat()
-			if err != nil {
-				fmt.Println(err)
-				os.Exit(11)
-			}
-			if st.Size() == 0 {
-				rtype.hOutBofwFile.WriteString("[\n    { ")
-			} else {
-				rtype.hOutBofwFile.WriteString(",\n    { ")
-			}
-		}
-
-		k := 0
-		for word, freq := range mapWordFreq {
-			if freq < args.minWord {
-				continue
-			}
-
-			if k > 0 {
-				if args.outFormatJson {
-					rtype.hOutBofwFile.WriteString(", ")
-				} else {
-					rtype.hOutBofwFile.WriteString(" ")
-				}
-			}
+		if k > 0 {
 			if args.outFormatJson {
-				rtype.hOutBofwFile.WriteString(fmt.Sprintf("%s:%d", word, freq))
+				rtype.hOutBofwFile.WriteString(", ")
 			} else {
-				rtype.hOutBofwFile.WriteString(fmt.Sprintf("%s %d", word, freq))
+				rtype.hOutBofwFile.WriteString(" ")
 			}
-			k++
 		}
-
 		if args.outFormatJson {
-			rtype.hOutBofwFile.WriteString(" }")
+			rtype.hOutBofwFile.WriteString(fmt.Sprintf("%s:%d", word, freq))
 		} else {
-			rtype.hOutBofwFile.WriteString("\n")
+			rtype.hOutBofwFile.WriteString(fmt.Sprintf("%s %d", word, freq))
 		}
-
-		_ = <-rtype.chanMutex
-
+		k++
 	}
+
+	if args.outFormatJson {
+		rtype.hOutBofwFile.WriteString(" }")
+	} else {
+		rtype.hOutBofwFile.WriteString("\n")
+	}
+
+	<-rtype.chanMutex
 }
 
 type Args struct {
@@ -341,20 +339,11 @@ func main() {
 	}
 
 	mapDict := make(map[string]string)
-	ReadDictionary(args.inWikiFile, mapDict)
+	ReadDictionary(args.inDictFile, mapDict)
 
-	// To know # of existing goroutines
-	var numgor = runtime.NumGoroutine()
-
-	cpu := runtime.NumCPU()
-	fmt.Printf("# of CPU is %d\n", cpu)
-	if cpu <= numgor {
-		cpu = numgor + 1
-	}
-	runtime.GOMAXPROCS(cpu)
-
-	chanData := make(chan []string)
-	//defer close(cp)
+	cpus := runtime.NumCPU()
+	//fmt.Printf("# of CPU is %d\n", cpus)
+	runtime.GOMAXPROCS(cpus)
 
 	// Mutex for write
 	chanMutex := make(chan int, 1)
@@ -371,19 +360,6 @@ func main() {
 		}()
 	}
 
-	rtype := routineType{
-		chanData,
-		chanMutex,
-		mapDict,
-		stopWords,
-		hOutTitleFile,
-		hOutBofwFile,
-	}
-
-	for i := 0; i < cpu; i++ {
-		go rtype.ParseAndWriteRoutine(*args)
-	}
-
 	var page = make([]string, 0, 65535)
 	var beginAppend, finishAppend = false, false
 	var str string
@@ -393,6 +369,19 @@ func main() {
 		os.Exit(1)
 	}
 	defer hInWikiFile.Close()
+
+	// Semaphore for limiting # of goroutines
+	chanSem := make(chan int, cpus)
+	defer close(chanSem)
+
+	rtype := routineType{
+		chanMutex,
+		chanSem,
+		mapDict,
+		stopWords,
+		hOutTitleFile,
+		hOutBofwFile,
+	}
 
 	scanner := bufio.NewScanner(hInWikiFile)
 	for scanner.Scan() {
@@ -408,7 +397,8 @@ func main() {
 			page = append(page, str)
 		}
 		if finishAppend {
-			chanData <- page
+			chanSem <- 1
+			go rtype.ParseAndWriteRoutine(*args, page)
 			page = make([]string, 0, 65535)
 			beginAppend = false
 			finishAppend = false
@@ -417,12 +407,8 @@ func main() {
 
 	fmt.Println("Finished reading from the input file.")
 
-	for len(chanData) > 0 {
-	}
-
-	close(chanData)
-
-	for runtime.NumGoroutine() > numgor {
+	for len(chanSem) > 0 {
+		// Spinlock
 	}
 
 	fmt.Println("Finished writing to the output file.")
