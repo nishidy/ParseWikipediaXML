@@ -274,8 +274,6 @@ func (rtype *routineType) RoutineRun(args Args, str string) {
 
 	var listText []string
 
-	listText = append(listText, fmt.Sprintf("%s\n", title))
-
 	if args.outFormatJson {
 		st, err := rtype.hOutBofwFile.Stat()
 		if err != nil {
@@ -285,7 +283,7 @@ func (rtype *routineType) RoutineRun(args Args, str string) {
 		if st.Size() == 0 {
 			listText = append(listText, "[\n    { ")
 		} else {
-			listText = append(listText, (",\n    { "))
+			listText = append(listText, ",\n    { ")
 		}
 	}
 
@@ -301,9 +299,9 @@ func (rtype *routineType) RoutineRun(args Args, str string) {
 
 		if k > 0 {
 			if args.outFormatJson {
-				listText = append(listText, (", "))
+				listText = append(listText, ", ")
 			} else {
-				listText = append(listText, (" "))
+				listText = append(listText, " ")
 			}
 		}
 		if args.outFormatJson {
@@ -315,17 +313,20 @@ func (rtype *routineType) RoutineRun(args Args, str string) {
 	}
 
 	if args.outFormatJson {
-		listText = append(listText, (" }"))
+		listText = append(listText, " }")
 	} else {
-		listText = append(listText, ("\n"))
+		listText = append(listText, "\n")
 	}
 
 	strText := strings.Join(listText, "")
 
-	/* Only one thread can write the result into file at the same time */
-	rtype.chanMutex <- 1
-	rtype.hOutBofwFile.WriteString(strText)
-	<-rtype.chanMutex
+	if len(strText) > 0 {
+		/* Only one thread can write the result into file at the same time */
+		rtype.chanMutex <- 1
+		rtype.hOutBofwFile.WriteString(strText)
+		rtype.hOutTitleFile.WriteString(fmt.Sprintf("%s\n", title))
+		<-rtype.chanMutex
+	}
 }
 
 type Args struct {
