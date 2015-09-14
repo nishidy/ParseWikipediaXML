@@ -161,7 +161,7 @@ func ReadDictionary(inWifiFile string, mapDict map[string]string) {
 
 func DownloadXml() {
 
-	fmt.Println("Dowload the latest list of wikipedia databases for articles.")
+	fmt.Println("Dowloading the latest list of Wikipedia DB of articles...")
 
 	re, _ := regexp.Compile("^enwiki-latest-pages-articles[^-].*bz2$")
 
@@ -172,19 +172,11 @@ func DownloadXml() {
 	}
 
 	urls := make([]string, 0, 100)
-	doc.Find("tr").Each(func(_ int, s *goquery.Selection) {
-		url, _ := s.Find("a").Attr("href")
-		var size string
+	doc.Find("a").Each(func(_ int, s *goquery.Selection) {
+		url, _ := s.Attr("href")
 		if re.MatchString(url) {
-			//text := s.Find("a").Text()
-			s.Find("td").Each(func(_ int, st *goquery.Selection) {
-				class, _ := st.Attr("class")
-				if class == "s" {
-					size = st.Text()
-					fmt.Printf("%d %s, %s\n", len(urls)+1, url, size)
-					urls = append(urls, url)
-				}
-			})
+			fmt.Printf("%d: %s\n", len(urls)+1, url)
+			urls = append(urls, url)
 		}
 
 	})
@@ -197,19 +189,10 @@ func DownloadXml() {
 	resp, _ := http.Get("http://dumps.wikimedia.org/enwiki/latest/" + urls[num-1])
 	defer resp.Body.Close()
 
-	//cont, _ := ioutil.ReadAll(resp.Body)
-	//file.Write(cont)
-
-	//file, _ := os.OpenFile(urls[num-1], os.O_CREATE|os.O_WRONLY, 0666)
-
 	file, _ := os.Create(urls[num-1])
 	io.Copy(file, resp.Body)
 
-	// XXX: Tried but could not read them as scanner without uncompressing the bzip2 file
-	// FIXME: Uncompress and give it the arg to keep running
-
-	// This should be automated
-	fmt.Println("Please uncompress it and give it the uncompressed file to thig program for -i option.")
+	fmt.Println("Download finished.")
 
 }
 
@@ -360,6 +343,7 @@ func main() {
 	mapDict := make(map[string]string)
 	ReadDictionary(args.inWikiFile, mapDict)
 
+	// To know # of existing goroutines
 	var numgor = runtime.NumGoroutine()
 
 	cpu := runtime.NumCPU()
