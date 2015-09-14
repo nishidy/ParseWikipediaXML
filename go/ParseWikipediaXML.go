@@ -65,6 +65,15 @@ func (ctype *countWordType) CountWordJp() int {
 	return wc
 }
 
+func Any(w string, list []string) bool {
+	for _, sp := range list {
+		if sp == w {
+			return true
+		}
+	}
+	return false
+}
+
 func (ctype *countWordType) CountWord() int {
 
 	var re *regexp.Regexp
@@ -84,15 +93,7 @@ func (ctype *countWordType) CountWord() int {
 				continue
 			}
 
-			// Should create Any function
-			flag := false
-			for _, sp := range ctype.stopWords {
-				if sp == word {
-					flag = true
-					break
-				}
-			}
-			if flag {
+			if Any(word, ctype.stopWords) {
 				continue
 			}
 
@@ -225,10 +226,13 @@ type routineType struct {
 }
 
 func (rtype *routineType) ParseAndWriteRoutine(args Args, data []string) {
+
 	// strings.Join is fast enough to concat strings
 	str := strings.Join(data, "")
 	rtype.RoutineRun(args, str)
+
 	<-rtype.chanSem
+
 }
 
 func (rtype *routineType) RoutineRun(args Args, str string) {
