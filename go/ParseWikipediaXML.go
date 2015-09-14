@@ -248,8 +248,6 @@ func (rtype *routineType) RoutineRun(args Args, str string) {
 		return
 	}
 
-	var wc = 0
-
 	ctype := countWordType{
 		text,
 		rtype.mapDict,
@@ -258,11 +256,11 @@ func (rtype *routineType) RoutineRun(args Args, str string) {
 	}
 
 	if args.isJapanese {
-		if wc = ctype.CountWordJp(); wc == 0 {
+		if wc := ctype.CountWordJp(); wc == 0 {
 			return
 		}
 	} else {
-		if wc = ctype.CountWord(); wc == 0 {
+		if wc := ctype.CountWord(); wc == 0 {
 			return
 		}
 	}
@@ -274,10 +272,9 @@ func (rtype *routineType) RoutineRun(args Args, str string) {
 	}
 	sort.Sort(structWordFreq)
 
-	/* Only one thread can write the result into file at the same time */
-	rtype.chanMutex <- 1
+	var listText []string
 
-	rtype.hOutTitleFile.WriteString(fmt.Sprintf("%s\n", title))
+	listText = append(listText, fmt.Sprintf("%s\n", title))
 
 	if args.outFormatJson {
 		st, err := rtype.hOutBofwFile.Stat()
@@ -286,41 +283,48 @@ func (rtype *routineType) RoutineRun(args Args, str string) {
 			os.Exit(11)
 		}
 		if st.Size() == 0 {
-			rtype.hOutBofwFile.WriteString("[\n    { ")
+			listText = append(listText, "[\n    { ")
 		} else {
-			rtype.hOutBofwFile.WriteString(",\n    { ")
+			listText = append(listText, (",\n    { "))
 		}
 	}
 
 	k := 0
 	for _, entry := range structWordFreq {
+
 		word := entry.word
 		freq := entry.freq
+
 		if freq < args.minWord {
 			continue
 		}
 
 		if k > 0 {
 			if args.outFormatJson {
-				rtype.hOutBofwFile.WriteString(", ")
+				listText = append(listText, (", "))
 			} else {
-				rtype.hOutBofwFile.WriteString(" ")
+				listText = append(listText, (" "))
 			}
 		}
 		if args.outFormatJson {
-			rtype.hOutBofwFile.WriteString(fmt.Sprintf("%s:%d", word, freq))
+			listText = append(listText, fmt.Sprintf("%s:%d", word, freq))
 		} else {
-			rtype.hOutBofwFile.WriteString(fmt.Sprintf("%s %d", word, freq))
+			listText = append(listText, fmt.Sprintf("%s %d", word, freq))
 		}
 		k++
 	}
 
 	if args.outFormatJson {
-		rtype.hOutBofwFile.WriteString(" }")
+		listText = append(listText, (" }"))
 	} else {
-		rtype.hOutBofwFile.WriteString("\n")
+		listText = append(listText, ("\n"))
 	}
 
+	strText := strings.Join(listText, "")
+
+	/* Only one thread can write the result into file at the same time */
+	rtype.chanMutex <- 1
+	rtype.hOutBofwFile.WriteString(strText)
 	<-rtype.chanMutex
 }
 
