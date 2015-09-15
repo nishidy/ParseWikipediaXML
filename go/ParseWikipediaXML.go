@@ -219,6 +219,7 @@ func DownloadXml() {
 type routineType struct {
 	chanMutex     chan int
 	chanSem       chan int
+	chanLock      chan int
 	mapDict       map[string]string
 	stopWords     []string
 	hOutTitleFile *os.File
@@ -227,7 +228,13 @@ type routineType struct {
 
 func (rtype *routineType) ParseAndWriteRoutine(args Args, data []string) {
 
-	defer func() { <-rtype.chanSem }()
+	defer func() {
+		<-rtype.chanSem
+		if len(rtype.chanSem) == 0 {
+			rtype.chanLock <- 1
+		}
+		//fmt.Printf("-:%d\n", len(rtype.chanSem))
+	}()
 
 	// strings.Join is fast enough to concat strings
 	str := strings.Join(data, "")
@@ -373,12 +380,16 @@ func main() {
 	ReadDictionary(args.inDictFile, mapDict)
 
 	cpus := runtime.NumCPU()
-	//fmt.Printf("# of CPU is %d\n", cpus)
+	fmt.Printf("# of CPU is %d\n", cpus)
 	runtime.GOMAXPROCS(cpus)
 
 	// Mutex for write
 	chanMutex := make(chan int, 1)
 	defer close(chanMutex)
+
+	// Lock until all goroutines finishes
+	chanLock := make(chan int, 1)
+	defer close(chanLock)
 
 	hOutTitleFile, _ := os.Create(args.outTitleFile)
 	hOutBofwFile, _ := os.Create(args.outBofwFile)
@@ -408,6 +419,7 @@ func main() {
 	rtype := routineType{
 		chanMutex,
 		chanSem,
+		chanLock,
 		mapDict,
 		stopWords,
 		hOutTitleFile,
@@ -429,6 +441,7 @@ func main() {
 		}
 		if finishAppend {
 			chanSem <- 1
+			//fmt.Printf("+:%d\n", len(chanSem))
 			go rtype.ParseAndWriteRoutine(*args, page)
 			page = make([]string, 0, 65535)
 			beginAppend = false
@@ -438,9 +451,7 @@ func main() {
 
 	fmt.Println("Finished reading from the input file.")
 
-	for len(chanSem) > 0 {
-		// Spinlock
-	}
+	<-chanLock
 
 	fmt.Println("Finished writing to the output file.")
 }
