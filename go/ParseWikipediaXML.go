@@ -227,15 +227,10 @@ type routineType struct {
 
 func (rtype *routineType) ParseAndWriteRoutine(args Args, data []string) {
 
+	defer func() { <-rtype.chanSem }()
+
 	// strings.Join is fast enough to concat strings
 	str := strings.Join(data, "")
-	rtype.RoutineRun(args, str)
-
-	<-rtype.chanSem
-
-}
-
-func (rtype *routineType) RoutineRun(args Args, str string) {
 
 	var regstr string
 	regstr = "<title>(.*)</title>"
