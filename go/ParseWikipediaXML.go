@@ -314,15 +314,16 @@ func (rtype *routineType) ParseAndWriteRoutine(args Args, data []string) {
 		k++
 	}
 
-	if args.outFormatJson {
-		listText = append(listText, " }")
-	} else {
-		listText = append(listText, "\n")
-	}
+	if len(listText) > 0 {
 
-	strText := strings.Join(listText, "")
+		if args.outFormatJson {
+			listText = append(listText, " }")
+		} else {
+			listText = append(listText, "\n")
+		}
 
-	if len(strText) > 0 {
+		strText := strings.Join(listText, "")
+
 		/* Only one thread can write the result into file at the same time */
 		rtype.chanMutex <- 1
 		rtype.hOutBofwFile.WriteString(strText)
