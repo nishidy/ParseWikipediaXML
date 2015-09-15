@@ -19,14 +19,11 @@ import (
 	"github.com/ikawaha/kagome"
 )
 
-var stopwords string = "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your"
+var (
+	stopWordsEn string = "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your"
 
-type countWordType struct {
-	text        string
-	mapDict     map[string]string
-	stopWords   []string
-	mapWordFreq map[string]int
-}
+	stopWordsJp string = "の,に,は,を,た,が,で,て,と,し,れ,さ,ある,いる,も,する,から,な,こと,として,い,や,れる,など,なっ,ない,この,ため,その,あっ,よう,また,もの,という,あり,まで,られ,なる,へ,か,だ,これ,によって,により,おり,より,による,ず,なり,られる,において,ば,なかっ,なく,しかし,について,せ,だっ,その後,できる,それ,う,ので,なお,のみ,でき,き,つ,における,および,いう,さらに,でも,ら,たり,その他,に関する,たち,ます,ん,なら,に対して,特に,せる,及び,これら,とき,では,にて,ほか,ながら,うち,そして,とともに,ただし,かつて,それぞれ,または,お,ほど,ものの,に対する,ほとんど,と共に,といった,です,とも,ところ,ここ"
+)
 
 type Entry struct {
 	word string
@@ -47,24 +44,6 @@ func (l List) Swap(i, j int) {
 	l[i], l[j] = l[j], l[i]
 }
 
-func (ctype *countWordType) CountWordJp() int {
-
-	tkn := kagome.NewTokenizer()
-	morphs := tkn.Tokenize(ctype.text)
-
-	var wc = 0
-
-	for _, m := range morphs {
-		f := m.Features()
-		if strings.Contains(f[0], "名詞") {
-			ctype.mapWordFreq[m.Surface] = 1
-		}
-
-	}
-
-	return wc
-}
-
 func Any(w string, list []string) bool {
 	for _, sp := range list {
 		if sp == w {
@@ -74,7 +53,58 @@ func Any(w string, list []string) bool {
 	return false
 }
 
-func (ctype *countWordType) CountWord() int {
+type countWordType struct {
+	text        string
+	mapDict     map[string]string
+	stopWords   []string
+	mapWordFreq map[string]int
+}
+
+func (ctype *countWordType) CountWordJp() int {
+
+	tkn := kagome.NewTokenizer()
+	morphs := tkn.Tokenize(ctype.text)
+
+	var wc = 0
+
+	re1 := regexp.MustCompile("^[" + regexp.QuoteMeta("-[]{}()|") + ",.*+=_:;~!@#$%^&?`'/]+$")
+	re2 := regexp.MustCompile("^[（）｛｝「」『』［］、。]+$")
+
+	for _, m := range morphs {
+
+		word := m.Surface
+		if word == "EOS" || word == "BOS" || re1.MatchString(word) || re2.MatchString(word) {
+			continue
+		}
+
+		//fmt.Printf("%s %v\n", m.Surface, m.Features())
+		f := m.Features()
+		class := f[0]
+		if strings.Contains(class, "名詞") ||
+			strings.Contains(class, "形容詞") ||
+			strings.Contains(class, "動詞") ||
+			strings.Contains(class, "副詞") {
+		} else {
+			continue
+		}
+
+		if Any(word, ctype.stopWords) {
+			continue
+		}
+
+		if _, err := ctype.mapWordFreq[word]; err {
+			ctype.mapWordFreq[word]++
+		} else {
+			ctype.mapWordFreq[word] = 1
+		}
+
+		wc++
+	}
+
+	return wc
+}
+
+func (ctype *countWordType) CountWordEn() int {
 
 	var re *regexp.Regexp
 
@@ -258,11 +288,11 @@ func (rtype *routineType) ParseAndWriteRoutine(args Args, data []string) {
 	}
 
 	if args.isJapanese {
-		if wc := ctype.CountWordJp(); wc == 0 {
+		if wc := ctype.CountWordJp(); wc == 0 || wc > args.maxWordsInDoc || wc < args.minWordsInDoc {
 			return
 		}
 	} else {
-		if wc := ctype.CountWord(); wc == 0 {
+		if wc := ctype.CountWordEn(); wc == 0 || wc > args.maxWordsInDoc || wc < args.minWordsInDoc {
 			return
 		}
 	}
@@ -362,8 +392,8 @@ func main() {
 	flag.IntVar(&args.maxWordsInDoc, "x", 65535, "Maximum number of words that a page should have")
 	flag.IntVar(&args.minWord, "c", 2, "Minimum number that a word should have")
 	flag.StringVar(&args.matchCategory, "g", ".*", "Category(regular expression)")
-	flag.BoolVar(&args.outFormatJson, "j", false, "Generate bug-of-words in JSON format")
-	flag.BoolVar(&args.isJapanese, "p", false, "If this is for Japanese text")
+	flag.BoolVar(&args.outFormatJson, "n", false, "Generate bug-of-words in JSON format")
+	flag.BoolVar(&args.isJapanese, "j", false, "If this is for Japanese text")
 
 	flag.Parse()
 
@@ -373,12 +403,21 @@ func main() {
 	}
 
 	stopWords := make([]string, 0, 256)
-	for _, word := range strings.Split(stopwords, ",") {
-		stopWords = append(stopWords, word)
+	if args.isJapanese {
+		for _, word := range strings.Split(stopWordsJp, ",") {
+			stopWords = append(stopWords, word)
+		}
+	} else {
+		stopWords := make([]string, 0, 256)
+		for _, word := range strings.Split(stopWordsEn, ",") {
+			stopWords = append(stopWords, word)
+		}
 	}
 
 	mapDict := make(map[string]string)
-	ReadDictionary(args.inDictFile, mapDict)
+	if !args.isJapanese {
+		ReadDictionary(args.inDictFile, mapDict)
+	}
 
 	cpus := runtime.NumCPU()
 	fmt.Printf("# of CPU is %d\n", cpus)
