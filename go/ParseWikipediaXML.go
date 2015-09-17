@@ -13,7 +13,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-	//"sync"
+	"sync"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/ikawaha/kagome"
@@ -249,21 +249,18 @@ func DownloadXml() {
 type routineType struct {
 	chanMutex     chan int
 	chanSem       chan int
-	chanLock      chan int
 	mapDict       map[string]string
 	stopWords     []string
 	hOutTitleFile *os.File
 	hOutBofwFile  *os.File
+	wait          *sync.WaitGroup
 }
 
 func (rtype *routineType) ParseAndWriteRoutine(args Args, data []string) {
 
 	defer func() {
 		<-rtype.chanSem
-		if len(rtype.chanSem) == 0 {
-			rtype.chanLock <- 1
-		}
-		//fmt.Printf("-:%d\n", len(rtype.chanSem))
+		rtype.wait.Done()
 	}()
 
 	// strings.Join is fast enough to concat strings
@@ -427,10 +424,6 @@ func main() {
 	chanMutex := make(chan int, 1)
 	defer close(chanMutex)
 
-	// Lock until all goroutines finishes
-	chanLock := make(chan int, 1)
-	defer close(chanLock)
-
 	hOutTitleFile, _ := os.Create(args.outTitleFile)
 	hOutBofwFile, _ := os.Create(args.outBofwFile)
 	defer hOutTitleFile.Close()
@@ -456,14 +449,16 @@ func main() {
 	chanSem := make(chan int, cpus)
 	defer close(chanSem)
 
+	var wait sync.WaitGroup
+
 	rtype := routineType{
 		chanMutex,
 		chanSem,
-		chanLock,
 		mapDict,
 		stopWords,
 		hOutTitleFile,
 		hOutBofwFile,
+		&wait,
 	}
 
 	scanner := bufio.NewScanner(hInWikiFile)
@@ -483,6 +478,7 @@ func main() {
 			chanSem <- 1
 			//fmt.Printf("+:%d\n", len(chanSem))
 			go rtype.ParseAndWriteRoutine(*args, page)
+			wait.Add(1)
 			page = make([]string, 0, 65535)
 			beginAppend = false
 			finishAppend = false
@@ -491,7 +487,7 @@ func main() {
 
 	fmt.Println("Finished reading from the input file.")
 
-	<-chanLock
+	wait.Wait()
 
 	fmt.Println("Finished writing to the output file.")
 }
