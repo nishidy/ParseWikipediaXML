@@ -6,6 +6,8 @@
 
 using namespace std;
 
+#define ASCII_DIFF_UPPER_AND_LOWER 32
+
 string makeDocFromGroupOfBofw(string line){
 
 	stringstream ss(line);
@@ -25,6 +27,9 @@ string makeDocFromGroupOfBofw(string line){
 				exit(1);
 			}
 		}else{ // freq
+			if(tmpCurrentTerm.size()>1){
+				tmpCurrentTerm[0] = (char)((int)tmpCurrentTerm[0]-ASCII_DIFF_UPPER_AND_LOWER);
+			}
 			for(int i=0;i<stoi(termOrFreq);i++){
 				vecTerms.push_back(tmpCurrentTerm);
 			}
