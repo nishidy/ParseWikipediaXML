@@ -1,6 +1,7 @@
 #include <iostream>
 #include <random>
 #include <vector>
+#include <sstream>
 
 using namespace std;
 
@@ -9,6 +10,8 @@ using namespace std;
 #define ASCII_DASH 45
 
 #define CHAR_SET_NUM ((ASCII_LOWER_END-ASCII_LOWER_START+1)-1+1)
+
+string stopwords= "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your";
 
 uniform_int_distribution<int> gGenCharAlphabet(0,CHAR_SET_NUM-1);
 uniform_int_distribution<int> gGenCharAlphabetDash(0,CHAR_SET_NUM);
@@ -34,7 +37,7 @@ char selectAlphabetDash(mt19937* mt){
 
 string makeRandomTerm(mt19937* mt, int maxNumCharOfTerm){
 
-	uniform_int_distribution<int> genNumCharOfTerm(1,maxNumCharOfTerm);
+	uniform_int_distribution<int> genNumCharOfTerm(2,maxNumCharOfTerm);
 	int length = genNumCharOfTerm(*mt);
 
 	string term;
@@ -55,16 +58,28 @@ int makeRandomFreq(mt19937* mt, int limit){
 	return genFreqOfTerm(*mt);
 }
 
+bool findStrFromVec(vector<string>* vecStrs, string str){
+	vector<string>::iterator itVecStrs =
+		find(vecStrs->begin(),vecStrs->end(),str);
+
+	if( itVecStrs == vecStrs->end() )
+		return false;
+	else
+		return true;
+
+}
+
 int main(int argc, char *argv[]){
 
 	int numDocs;
 	int maxNumTermsInDocs;
 	int maxNumCharOfTerm;
 	int maxFreq;
+
 	if(argc==5){
 		numDocs=atoi(argv[1]);
 		maxNumTermsInDocs=atoi(argv[2]);
-		maxNumCharOfTerm=atoi(argv[3]);
+		maxNumCharOfTerm=atoi(argv[3])<2?2:atoi(argv[3]);
 		maxFreq=atoi(argv[4]);
 	}else{
 		cout << argv[0] << " numDocs maxNumTermsInDocs maxNumCharOfTerm maxFreq"<< endl;
@@ -73,6 +88,13 @@ int main(int argc, char *argv[]){
 
 	random_device rnd;
 	mt19937 mt(rnd());
+
+	stringstream ss(stopwords);
+	string word;
+	vector<string> vecStopwords;
+	while(getline(ss,word,',')){
+		vecStopwords.push_back(word);
+	}
 
 	for(int i=0;i<numDocs;i++){
 		uniform_int_distribution<int> genNumTermsInDoc(1,maxNumTermsInDocs);
@@ -85,14 +107,19 @@ int main(int argc, char *argv[]){
 			string term;
 			while(true){
 				term = makeRandomTerm(&mt,maxNumCharOfTerm);
-				vector<string>::iterator itVecTerms = find(vecTerms.begin(),vecTerms.end(),term);
-				if( itVecTerms == vecTerms.end() ){
-					vecTerms.push_back(term);
-					break;
-				}
+
+				if(findStrFromVec(&vecStopwords, term)) continue;
+				if(findStrFromVec(&vecTerms, term)) continue;
+
+				vecTerms.push_back(term);
+				break;
 			}
+		}
+		sort(vecTerms.begin(), vecTerms.end());
+
+		for(int j=0;j<numTermsInDoc;j++){
 			int freq  = makeRandomFreq(&mt,limit);
-			cout << term << " " << freq;
+			cout << vecTerms[j] << " " << freq;
 			if(j<numTermsInDoc-1) cout << " ";
 			limit = freq;
 		}
@@ -101,5 +128,4 @@ int main(int argc, char *argv[]){
 
 	return 0;
 }
-
 

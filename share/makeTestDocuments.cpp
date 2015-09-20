@@ -66,8 +66,12 @@ int main(int argc, char *argv[]){
 	}
 
 	string line;
+	int cnt=0;
 	while(getline(ifs, line)){
+		cout << "<page>" << endl << "<title>title" << cnt << "</title><text>";
 		cout << makeDocFromGroupOfBofw(line) << endl;
+		cout << "</text>"<< endl << "<category>category" << cnt << "</category>" << "</page>" << endl;
+		cnt++;
 	}
 
 	return 0;

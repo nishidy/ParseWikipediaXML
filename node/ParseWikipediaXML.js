@@ -19,6 +19,7 @@ var argv = minimist(process.argv.slice(2), {
 	],
 	boolean: [
 		'isJapanese',
+		'notCareBaseform',
 	],
 	alias: {
 		i: 'inWikiFile',
@@ -29,13 +30,15 @@ var argv = minimist(process.argv.slice(2), {
 		x: 'maxWordsInDoc',
 		c: 'minWordForCount',
 		j: 'isJapanese',
+		b: 'notCareBaseform',
 	},
 	default: {
 		inDictFile: "",
-		minWordsInDoc: 2,
+		minWordsInDoc: 1,
 		maxWordsInDoc: 65535,
 		minWordForCount: 1,
 		isJapanese: false,
+		notCareBaseform: false,
 	},
 })
 
@@ -120,9 +123,6 @@ function parseJp(page){
 	var numWordsInDoc = 0
 	var text= page.match(/<text[^<>]*>([\s\S]*?)<\/text>/)[1]
 
-	var stopwords = this.stopwords
-	var outputFile = this.outputFile
-
 	tokens = this.tokenizer.tokenize(text)
 	for(var idx in tokens){
 
@@ -140,7 +140,7 @@ function parseJp(page){
 			}
 		}
 
-		if(stopwords.indexOf(word)>-1){ return }
+		if(this.stopwords.indexOf(word)>-1){ return }
 
 		if(word in mapWordFreq){
 			mapWordFreq[word] += 1
@@ -153,7 +153,9 @@ function parseJp(page){
 
 	var tupleWordFreq = []
 	for(var key in mapWordFreq){ tupleWordFreq.push([key,mapWordFreq[key]]) }
-	tupleWordFreq.sort(function(a,b){ return a[1] < b[1] ? 1 : a[1] > b[1] ? -1 : 0 } )
+	tupleWordFreq.sort(function(a,b){
+		return a[1] < b[1] ? 1 : a[1] > b[1] ? -1 : a[0] > b[0] ? 1 : a[0] < b[0] ? -1 : 0
+	})
 
 	var strBofw = ""
 	for(var idx in tupleWordFreq){
@@ -161,8 +163,8 @@ function parseJp(page){
 		if(idx < tupleWordFreq.length-1){ strBofw += " " }
 	}
 
-	if(numWordsInDoc>argv.m && strBofw.length>0){
-		fs.appendFileSync(outputFile,strBofw.slice(0,strBofw.length-1)+"\n")
+	if(numWordsInDoc>=argv.m && strBofw.length>0){
+		fs.appendFileSync(this.outputFile,strBofw+"\n")
 	}
 
 }
@@ -174,16 +176,14 @@ function parseEn(page){
 	var text= page.match(/<text[^<>]*>([\s\S]*?)<\/text>/)[1]
 
 	// To deliver these propaties to forEach function
-	var stopwords = this.stopwords
-	var mapDict = this.mapDict
-	var outputFile = this.outputFile
+	var _this = this
 
 	text.replace(/\n/g," ").split(" ").forEach(function(word){
 		word = word.toLowerCase()
 
 		if(word.match(/^[a-z][\-'0-9a-z]*[0-9a-z]$/)==null){ return }
-		if(stopwords.indexOf(word)>-1){ return }
-		if(word in mapDict){ word = mapDict[word] }
+		if(_this.stopwords.indexOf(word)>-1){ return }
+		if(_this.notCareBaseform && word in _this.mapDict){ word = _this.mapDict[word] }
 
 		if(word in mapWordFreq){
 			mapWordFreq[word] += 1
@@ -195,7 +195,9 @@ function parseEn(page){
 
 	var tupleWordFreq = []
 	for(var key in mapWordFreq){ tupleWordFreq.push([key,mapWordFreq[key]]) }
-	tupleWordFreq.sort(function(a,b){ return a[1] < b[1] ? 1 : a[1] > b[1] ? -1 : 0 } )
+	tupleWordFreq.sort(function(a,b){
+		return a[1] < b[1] ? 1 : a[1] > b[1] ? -1 : a[0] > b[0] ? 1 : a[0] < b[0] ? -1 : 0
+	})
 
 	var strBofw = ""
 	for(var idx in tupleWordFreq){
@@ -203,8 +205,8 @@ function parseEn(page){
 		if(idx < tupleWordFreq.length-1){ strBofw += " " }
 	}
 
-	if(numWordsInDoc>argv.m && strBofw.length>0){
-		fs.appendFileSync(outputFile,strBofw.slice(0,strBofw.length-1)+"\n")
+	if(numWordsInDoc>=argv.m && strBofw.length>0){
+		fs.appendFileSync(_this.outputFile,strBofw+"\n")
 	}
 }
 
@@ -219,9 +221,9 @@ co(function *(){
 		// Read dictionary
 		var hDictFile = yield openAsync(parser.dictFile)
 		var mapDict = {}
-		console.log("Reading dictionary begins.")
+		console.log("Begin reading dictionary.")
 		while(offset<parser.dictFileSize){
-			console.log(~~(offset*100/parser.dictFileSize)+"%")
+			process.stdout.write(~~(offset*100/parser.dictFileSize)+"%..")
 
 			var length = (parser.dictFileSize-offset)>BUFSIZE ? BUFSIZE : parser.dictFileSize-offset
 			text += yield readAsync(hDictFile,length)
@@ -230,15 +232,15 @@ co(function *(){
 			offset += BUFSIZE
 		}
 		parser.mapDict = mapDict
-		console.log("Reading dictionary finished.")
+		console.log(" Finished reading dictionary.")
 	}
 
 	// Parse WikipediaXML
 	offset = 0
 	var hInputFile = yield openAsync(parser.inputFile)
-	console.log("Reading WikipediaXML begins.")
+	console.log("Begins reading WikipediaXML.")
 	while(offset<parser.inputFileSize){
-		console.log(~~(offset*100/parser.inputFileSize)+"%")
+		process.stdout.write(~~(offset*100/parser.inputFileSize)+"%..")
 
 		var length = (parser.inputFileSize-offset)>BUFSIZE ? BUFSIZE : parser.inputFileSize-offset
 		text += yield readAsync(hInputFile,length)
@@ -249,7 +251,7 @@ co(function *(){
 		}
 		offset += BUFSIZE
 	}
-	console.log("Reading WikipediaXML finished.")
+	console.log(" Finished reading WikipediaXML.")
 
 }).catch(function(err){
 	console.log(err.message)
