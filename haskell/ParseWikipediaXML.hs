@@ -11,7 +11,7 @@ type S = String
 main :: IO ()
 main = do
 	args <- getArgs
-	mapArgs <- return $ defaultArgs "idstmxc" $ parseArgsAbbr args $ parseArgs args
+	mapArgs <- return $ parseArgs args $ defaultArgs "idstmxc"
 
 	putStrLn "Begin reading dictionary."
 	mapDict <- getDictionaryFromFile mapArgs
@@ -32,57 +32,46 @@ splitByComma [] _ arr = arr
 splitByComma (x:xs) s arr | x==',' = splitByComma xs "" (s:arr)
 splitByComma (x:xs) s arr = splitByComma xs (s++[x]) arr
 
-defaultArgs :: S -> M.Map S S -> M.Map S S
-defaultArgs [] m = m
-defaultArgs (x:xs) m =
-	let newMapDict = case x of
-		'i' -> M.insertWithKey (\_ _ o->o) "i" "" m
-		'd' -> M.insertWithKey (\_ _ o->o) "d" "" m
-		's' -> M.insertWithKey (\_ _ o->o) "s" "" m
-		't' -> M.insertWithKey (\_ _ o->o) "t" ""  m
-		'm' -> M.insertWithKey (\_ _ o->o) "m" (show 1) m
-		'x' -> M.insertWithKey (\_ _ o->o) "x" (show 65535) m
-		'c' -> M.insertWithKey (\_ _ o->o) "c" (show 1) m
-		_ -> m
-	in defaultArgs xs newMapDict
-
-parseArgsAbbr :: [S] -> M.Map S S -> M.Map S S
-parseArgsAbbr [] mapArgs = mapArgs
-parseArgsAbbr (('-':option):value:args) mapArgs =
-	let m = parseArgsAbbr args mapArgs in
-		case option of
-			"i" -> M.insertWithKey (\_ _ _ -> value) "i" value m
-			"d" -> M.insertWithKey (\_ _ _ -> value) "d" value m
-			"s" -> M.insertWithKey (\_ _ _ -> value) "s" value m
-			"t" -> M.insertWithKey (\_ _ _ -> value) "t" value m
-			"m" -> M.insertWithKey (\_ _ _ -> value) "m" value m
-			"x" -> M.insertWithKey (\_ _ _ -> value) "x" value m
-			"c" -> M.insertWithKey (\_ _ _ -> value) "c" value m
+defaultArgs :: S -> M.Map S S
+defaultArgs [] = M.empty
+defaultArgs (x:xs) =
+	let m = defaultArgs xs in
+		case x of
+			'i' -> M.insertWithKey (\_ _ o->o) "i" "" m
+			'd' -> M.insertWithKey (\_ _ o->o) "d" "" m
+			's' -> M.insertWithKey (\_ _ o->o) "s" "" m
+			't' -> M.insertWithKey (\_ _ o->o) "t" ""  m
+			'm' -> M.insertWithKey (\_ _ o->o) "m" (show (1::Int)) m
+			'x' -> M.insertWithKey (\_ _ o->o) "x" (show (65535::Int)) m
+			'c' -> M.insertWithKey (\_ _ o->o) "c" (show (1::Int)) m
 			_ -> m
-parseArgsAbbr _ mapArgs = mapArgs
 
-parseArgs :: [S] -> M.Map S S
-parseArgs [] = M.empty
-parseArgs (('-':option):value:args) =
-	let m = parseArgs args in
+parseArgs :: [S] -> M.Map S S -> M.Map S S
+parseArgs [] mapArgs = mapArgs
+parseArgs (('-':option):value:args) mapArgs =
+	let m = parseArgs args mapArgs in
 		case option of
-			"i" -> M.insertWithKey (\_ _ _ -> value) "inWikiFile" value m
-			"d" -> M.insertWithKey (\_ _ _ -> value) "inDictFile" value m
-			"s" -> M.insertWithKey (\_ _ _ -> value) "outBofwFile" value m
-			"t" -> M.insertWithKey (\_ _ _ -> value) "outTitleFile" value m
-			"m" -> M.insertWithKey (\_ _ _ -> value) "numMinTermsInDoc" value m
-			"x" -> M.insertWithKey (\_ _ _ -> value) "numMaxTermsInDoc" value m
-			"c" -> M.insertWithKey (\_ _ _ -> value) "numMinFreqOfTerm" value m
+			"i" -> M.insertWithKey (\_ _ _ -> value) "i" value $
+					( M.insertWithKey (\_ _ _ -> value) "inWikiFile" value m )
+			"d" -> M.insertWithKey (\_ _ _ -> value) "d" value $
+					( M.insertWithKey (\_ _ _ -> value) "inDictFile" value m )
+			"s" -> M.insertWithKey (\_ _ _ -> value) "s" value $
+					( M.insertWithKey (\_ _ _ -> value) "outBofwFile" value m )
+			"t" -> M.insertWithKey (\_ _ _ -> value) "t" value $
+					( M.insertWithKey (\_ _ _ -> value) "outTitleFile" value m )
+			"m" -> M.insertWithKey (\_ _ _ -> value) "m" value $
+					( M.insertWithKey (\_ _ _ -> value) "numMinTermsInDoc" value m )
+			"x" -> M.insertWithKey (\_ _ _ -> value) "x" value $
+					( M.insertWithKey (\_ _ _ -> value) "numMaxTermsInDoc" value m )
+			"c" -> M.insertWithKey (\_ _ _ -> value) "c" value $
+					( M.insertWithKey (\_ _ _ -> value) "numMinFreqOfTerm" value m )
 			_ -> m
-parseArgs _ = M.empty
+parseArgs _ mapArgs = mapArgs
 
 getDictionaryFromFile :: M.Map S S -> IO (M.Map S S)
 getDictionaryFromFile mapArgs = do
 
-	let inDictFile = case M.lookup "d" mapArgs of
-		Just i -> i
-		Nothing -> "../share/morph_english.flat"
-
+	let inDictFile = tk mapArgs "d"
 	hInDictFile <- openFile inDictFile ReadMode
 	getLineFromInDictFile hInDictFile M.empty
 
@@ -101,10 +90,7 @@ getLineFromInDictFile hInDictFile mapDict = do
 getContentFromFile :: M.Map S S -> M.Map S S -> [S] -> IO () 
 getContentFromFile mapArgs mapDict stopwords = do
 
-	let inWikiFile = case M.lookup "i" mapArgs of
-		Just i -> i
-		Nothing -> "../share/enwiki-test-5000"
-
+	let inWikiFile = tk mapArgs "i"
 	hInWikiFile <- openFile inWikiFile ReadMode
 	--encoding <- mkTextEncoding "65001"
 	--hSetEncoding hInWikiFile encoding
@@ -117,15 +103,6 @@ getLineFromFile hInWikiFile page mapArgs mapDict stopwords = do
 	hInWikiFileEOF <- hIsEOF hInWikiFile
 	if hInWikiFileEOF then return ()
 	else do
-		--let outBofwFile = case M.lookup "s" mapArgs of
-		--	Just s -> s
-		--	Nothing -> "bofw.txt"
-	
-		let outBofwFile = takeFromMap mapArgs "s"
-		let numMinTermsInDoc = read $ takeFromMap mapArgs "m"
-		let numMaxTermsInDoc = read $ takeFromMap mapArgs "x"
-		let numMinFreqOfTerm = read $ takeFromMap mapArgs "c"
-
 		line <- hGetLine hInWikiFile
 		let pageline = page++line
 	
@@ -136,7 +113,7 @@ getLineFromFile hInWikiFile page mapArgs mapDict stopwords = do
 	
 					(_,_,_,(text:_)) ->
 						-- Write to file or stdout
-						notEmptyWriteToFile outBofwFile $
+						notEmptyWriteToFile (tk mapArgs "s") $
 						-- Make list to string joined with space
 						unwords $
 						-- Make list's list to list flattened
@@ -144,12 +121,13 @@ getLineFromFile hInWikiFile page mapArgs mapDict stopwords = do
 						-- Note that concat infers that y is String but Int
 						-- Make tuple's list to list's list with conditions
 						map (\ (x,y) ->
-								if y >= numMinFreqOfTerm
+								if y >= (read $ tk mapArgs "c")
 								then [x,show y]
 								else []
 							) $
+						-- Apply condition for the number of terms in a doc
 						(\ x ->
-							if length x >= numMinTermsInDoc && length x <= numMaxTermsInDoc
+							if length x >= (read $ tk mapArgs "m") && length x <= (read $ tk mapArgs "x")
 							then x
 							else []
 						) $
@@ -187,8 +165,9 @@ getBaseformFromDict mapDict term =
 		Just t -> t
 		Nothing -> term
 
-takeFromMap :: M.Map S S -> S -> S
-takeFromMap m s =
+-- The shorter function name is better for frequent use
+tk :: M.Map S S -> S -> S
+tk m s =
 	case M.lookup s m of
 		Just v -> v
 		Nothing -> ""
