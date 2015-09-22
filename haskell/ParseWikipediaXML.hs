@@ -11,7 +11,7 @@ type S = String
 main :: IO ()
 main = do
 	args <- getArgs
-	mapArgs <- return $ parseArgsAbbr args $ parseArgs args
+	mapArgs <- return $ defaultArgs "idstmxc" $ parseArgsAbbr args $ parseArgs args
 
 	putStrLn "Begin reading dictionary."
 	mapDict <- getDictionaryFromFile mapArgs
@@ -22,17 +22,31 @@ main = do
 	stopwords <- return getStopwords
 	getContentFromFile mapArgs _mapDict stopwords
 
-getStopwords :: [String]
+getStopwords :: [S]
 getStopwords =
 	let stopwords = "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your"
 	in splitByComma stopwords "" []
 
-splitByComma :: String -> String -> [String] -> [String]
+splitByComma :: S -> S -> [S] -> [S]
 splitByComma [] _ arr = arr
 splitByComma (x:xs) s arr | x==',' = splitByComma xs "" (s:arr)
 splitByComma (x:xs) s arr = splitByComma xs (s++[x]) arr
 
-parseArgsAbbr :: [String] -> M.Map S S -> M.Map S S
+defaultArgs :: S -> M.Map S S -> M.Map S S
+defaultArgs [] m = m
+defaultArgs (x:xs) m =
+	let newMapDict = case x of
+		'i' -> M.insertWithKey (\_ _ o->o) "i" "" m
+		'd' -> M.insertWithKey (\_ _ o->o) "d" "" m
+		's' -> M.insertWithKey (\_ _ o->o) "s" "" m
+		't' -> M.insertWithKey (\_ _ o->o) "t" ""  m
+		'm' -> M.insertWithKey (\_ _ o->o) "m" (show 1) m
+		'x' -> M.insertWithKey (\_ _ o->o) "x" (show 65535) m
+		'c' -> M.insertWithKey (\_ _ o->o) "c" (show 1) m
+		_ -> m
+	in defaultArgs xs newMapDict
+
+parseArgsAbbr :: [S] -> M.Map S S -> M.Map S S
 parseArgsAbbr [] mapArgs = mapArgs
 parseArgsAbbr (('-':option):value:args) mapArgs =
 	let m = parseArgsAbbr args mapArgs in
@@ -47,7 +61,7 @@ parseArgsAbbr (('-':option):value:args) mapArgs =
 			_ -> m
 parseArgsAbbr _ mapArgs = mapArgs
 
-parseArgs :: [String] -> M.Map S S
+parseArgs :: [S] -> M.Map S S
 parseArgs [] = M.empty
 parseArgs (('-':option):value:args) =
 	let m = parseArgs args in
@@ -58,7 +72,7 @@ parseArgs (('-':option):value:args) =
 			"t" -> M.insertWithKey (\_ _ _ -> value) "outTitleFile" value m
 			"m" -> M.insertWithKey (\_ _ _ -> value) "numMinTermsInDoc" value m
 			"x" -> M.insertWithKey (\_ _ _ -> value) "numMaxTermsInDoc" value m
-			"c" -> M.insertWithKey (\_ _ _ -> value) "numMinWordOfTerm" value m
+			"c" -> M.insertWithKey (\_ _ _ -> value) "numMinFreqOfTerm" value m
 			_ -> m
 parseArgs _ = M.empty
 
@@ -84,7 +98,7 @@ getLineFromInDictFile hInDictFile mapDict = do
 		getLineFromInDictFile hInDictFile newMapDict
 
 
-getContentFromFile :: M.Map S S -> M.Map S S -> [String] -> IO () 
+getContentFromFile :: M.Map S S -> M.Map S S -> [S] -> IO () 
 getContentFromFile mapArgs mapDict stopwords = do
 
 	let inWikiFile = case M.lookup "i" mapArgs of
@@ -97,16 +111,21 @@ getContentFromFile mapArgs mapDict stopwords = do
 	_ <- getLineFromFile hInWikiFile "" mapArgs mapDict stopwords
 	hClose hInWikiFile
 
-getLineFromFile :: Handle -> S -> M.Map S S -> M.Map S S -> [String] -> IO ()
+getLineFromFile :: Handle -> S -> M.Map S S -> M.Map S S -> [S] -> IO ()
 getLineFromFile hInWikiFile page mapArgs mapDict stopwords = do
 
 	hInWikiFileEOF <- hIsEOF hInWikiFile
 	if hInWikiFileEOF then return ()
 	else do
-		let outBofwFile = case M.lookup "s" mapArgs of
-			Just s -> s
-			Nothing -> "bofw.txt"
+		--let outBofwFile = case M.lookup "s" mapArgs of
+		--	Just s -> s
+		--	Nothing -> "bofw.txt"
 	
+		let outBofwFile = takeFromMap mapArgs "s"
+		let numMinTermsInDoc = read $ takeFromMap mapArgs "m"
+		let numMaxTermsInDoc = read $ takeFromMap mapArgs "x"
+		let numMinFreqOfTerm = read $ takeFromMap mapArgs "c"
+
 		line <- hGetLine hInWikiFile
 		let pageline = page++line
 	
@@ -123,8 +142,17 @@ getLineFromFile hInWikiFile page mapArgs mapDict stopwords = do
 						-- Make list's list to list flattened
 						concat $
 						-- Note that concat infers that y is String but Int
-						-- Make tuple's list to list's list
-						map (\(x,y)->[x,show y]) $
+						-- Make tuple's list to list's list with conditions
+						map (\ (x,y) ->
+								if y >= numMinFreqOfTerm
+								then [x,show y]
+								else []
+							) $
+						(\ x ->
+							if length x >= numMinTermsInDoc && length x <= numMaxTermsInDoc
+							then x
+							else []
+						) $
 						-- Make map to tuple's list
 						M.toList $
 						-- Make bag-of-words by counting each term's frequency
@@ -159,7 +187,13 @@ getBaseformFromDict mapDict term =
 		Just t -> t
 		Nothing -> term
 
-notEmptyWriteToFile :: FilePath -> String -> IO ()
+takeFromMap :: M.Map S S -> S -> S
+takeFromMap m s =
+	case M.lookup s m of
+		Just v -> v
+		Nothing -> ""
+
+notEmptyWriteToFile :: FilePath -> S -> IO ()
 notEmptyWriteToFile _ "" = return ()
 notEmptyWriteToFile "" bofw = putStrLn bofw
 notEmptyWriteToFile outBofwFile bofw = appendFile outBofwFile $ bofw++"\n"
