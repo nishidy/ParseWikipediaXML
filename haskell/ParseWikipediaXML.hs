@@ -5,6 +5,9 @@ import qualified Data.Map as M
 import Data.Char
 --import Control.Applicative
 import Text.Regex.Posix
+--import Debug.Trace
+--import Codec.Binary.UTF8.String
+--import Control.Exception as E
 
 type S = String
 
@@ -40,7 +43,10 @@ defaultArgs (x:xs) =
 			'i' -> M.insertWithKey (\_ _ o->o) "i" "" m
 			'd' -> M.insertWithKey (\_ _ o->o) "d" "" m
 			's' -> M.insertWithKey (\_ _ o->o) "s" "" m
-			't' -> M.insertWithKey (\_ _ o->o) "t" ""  m
+			't' -> M.insertWithKey (\_ _ o->o) "t" "" m
+			-- Integer literal cannot be identified as integer without declaration
+			-- This may be better instead of getting it back to string from integer
+			--'m' -> M.insertWithKey (\_ _ o->o) "m" "1") m
 			'm' -> M.insertWithKey (\_ _ o->o) "m" (show (1::Int)) m
 			'x' -> M.insertWithKey (\_ _ o->o) "x" (show (65535::Int)) m
 			'c' -> M.insertWithKey (\_ _ o->o) "c" (show (1::Int)) m
@@ -87,13 +93,13 @@ getLineFromInDictFile hInDictFile mapDict = do
 		getLineFromInDictFile hInDictFile newMapDict
 
 
-getContentFromFile :: M.Map S S -> M.Map S S -> [S] -> IO () 
+getContentFromFile :: M.Map S S -> M.Map S S -> [S] -> IO ()
 getContentFromFile mapArgs mapDict stopwords = do
 
 	let inWikiFile = tk mapArgs "i"
 	hInWikiFile <- openFile inWikiFile ReadMode
-	--encoding <- mkTextEncoding "65001"
-	--hSetEncoding hInWikiFile encoding
+	encoding <- mkTextEncoding "UTF-8"
+	hSetEncoding hInWikiFile encoding
 	_ <- getLineFromFile hInWikiFile "" mapArgs mapDict stopwords
 	hClose hInWikiFile
 
@@ -105,20 +111,27 @@ getLineFromFile hInWikiFile page mapArgs mapDict stopwords = do
 	else do
 		line <- hGetLine hInWikiFile
 		let pageline = page++line
+		putStrLn line
 	
-		--case search pageline "</page>" of
-		case pageline =~ ".*</page>" :: Bool of
+		-- FIXME: Currently regex-posix (Text.Regex.Lazy in sourceforge)
+		--        could not successfuly match with text if it contains
+		--        Japanese space whose character code in UTF8 is E38080.
+		--        ASCII compatible characters in UTF8 is probably OK.
+		--case pageline =~ "</page>" :: Bool of
+		case search pageline "</page>" of
+
 			True ->
-				case pageline =~ "<text.*>([^<>]*)</text>" :: (S,S,S,[S]) of
-	
-					(_,_,_,(text:_)) ->
+				--case pageline =~ "<text.*>([^<>]*)</text>" :: (S,S,S,[S]) of
+				case matchText pageline ("<text",'>',"</text>") of
+					--(_,_,_,(text:_)) ->
+					Just text ->
 						-- Write to file or stdout
 						notEmptyWriteToFile (tk mapArgs "s") $
 						-- Make list to string joined with space
 						unwords $
 						-- Make list's list to list flattened
 						concat $
-						-- Note that concat infers that y is String but Int
+						-- Note that concat infers that y is String but Int actually
 						-- Make tuple's list to list's list with conditions
 						map (\ (x,y) ->
 								if y >= (read $ tk mapArgs "c")
@@ -127,7 +140,9 @@ getLineFromFile hInWikiFile page mapArgs mapDict stopwords = do
 							) $
 						-- Apply condition for the number of terms in a doc
 						(\ x ->
-							if length x >= (read $ tk mapArgs "m") && length x <= (read $ tk mapArgs "x")
+							--trace("trace2:" ++ show x) $
+							if length x >= (read $ tk mapArgs "m") &&
+								length x <= (read $ tk mapArgs "x")
 							then x
 							else []
 						) $
@@ -139,25 +154,56 @@ getLineFromFile hInWikiFile page mapArgs mapDict stopwords = do
 						map (\x -> getBaseformFromDict mapDict x) $
 						-- Exclude stopwords
 						filter (\x -> not $ elem x stopwords) $
-						-- Lower all characters in each string
-						map (\x -> map toLower x) $
 						-- Filter terms out by this regular expression
 						filter (\x -> x =~ "^[a-z][0-9a-z'-]*[0-9a-z]$") $
+						-- Lower all characters in each string
+						map (\x ->
+							--trace("trace1:" ++ show x) $
+							map toLower x) $
 						-- Split text by space
 						words text
 	
-					_ -> exitFailure
+					Nothing -> exitFailure
 	
-			False -> getLineFromFile hInWikiFile pageline mapArgs mapDict stopwords
+			False ->
+				getLineFromFile hInWikiFile pageline mapArgs mapDict stopwords
 	
 		getLineFromFile hInWikiFile "" mapArgs mapDict stopwords
 
+--ignore :: SomeException -> IO Bool
+--ignore _ = trace("SomeException.") return False
+
 -- Regular expresion match can replace this
--- search [] _ = False
--- search _ [] = True
--- search (x:xs) (y:ys)
--- 	| x == y = search xs ys
--- 	| otherwise = search xs (y:ys)
+search :: S -> S -> Bool
+search x y = doSearch x (y, y)
+
+doSearch :: S -> (S,S) -> Bool
+doSearch _ ([],_) = True
+doSearch [] _ = False
+doSearch (x:xs) ((y:ys),_y)
+	| x == y = doSearch xs (ys,_y)
+	| otherwise = doSearch xs (_y,_y)
+
+matchText :: S -> (S,Char,S) -> Maybe S
+matchText text (begin,mid,end) = doMatch text (begin,begin) mid (end,end) []
+
+doMatch :: S -> (S,S) -> Char -> (S,S) -> S -> Maybe S
+doMatch _ _ _ ([],_end) cont
+	| cont == [] = Nothing
+	| otherwise = Just cont
+doMatch [] _ _ _ cont
+	| cont == [] = Nothing
+	| otherwise = Just cont
+doMatch (t:text) ([],_begin) ' ' ((e:end),_end) cont
+	| t==e = doMatch text ([],_begin) ' ' (end,_end) cont
+	| otherwise = doMatch text ([],_begin) ' ' (_end,_end) (cont++[t])
+doMatch (t:text) ([],_begin) m end []
+	| t==m = doMatch text ([],_begin) ' ' end []
+	| otherwise = doMatch text ([],_begin) m end []
+doMatch (t:text) ((b:begin),_begin) m end []
+	| t==b = doMatch text (begin,_begin) m end []
+	| otherwise = doMatch text (_begin,_begin) m end []
+doMatch _ _ _ _ _ = Nothing
 
 getBaseformFromDict :: M.Map S S -> S -> S
 getBaseformFromDict mapDict term =
@@ -184,6 +230,6 @@ notEmptyWriteToFile outBofwFile bofw = appendFile outBofwFile $ bofw++"\n"
 makeBagofwords :: [S] -> M.Map S Int
 makeBagofwords [] = M.empty
 makeBagofwords (x:xs)=
-	let m = makeBagofwords xs in 
+	let m = makeBagofwords xs in
 		M.insertWithKey (\_ _ o->o+1) x 1 m
 
