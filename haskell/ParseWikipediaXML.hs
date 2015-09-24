@@ -176,14 +176,22 @@ getLineFromFile hInWikiFile page mapArgs mapDict stopwords = do
 
 -- Regular expresion match can replace this
 search :: S -> S -> Bool
-search x y = doSearch x (y, y)
+search x y = doSearch x y
 
-doSearch :: S -> (S,S) -> Bool
-doSearch _ ([],_) = True
-doSearch [] _ = False
-doSearch (x:xs) ((y:ys),_y)
-	| x == y = doSearch xs (ys,_y)
-	| otherwise = doSearch xs (_y,_y)
+doSearch :: S -> S -> Bool
+doSearch (x:xs) (y:ys)
+		| x==y = case doSearchIn xs ys of
+			True -> True
+			False -> doSearch xs (y:ys)
+		| otherwise = doSearch xs (y:ys)
+doSearch _ _ = False
+
+doSearchIn :: S -> S -> Bool
+doSearchIn _ [] = True
+doSearchIn [] _ = False
+doSearchIn (x:xs) (y:ys)
+		| x==y = doSearchIn xs ys
+		| otherwise = False
 
 matchText :: S -> (S,Char,S) -> Maybe S
 matchText text (begin,mid,end) = doMatch text begin mid end []
