@@ -1,6 +1,6 @@
 #import <stdio.h>
 #import <Foundation/NSObject.h>
-#import "YLFileReader.h"
+#import <YLFileReader.h>
  
 @interface Parser : NSObject
 {
