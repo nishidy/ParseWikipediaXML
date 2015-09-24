@@ -162,7 +162,9 @@ getLineFromFile hInWikiFile page mapArgs mapDict stopwords = do
 						-- Split text by space
 						words text
 	
-					Nothing -> trace("trace: Nothing.") $ exitFailure
+					Nothing ->
+						trace("trace: Nothing for "++ show pageline) $
+						exitFailure
 	
 			False ->
 				getLineFromFile hInWikiFile pageline mapArgs mapDict stopwords
@@ -184,25 +186,32 @@ doSearch (x:xs) ((y:ys),_y)
 	| otherwise = doSearch xs (_y,_y)
 
 matchText :: S -> (S,Char,S) -> Maybe S
-matchText text (begin,mid,end) = doMatch text (begin,begin) mid (end,end) []
+matchText text (begin,mid,end) = doMatch text begin mid end []
 
-doMatch :: S -> (S,S) -> Char -> (S,S) -> S -> Maybe S
-doMatch _ _ _ ([],_end) cont
-	| cont == [] = Nothing
-	| otherwise = Just cont
-doMatch [] _ _ _ cont
-	| cont == [] = Nothing
-	| otherwise = Just cont
-doMatch (t:text) ([],_begin) ' ' ((e:end),_end) cont
-	| t==e = doMatch text ([],_begin) ' ' (end,_end) cont
-	| otherwise = doMatch text ([],_begin) ' ' (_end,_end) (cont++[t])
-doMatch (t:text) ([],_begin) m end []
-	| t==m = doMatch text ([],_begin) ' ' end []
-	| otherwise = doMatch text ([],_begin) m end []
-doMatch (t:text) ((b:begin),_begin) m end []
-	| t==b = doMatch text (begin,_begin) m end []
-	| otherwise = doMatch text (_begin,_begin) m end []
+doMatch :: S -> S -> Char -> S -> S -> Maybe S
+doMatch _ _ _ [] cont = Just cont
+doMatch [] _ _ _ _ = Nothing
+doMatch (t:text) [] ' ' (e:end) cont
+	| t==e = case doMatchIn text end of
+		True -> Just cont
+		False -> doMatch text [] ' ' (e:end) (t:cont)
+	| otherwise = doMatch text [] ' ' (e:end) (t:cont)
+doMatch (t:text) [] m end []
+	| t==m = doMatch text [] ' ' end []
+	| otherwise = doMatch text [] m end []
+doMatch (t:text) (b:begin) m end []
+	| t==b = case doMatchIn text begin of
+		True -> doMatch (drop (length (b:begin)) text) [] m end []
+		False -> doMatch text (b:begin) m end []
+	| otherwise = doMatch text (b:begin) m end []
 doMatch _ _ _ _ _ = Nothing
+
+doMatchIn :: S -> S -> Bool
+doMatchIn _ [] = True
+doMatchIn [] _ = False
+doMatchIn (t:text) (b:begin)
+	| t==b = doMatchIn text begin
+	| otherwise = False
 
 getBaseformFromDict :: M.Map S S -> S -> S
 getBaseformFromDict mapDict term =
