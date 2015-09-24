@@ -118,58 +118,59 @@ getLineFromFile hInWikiFile page mapArgs mapDict stopwords = do
 		--        ASCII compatible characters in UTF8 is probably OK.
 		--case pageline =~ "</page>" :: Bool of
 		case search line "</page>" of
-
-			True ->
-				--case pageline =~ "<text.*>([^<>]*)</text>" :: (S,S,S,[S]) of
-				case matchText pageline ("<text",'>',"</text>") of
-					--(_,_,_,(text:_)) ->
-					Just text ->
-						-- Write to file or stdout
-						notEmptyWriteToFile (tk mapArgs "s") $
-						-- Make list to string joined with space
-						unwords $
-						-- Make list's list to list flattened
-						concat $
-						-- Note that concat infers that y is String but Int actually
-						-- Make tuple's list to list's list with conditions
-						map (\ (x,y) ->
-								if y >= (read $ tk mapArgs "c")
-								then [x,show y]
-								else []
-							) $
-						-- Apply condition for the number of terms in a doc
-						(\ x ->
-							--trace("trace2:" ++ show x) $
-							if length x >= (read $ tk mapArgs "m") &&
-								length x <= (read $ tk mapArgs "x")
-							then x
-							else []
-						) $
-						-- Make map to tuple's list
-						M.toList $
-						-- Make bag-of-words by counting each term's frequency
-						makeBagofwords $
-						-- Get baseform from dictionary for each string(term)
-						map (\x -> getBaseformFromDict mapDict x) $
-						-- Exclude stopwords
-						filter (\x -> not $ elem x stopwords) $
-						-- Filter terms out by this regular expression
-						filter (\x -> x =~ "^[a-z][0-9a-z'-]*[0-9a-z]$") $
-						-- Lower all characters in each string
-						map (\x ->
-							--trace("trace1:" ++ show x) $
-							map toLower x) $
-						-- Split text by space
-						words text
-	
-					Nothing ->
-						trace("trace: Nothing for "++ show pageline) $
-						exitFailure
-	
-			False ->
-				getLineFromFile hInWikiFile pageline mapArgs mapDict stopwords
-	
+			True -> parsePage mapArgs mapDict stopwords pageline
+			False -> getLineFromFile hInWikiFile pageline mapArgs mapDict stopwords
 		getLineFromFile hInWikiFile "" mapArgs mapDict stopwords
+
+parsePage :: M.Map S S -> M.Map S S -> [S] -> S -> IO ()
+parsePage mapArgs mapDict stopwords page = 
+	-- FIXME:
+	--case page =~ "<text.*>([^<>]*)</text>" :: (S,S,S,[S]) of
+	case matchText page ("<text",'>',"</text>") of
+		--(_,_,_,(text:_)) ->
+		Just text ->
+			-- Write to file or stdout
+			notEmptyWriteToFile (tk mapArgs "s") $
+			-- Make list to string joined with space
+			unwords $
+			-- Make list's list to list flattened
+			concat $
+			-- Note that concat infers that y is String but Int actually
+			-- Make tuple's list to list's list with conditions
+			-- Apply condition for the number of a term in a doc
+			map (\ (x,y) ->
+					if y >= (read $ tk mapArgs "c")
+					then [x,show y]
+					else []
+				) $
+			-- Apply condition for the number of (any) terms in a doc
+			(\ x ->
+				--trace("trace2:" ++ show x) $
+				if length x >= (read $ tk mapArgs "m") &&
+					length x <= (read $ tk mapArgs "x")
+				then x
+				else []
+			) $
+			-- Make map to tuple's list
+			M.toList $
+			-- Make bag-of-words by counting each term's frequency
+			makeBagofwords $
+			-- Get baseform from dictionary for each string(term)
+			map (\x -> getBaseformFromDict mapDict x) $
+			-- Exclude stopwords
+			filter (\x -> not $ elem x stopwords) $
+			-- Filter terms out by this regular expression
+			filter (\x -> x =~ "^[a-z][0-9a-z'-]*[0-9a-z]$") $
+			-- Lower all characters in each string
+			map (\x ->
+				--trace("trace1:" ++ show x) $
+				map toLower x) $
+			-- Split text by space
+			words text
+
+		Nothing ->
+			trace("trace: Nothing for "++ show page) $
+			exitFailure
 
 --ignore :: SomeException -> IO Bool
 --ignore _ = trace("SomeException.") return False
