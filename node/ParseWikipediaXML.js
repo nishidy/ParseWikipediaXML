@@ -5,7 +5,7 @@ var minimist = require('minimist')
 var merge = require('merge')
 var kuromoji = require('kuromoji')
 
-var BUFSIZE = 65535*32
+var BUFSIZE = 65536*32
 
 var argv = minimist(process.argv.slice(2), {
 	string: [
@@ -181,7 +181,7 @@ function parseEn(page){
 	text.replace(/\n/g," ").split(" ").forEach(function(word){
 		word = word.toLowerCase()
 
-		if(word.match(/^[a-z][\-'0-9a-z]*[0-9a-z]$/)==null){ return }
+		if(word.match(/^[a-z][0-9a-z'-]*[0-9a-z]$/)==null){ return }
 		if(_this.stopwords.indexOf(word)>-1){ return }
 		if(_this.notCareBaseform && word in _this.mapDict){ word = _this.mapDict[word] }
 
