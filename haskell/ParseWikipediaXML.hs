@@ -5,7 +5,7 @@ import qualified Data.Map as M
 import Data.Char
 --import Control.Applicative
 import Text.Regex.Posix
---import Debug.Trace
+import Debug.Trace
 --import Codec.Binary.UTF8.String
 --import Control.Exception as E
 
@@ -111,14 +111,13 @@ getLineFromFile hInWikiFile page mapArgs mapDict stopwords = do
 	else do
 		line <- hGetLine hInWikiFile
 		let pageline = page++line
-		putStrLn line
 	
 		-- FIXME: Currently regex-posix (Text.Regex.Lazy in sourceforge)
 		--        could not successfuly match with text if it contains
 		--        Japanese space whose character code in UTF8 is E38080.
 		--        ASCII compatible characters in UTF8 is probably OK.
 		--case pageline =~ "</page>" :: Bool of
-		case search pageline "</page>" of
+		case search line "</page>" of
 
 			True ->
 				--case pageline =~ "<text.*>([^<>]*)</text>" :: (S,S,S,[S]) of
@@ -163,7 +162,7 @@ getLineFromFile hInWikiFile page mapArgs mapDict stopwords = do
 						-- Split text by space
 						words text
 	
-					Nothing -> exitFailure
+					Nothing -> trace("trace: Nothing.") $ exitFailure
 	
 			False ->
 				getLineFromFile hInWikiFile pageline mapArgs mapDict stopwords
