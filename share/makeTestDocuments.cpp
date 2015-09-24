@@ -11,28 +11,25 @@ using namespace std;
 string makeDocFromGroupOfBofw(string line){
 
 	stringstream ss(line);
-	string termOrFreq;
+	string term;
+	int freq;
 
 	vector<string> vecTerms;
 
-	bool c=false;
 	string tmpCurrentTerm;
-	while(ss >> termOrFreq){
-		if((c=!c)){ // term
-			vector<string>::iterator it = find(vecTerms.begin(),vecTerms.end(),termOrFreq);
-			if( it == vecTerms.end() ){
-				tmpCurrentTerm = termOrFreq;
-			}else{
-				cerr << "Term is duplicated in a document! " << termOrFreq << endl;
-				exit(1);
-			}
-		}else{ // freq
-			if(tmpCurrentTerm.size()>1){
-				tmpCurrentTerm[0] = (char)((int)tmpCurrentTerm[0]-ASCII_DIFF_UPPER_AND_LOWER);
-			}
-			for(int i=0;i<stoi(termOrFreq);i++){
-				vecTerms.push_back(tmpCurrentTerm);
-			}
+	while(ss >> term >> freq){
+		vector<string>::iterator it = find(vecTerms.begin(),vecTerms.end(),term);
+		if( it == vecTerms.end() ){
+			tmpCurrentTerm = term;
+		}else{
+			cerr << "Term is duplicated in a document! " << term << endl;
+			exit(1);
+		}
+		if(tmpCurrentTerm.size()>1){
+			tmpCurrentTerm[0] = (char)((int)tmpCurrentTerm[0]-ASCII_DIFF_UPPER_AND_LOWER);
+		}
+		for(int i=0;i<freq;i++){
+			vecTerms.push_back(tmpCurrentTerm);
 		}
 	}
 
