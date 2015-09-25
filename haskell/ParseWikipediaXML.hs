@@ -4,6 +4,7 @@ import System.Exit
 import qualified Data.Map as M
 import Data.Char
 --import Control.Applicative
+import qualified Text.Parsec as P
 import Text.Regex.Posix
 import Debug.Trace
 --import Codec.Binary.UTF8.String
@@ -124,11 +125,9 @@ getLineFromFile hInWikiFile page mapArgs mapDict stopwords = do
 
 parsePage :: M.Map S S -> M.Map S S -> [S] -> S -> IO ()
 parsePage mapArgs mapDict stopwords page = 
-	-- FIXME:
-	--case page =~ "<text.*>([^<>]*)</text>" :: (S,S,S,[S]) of
-	case matchText page ("<text",'>',"</text>") of
-		--(_,_,_,(text:_)) ->
-		Just text ->
+	--case matchText page ("<text",'>',"</text>")of
+	case P.parse myTextParser "Error:" page of
+		Right text ->
 			-- Write to file or stdout
 			notEmptyWriteToFile (tk mapArgs "s") $
 			-- Make list to string joined with space
@@ -168,8 +167,9 @@ parsePage mapArgs mapDict stopwords page =
 			-- Split text by space
 			words text
 
-		Nothing ->
-			trace("trace: Nothing for "++ show page) $
+		Left err ->
+			--trace(err ++ ": Nothing for "++ show page) $
+			trace(show err ++ ": Nothing for "++ show page) $
 			exitFailure
 
 --ignore :: SomeException -> IO Bool
@@ -194,17 +194,26 @@ doSearchIn (x:xs) (y:ys)
 		| x==y = doSearchIn xs ys
 		| otherwise = False
 
-matchText :: S -> (S,Char,S) -> Maybe S
+--{-
+myTextParser :: P.Parsec S () S
+myTextParser = do
+	_ <- P.manyTill P.anyChar (P.try $ P.string "<text")
+	_ <- P.manyTill P.anyChar (P.char '>')
+	P.manyTill P.anyChar (P.try $ P.string "</text>")
+---}
+
+{-
+matchText :: S -> (S,Char,S) -> Either S S
 matchText text (begin,mid,end) = doMatch text begin mid end []
 
-doMatch :: S -> S -> Char -> S -> S -> Maybe S
-doMatch _ _ _ [] cont = Just cont
-doMatch [] _ _ _ _ = Nothing
+doMatch :: S -> S -> Char -> S -> S -> Either S S
+doMatch _ _ _ [] cont = Right (reverse cont)
+doMatch [] _ _ _ _ = Left "Did not match."
 doMatch (t:text) [] ' ' (e:end) cont
 	| t==e = case doMatchIn text end of
-		True -> Just cont
-		False -> doMatch text [] ' ' (e:end) (t:cont)
-	| otherwise = doMatch text [] ' ' (e:end) (t:cont)
+		True -> Right (reverse cont)
+		False -> doMatch text [] ' ' (e:end) (t:cont) -- Reversed order
+	| otherwise = doMatch text [] ' ' (e:end) (t:cont) -- Reversed order
 doMatch (t:text) [] m end []
 	| t==m = doMatch text [] ' ' end []
 	| otherwise = doMatch text [] m end []
@@ -213,7 +222,7 @@ doMatch (t:text) (b:begin) m end []
 		True -> doMatch (drop (length (b:begin)) text) [] m end []
 		False -> doMatch text (b:begin) m end []
 	| otherwise = doMatch text (b:begin) m end []
-doMatch _ _ _ _ _ = Nothing
+doMatch _ _ _ _ _ = Left "Something wrong."
 
 doMatchIn :: S -> S -> Bool
 doMatchIn _ [] = True
@@ -221,6 +230,7 @@ doMatchIn [] _ = False
 doMatchIn (t:text) (b:begin)
 	| t==b = doMatchIn text begin
 	| otherwise = False
+-}
 
 getBaseformFromDict :: M.Map S S -> S -> S
 getBaseformFromDict mapDict term =
