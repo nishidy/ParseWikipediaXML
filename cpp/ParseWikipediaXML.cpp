@@ -1,834 +1,227 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include <string>
-
-#include <stdlib.h>
-#include <string.h>
-
-#include <deque>
-#include <algorithm>
 #include <unordered_map>
-#include <vector>
+#include <queue>
+#include <memory>
+#include <utility>
+#include <algorithm>
+
+//#include <mecab.h>
+
+#include <boost/thread.hpp> // For std::thread::hardware_concurrency()
+#include <boost/thread/thread.hpp>
+#include <boost/bind.hpp>
+#include <boost/program_options.hpp>
+#include <boost/interprocess/sync/named_semaphore.hpp>
+#include <boost/regex.hpp>
+
 using namespace std;
 
-#include <boost/thread.hpp>
-#include <boost/thread/condition.hpp>
-#include <boost/bind.hpp>
-#include <boost/regex.hpp>
-#include <boost/algorithm/string.hpp>
-using namespace boost;
+namespace bt = boost;
+namespace ip = boost::interprocess;
+namespace po = boost::program_options;
 
-#include <sched.h>
-#include <error.h>
-#include <sys/types.h> // gettid() (they do not provide wrapper func)
+#define semaphore_name "worker_number_control"
 
-#include <unistd.h>
-#include <sys/syscall.h>
-#include <sys/types.h>
+class Worker {
 
-#include <mecab.h>
-
-pid_t gettid(void)
-{
-    return syscall(SYS_gettid);
-}
-
-/* Fix thread with a certain CPU. */
-int set_cpu_id(int id)
-{
-	cpu_set_t mask;
-	CPU_ZERO(&mask);
-	CPU_SET(id,&mask);
-
-	pid_t p=gettid();
-	if(sched_setaffinity(p,sizeof(mask),&mask)==-1){
-		cout<<"Failed to set affinity:"<<id<<endl;
-		if(errno==ESRCH)
-			cout<<"No process or thread with the given ID found."<<endl;
-		else if(errno==EFAULT)
-			cout<<"The pointer cpuset is does not point to a valid object."<<endl;
-		else if(errno==EINVAL)
-			cout<<"The bitset is not valid."
-				  "This might mean that the affinity set might not leave a processor"
-				  " for the process or thread to run on."<<endl;
-
-		return 0;
-	}
-	return 1;
-}
-
-
-string stopwords="a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your";
-
-
-/*********************
- *
- * Params class
- *
- ********************/
-
-class Params
-{
-	public:
-	static bool debug;
-	static string lang;
-	static int min_words_doc;
-	static int max_words_doc;
-	static int min_word_cnt;
-	static string category;
-	static unsigned int cpus;
-};
-
-bool Params::debug;
-string Params::lang;
-int Params::min_words_doc;
-int Params::max_words_doc;
-int Params::min_word_cnt;
-string Params::category;
-unsigned int Params::cpus;
-
-
-/*********************
- *
- * Common class
- *
- ********************/
-
-class Common
-{
-	public:
-	static condition* c;
-	static bool finished;
-};
-
-condition* Common::c;
-bool Common::finished;
-
-
-/*********************
- *
- * Queue class
- *
- ********************/
-
-class Queue : public Common, public Params
-{
 	private:
-	deque<string> q;
-	mutex mq; // mutex for queue push and pop
+		vector<string> stopwords;
+
+		po::variables_map args;
+
+		bt::mutex *lockOutBofwFile;
+		ofstream *osOutBofwFile;
+		unordered_map<string,string> *map_dict;
+
+		string page;
+		string bofw;
+		int num_terms_in_doc;
 
 	public:
-	static ifstream *ifs;
-
-	Queue(){};
-	Queue(condition* c){this->c=c;};
-	void set_condition(condition* c){this->c=c;};
-
-	void run();
-	void push(string page);
-	string pop();
-	void finish();
-
-	void set_final_flag(){finished=true;};
+		Worker(){};
+		Worker(po::variables_map args,string page,ofstream *osOutBofwFile, bt::mutex *lockOutBofwFile, unordered_map<string,string> *map_dict):
+			args(args),page(page),osOutBofwFile(osOutBofwFile),lockOutBofwFile(lockOutBofwFile),map_dict(map_dict){ set_stopwords(); };
+		~Worker(){};
+		void parse();
+		void save_to_file();
+		void set_stopwords();
+		string get_page(){ return page; }
 
 };
 
-ifstream* Queue::ifs;
+void Worker::set_stopwords(){
 
-void Queue::run(){
+	string stopwords = "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your";
 
-	string line="", page="";
-	int sflag=0,eflag=0,lnum=0;
-
-	while(*ifs && getline(*ifs,line)){
-		if(string::npos!=line.find("<page>",0)) sflag=1;
-		if(string::npos!=line.find("</page>",0)) eflag=1;
-		if(sflag) page+=line;
-		if(eflag){
-			push(page);
-			page="";
-			sflag=eflag=0;
-		}
-		lnum++;
+	replace(stopwords.begin(),stopwords.end(),',',' ');
+	stringstream ss(stopwords);
+	string stopword;
+	while(!ss.eof()){
+		ss>>stopword;
+		this->stopwords.push_back(stopword);
 	}
 }
 
-void Queue::push(string page)
-{
-	{
-		mutex::scoped_lock lk(mq);
-
-		// To avoid consuming much memory
-		if(q.size()>100*cpus) c->wait(lk);
-		q.push_back(page);
+struct comparator{
+	bool operator()(const pair<string,int>& a, const pair<string,int>& b) const {
+		int af = a.second;
+		int bf = b.second;
+		return af<bf? true: af>bf? false: a.first>b.first;
 	}
-	c->notify_one();
-}
-
-string Queue::pop(){
-	string page;
-
-	{
-		mutex::scoped_lock lk(mq);
-		if(q.size()>0){
-			page=q.front();
-			q.pop_front();
-		}else{
-			page="";
-		}
-		if(page=="") c->wait(lk);
-	}
-	c->notify_one();
-
-	return page;
-}
-
-void Queue::finish(){
-
-	if(Params::debug)
-		cout<<"[Info: Finish reading.]"<<endl;
-
-	while(q.size()>0){}
-
-	if(Params::debug)
-		cout<<"[Info: Queue is empty.]"<<endl;
-
-	// FIXME: This notifies before thread goes into wait state
-	// on this condition variable.
-	c->notify_all();
-
-	set_final_flag();
-}
-
-
-/*********************
- *
- * Threads class
- *
- ********************/
-
-class Threads : public Common, public Params
-{
-	private:
-	int id;
-
-	public:
-	static Queue* qobj;
-	static mutex mf; //mutex for output to ostreams
-
-	static vector<string> st; // stopwords
-	static unordered_map<string,string> dict;
-
-	static struct ostreams f;
-
-	Threads(){id=0;};
-	Threads(int id){this->id=id;};
-	void set_id(int id){this->id=id;};
-
-	void pop_n_parse();
-	void parse_n_save(string);
-	string parse_title(string);
-	string parse_text(string,string);
-	void save(string,string);
-
-	/* Read stopwords and dictionary to convert
-	 * to original form */
-	static void read_stopwords();
-	static void read_dict(string);
-
-	string convert_text(string);
-	string convert_text_en(string);
-	string convert_text_jp(string);
-	string convert_text_jp_r(string,string);
-	string count_words(string,int*);
-	string count_words_comm(string,int*);
-	string count_words_jp_r(string,int*);
-
-	bool category_check(string);
-	bool title_check(string);
-
-	// R script may return the sequence of only symbols extracted by "サ変接続" noun.
-	bool check_all_symbols(string);
-
 };
 
-Queue* Threads::qobj;
-mutex Threads::mf;
-vector<string> Threads::st;
-unordered_map<string,string> Threads::dict;
+void Worker::parse(){
 
-struct ostreams {
-	ostream* s; // -s:sentence
-	ostream* t; // -t:title
-} Threads::f;
-
-
-void Threads::pop_n_parse(){
-
-	string page;
-
-	for(;;){
-
-		if((page=qobj->pop())!=""){
-			parse_n_save(page);
-		}
-
-		if(finished) break;
-	}
-}
-
-void Threads::parse_n_save(string page){
-	string title=parse_title(page);
-	string text=parse_text(title,page);
-
-	if(text!="")
-		save(title,text);
-}
-
-string Threads::parse_title(string page){
-
-	regex t_reg("<title>(.*)</title>");
-	smatch match;
-	string title;
-
-	if(regex_search(page,match,t_reg))
-		title=match.str(1);
-	if(!title_check(title)) return "";
-
-	algorithm::replace_all(title, " ", "_");
-
-	if(title.size()==0){
-		cerr<<"No title found"<<endl;
-		return "";
-	}
-
-	return title;
-}
-
-string Threads::parse_text(string title, string page){
-
-	if(title.size()==0) return "";
-
-	regex txt_reg("<text[^>]*>(.*)</text>");
-	smatch match;
+	bt::regex text_reg("<text[^>]*>([\\s\\S]*)</text>");
+	bt::smatch match_text_reg;
 	string text;
 
-	if(regex_search(page,match,txt_reg))
-		text=match.str(1);
+	if(bt::regex_search(page,match_text_reg,text_reg))
+		text=match_text_reg.str(1);
 
-	if(text.size()>0){
-		if(!category_check(text))
-			return "";
-	}else{
-		if(Params::debug)
-			cerr<<"[Info : No content in <text>. "<<title<<" ]"<<endl;
-		return "";
-	}
+	unordered_map<string,int> map_term_freq;
+	stringstream ss_text(text);
+	int num_terms_in_doc=0;
+	string term;
 
-	text=convert_text(text);
-	if(text.size()==0){
-		if(Params::debug)
-			cerr<<"[Info: No content after convert. "<<title<<" ]"<<endl;
-		return "";
-	}
+	bt::regex term_reg("^[a-z][0-9a-z'-]*[0-9a-z]$");
+	bt::smatch _smatch;
 
-	int n=0;
-	text=count_words(text,&n);
-	if(text.size()==0){
-		if(Params::debug)
-			cerr<<"[Info: No content after count. "<<title<<" ]"<<endl;
-		return "";
-	}
+	while(!ss_text.eof()){
+		ss_text>>term;
+		transform(term.begin(),term.end(),term.begin(),::tolower);
 
-	if(n<min_words_doc){
-		if(Params::debug){
-			cout<<"[Info: "<<min_words_doc<<" > "<<
-			title<<": "<<n<<"]"<<endl;
-		}
-		return "";
-	}else if(n>max_words_doc){
-		if(Params::debug){
-			cout<<"[Info: "<<max_words_doc<<" < "<<
-			title<<": "<<n<<"]"<<endl;
-		}
-		return "";
-	}else{
-		cout<<title<<": "<<n<<endl;
-	}
+		if(!bt::regex_search(term,_smatch,term_reg)) continue;
+		auto itr_stopwords = find(stopwords.begin(),stopwords.end(),term);
+		if(itr_stopwords!=stopwords.end()) continue;
 
-	return text;
-}
+		if(map_dict->find(term)!=map_dict->end()) term=(*map_dict)[term];
 
-void Threads::save(string title, string text){
-	{
-		mutex::scoped_lock lk(mf);
-		*f.t<<title<<endl;
-		*f.s<<text<<endl;
-	}
-}
-
-void Threads::read_stopwords(){
-	string w;
-	stringstream ss;
-
-	algorithm::replace_all(stopwords, ",", " ");
-	ss<<stopwords;
-	while(!ss.eof()){
-		ss>>w;
-		if(find(st.begin(),st.end(),w)==st.end()){
-			st.push_back(w);
-		}
-		ss.ignore();
-	}
-
-}
-
-void Threads::read_dict(string dictionary){
-
-	read_stopwords();
-
-	ifstream ifs(dictionary);
-	if(!ifs) return;
-
-	string line,w1,w2,w3;
-	stringstream ss;
-
-	while(ifs&&getline(ifs,line)){
-		if(line.at(0)==';') continue;
-		ss.str(line);
-		w1=w2=w3="";
-		ss>>w1>>w2>>w3;
-		ss.clear();
-
-		if(find(st.begin(),st.end(),w1)!=st.end())
-			continue;
-		if(find(st.begin(),st.end(),w2)!=st.end())
-			continue;
-		if(w3=="Punct") continue;
-
-		if(dict.find(w1)==dict.end()){
-			dict[w1]=w2;
+		if(map_term_freq.find(term)==map_term_freq.end()){
+			map_term_freq[term]=1;
 		}else{
-			break;
+			map_term_freq[term]++;
 		}
+		num_terms_in_doc++;
 	}
-}
+	this->num_terms_in_doc=num_terms_in_doc;
 
-string Threads::convert_text(string text){
-	if(Params::lang=="EN"){
-		return convert_text_en(text);
-	}else if(Params::lang=="JP"){
-		return convert_text_jp(text);
-	}else{
-		return  "";
-	}
-}
-
-string Threads::convert_text_en(string text){
-
-	stringstream ss(text);
-	string w,res="";
-
-	regex t_reg("^[a-zA-Z0-9]+$");
-	smatch match;
-
-	while(!ss.eof()){
-		ss>>w;
-		if(w.size()==0) continue;
-		if(w.at(w.size()-1)=='\n') w.erase(--w.end());
-
-		if(find(st.begin(),st.end(),w)!=st.end()) continue;
-
-		// Books -> books => book
-		// Australian -> australian -> Australian => Asutralia
-		w.at(0)=tolower(w.at(0));
-		if(dict.find(w)!=dict.end()){
-			res+=dict[w]+" ";
-		}else{
-			w.at(0)=toupper(w.at(0));
-			if(dict.find(w)!=dict.end()){
-				res+=dict[w]+" ";
-				if(regex_search(w,match,t_reg)){
-					res+=w+" ";
-				}
-			}
-		}
-	}
-	if(res.size()>0) res.erase(--res.end());
-
-	return res;
-}
-
-string Threads::convert_text_jp(string text){
-
-	MeCab::Tagger *tagger = MeCab::createTagger("");
-	char *result = (char*)tagger->parse(text.c_str());
-
-	char *line, *word;
-	string first,res;
-	char second[255] = "";
-
-	stringstream ss;
-
-	char *ptr1, *ptr2;
-	while((line=strtok_r(result,"\n",&ptr1))!=NULL){
-
-		ss<<line;
-		ss>>first>>second;
-
-		if(strstr(second,"動詞")==second){
-			int c = 1;
-			while((word=strtok_r(line,",",&ptr2))!=NULL){
-				if( c==7 ){
-					res+=(string)word+" ";
-				}
-				c++;
-				line = NULL;
-			}
-		}
-
-		else if(strstr(second,"形容詞")==second){
-			res+=first+" ";
-		}
-
-		else if(strstr(second,"名詞")==second){
-			res+=first+" ";
-		}
-
-		line = strtok(line,"\n");
-		ss.str(""); ss.clear();
-
-		result = NULL;
+	priority_queue<pair<string,int>,vector<pair<string,int> >, comparator> queue_term_freq;
+	for(auto it=map_term_freq.begin();it!=map_term_freq.end();++it){
+		queue_term_freq.push(*it);
 	}
 
-	return res;
+	bofw = "";
+	stringstream ss_freq;
+	pair<string,int> pair_term_freq;
+	while(!queue_term_freq.empty()){
 
-}
+		if(bofw.length()>0) bofw+=" ";
 
-string Threads::convert_text_jp_r(string text,string title){
-
-	string res="";
-
-	char tmp[64];
-	sprintf(tmp,"/tmp/.%s%02d",__func__,(int)gettid());
-	ofstream ofs(tmp);
-	ofs<<text;
-	
-	string command = "Rscript rmecabfreq.r "+(string)tmp+" \""+title+"\"";
-	FILE *fp = popen((const char*)command.c_str(),"r");
-	char buf[64];
-	string w,cnt;
-
-	stringstream ss;
-	while(fgets(buf,sizeof(buf),fp) != NULL){
-
-		if(strstr(buf,"=")!=0) continue;
-		ss<<(string)buf;
-		ss>>w>>cnt;
+		pair_term_freq = queue_term_freq.top();
+		queue_term_freq.pop();
 		
-		//if(check_all_symbols(w)) continue;
+		ss_freq.str("");
+		ss_freq.clear();
+		ss_freq<<pair_term_freq.second;
+		bofw+=pair_term_freq.first+" "+ss_freq.str();
 
-		if(!isdigit(cnt.c_str()[0])) continue;
-		if(find(st.begin(),st.end(),w)!=st.end()) continue;
-
-		res+=w+" "+cnt+" ";
 	}
 
-	pclose(fp);
-	return res;
+	this->bofw = bofw;
 }
 
-string Threads::count_words(string text, int* n){
-	return count_words_comm(text,n);
-	/*
-	if(Params::lang=="EN"){
-		return count_words_en(text,n);
-	}else if(Params::lang=="JP"){
-		return count_words_jp(text,n);
-	}else{
-		return  "";
+void Worker::save_to_file(){
+	if(num_terms_in_doc>0)
+	{
+		bt::mutex::scoped_lock lk(*lockOutBofwFile);
+		*osOutBofwFile<<bofw<<endl;
 	}
-	*/
 }
 
-string Threads::count_words_comm(string text,int* n){
+void run_worker(shared_ptr<Worker> worker){
+	worker->parse();
+	worker->save_to_file();
+	ip::named_semaphore semaphore(ip::open_only_t(), semaphore_name);
+	semaphore.post();
+}
 
-	unordered_map<string,int> words;
-	stringstream ss(text);
-	string w,res="";
+void read_dictionary(string inDictFile, unordered_map<string,string> *map_dict){
 
-	while(!ss.eof()){
-		ss>>w;
-		if(words.find(w)==words.end()){
-			words[w]=1;
-		}else{
-			words[w]++;
-		}
-	}
-
-	for(unordered_map<string,int>::iterator it=words.begin();\
-		it!=words.end();++it){
-		if(it->second<min_word_cnt) continue;
+	ifstream hInDictFile(inDictFile);
+	string line;
+	stringstream ss;
+	string baseform, transform;
+	while(hInDictFile && getline(hInDictFile,line)){
 		ss.str("");
 		ss.clear();
-		ss<<it->second;
-		res+=it->first+" "+ss.str()+" ";
-		(*n)+=it->second;
+		ss<<line;
+		ss>>transform>>baseform;
+		(*map_dict)[transform]=baseform;
 	}
-	if(res.size()>0) res.erase(--res.end());
- 
-	return res;
+
 }
 
-string Threads::count_words_jp_r(string text,int* n){
+int main(int argc, char *argv[]){
 
-	unordered_map<string,int> words;
-	stringstream ss(text);
-	string w,res="";
-	int cnt;
+	string inWikiFile,inDictFile,outBofwFile;
+	int minFreqOfTerm;
 
-	while(!ss.eof()){
-		ss>>w>>cnt;
-		if(words.find(w)==words.end()){
-			words[w]=cnt;
-		}else{
-			words[w]+=cnt;
+	po::options_description option("ParseWikipediaXML:");
+	option.add_options()
+		("inWikiFile,i",po::value<string>(&inWikiFile),"Input WikipediaXML file.")
+		("inDictFile,d",po::value<string>(&inDictFile),"Input Dictionary file.")
+		("outBofwFile,s",po::value<string>(&outBofwFile),"Output bag-of-words file.")
+		("minFreqOfTerm,c",po::value<int>(&minFreqOfTerm),"How many times a term should appear in a document.")
+	;
+
+	po::variables_map args;
+
+	try {
+		po::store(po::parse_command_line(argc,argv,option),args);
+	} catch (exception &e) {
+		cout << e.what() << endl;
+	}
+	po::notify(args);
+
+	bt::thread_group workers;
+	// Number of concurrent threads supported.
+	int max_running_workers = boost::thread::hardware_concurrency();
+
+	ip::named_semaphore::remove(semaphore_name);
+	ip::named_semaphore(ip::create_only_t(), semaphore_name, max_running_workers);
+	ip::named_semaphore semaphore(ip::open_only_t(), semaphore_name);
+
+	ifstream hInWikiFile(inWikiFile.c_str());
+	if(!hInWikiFile) return 1;
+
+	ofstream osOutBofwFile(outBofwFile);
+	bt::mutex lockOutBofwFile;
+
+	unordered_map<string,string> map_dict;
+	read_dictionary(args["inDictFile"].as<string>(),&map_dict);
+
+	string line="", page="";
+	int insidePage=0,outsidePage=0;
+	int c=0;
+	while(hInWikiFile && getline(hInWikiFile,line)){
+		if(string::npos!=line.find("<page>",0)) insidePage=1;
+		if(string::npos!=line.find("</page>",0)) outsidePage=1;
+		if(insidePage) page += line;
+		if(outsidePage){
+			c++;
+			//cout<<c<<endl;
+			semaphore.wait();
+			shared_ptr<Worker> worker =
+				make_shared<Worker>(args,page,&osOutBofwFile,&lockOutBofwFile,&map_dict);
+			workers.create_thread(bt::bind(&run_worker,worker));
+			page = "";
+			insidePage=outsidePage=0;
 		}
 	}
-
-	for(unordered_map<string,int>::iterator it=words.begin();\
-		it!=words.end();++it){
-		if(it->second<min_word_cnt) continue;
-		ss.str("");
-		ss.clear();
-		ss<<it->second;
-		res+=it->first+" "+ss.str()+" ";
-		(*n)+=it->second;
-	}
-	if(res.size()>0) res.erase(--res.end());
- 
-	return res;
-}
-
-bool Threads::category_check(string text){
-
-	if(Params::category=="") return 1;
-
-	regex txt_reg("\\[\\[\\:*Category:([^\\[\\]]+)\\|*[^\\[\\]]*\\]\\]");
-	smatch match;
-
-	string::const_iterator start=text.begin();
-	string::const_iterator end=text.end();
-
-	regex cate_reg(Params::category);
-
-	while(regex_search(start,end,match,txt_reg)){
-		smatch cmatch;
-		if(regex_search(match.str(1),cmatch,cate_reg)){
-			if(Params::debug)
-				cout<<"[Info: Category matched is "<<match.str(1)<<".]"<<endl;
-			return 1;
-		}
-		start=match[0].second;
-	}
-
-	return 0;
-}
-
-bool Threads::title_check(string text){
-
-	regex txt_reg("Wikipedia:|Portal:|Template:|Category:");
-	smatch match;
-	if(regex_search(text,match,txt_reg)) return 0;
-
-	return 1;
-}
-
-// FIXME
-bool Threads::check_all_symbols(string w){
-
-	setlocale(LC_CTYPE,"ja_JP.utf8");
-
-	int wcsn;
-	wchar_t *wc = new wchar_t[w.size()+1];
-	wcsn=mbstowcs(wc,w.c_str(),w.size()+1);
-	if(wcsn<0){
-		cout<<"[Warning: Failed to convert from multibyte string to wide string: "<<w<<endl;
-		return 0;
-	}
-
-	wregex wsym_reg(L"[｛｝［］（）＼「」〜！＠＃＄％＾＆＊ーｰ”’：；｜※。、＿？ ]+");
-	wsmatch wmatch;
-
-	wstring::const_iterator wstart=((wstring)wc).begin();
-	wstring::const_iterator wend=((wstring)wc).end();
-
-	int len=0;
-
-	// FIXME: Not sure about the reason why regex_search fails...
-	// According to the backtrace, L\000 should not be passed to this func.
-	// I tried Boost-1.54.0 and 1.56.0 but neither of them worked.
-	while(regex_search(wstart,wend,wmatch,wsym_reg)){
-		len+=wmatch.str(0).size();
-
-		// Some of the wide character string may be converted
-		// to one of wsym_reg!! Abort check.
-		if(len>wcsn) return 1;
-
-		wstart=wmatch[0].second;
-	}
-
-	regex sym_reg("[\\{\\}\\[\\]\\(\\)\\~\\!\\@\\#\\$\\%\\^\\&\\*\\-\"\'\\:\\;\\|\\.,_\\/\? ]+");
-	smatch match;
-
-	string::const_iterator start=w.begin();
-	string::const_iterator end=w.end();
-
-	while(regex_search(start,end,match,sym_reg)){
-		len+=match.str(0).size();
-		// XXX
-		if(len>wcsn) return 1;
-		start=match[0].second;
-	}
-
-	if(len==wcsn){
-		if(Params::debug){
-			cout<<"[Info: "<<w<<" is omitted since the length is same as "
-			<<wcsn<<".]"<<endl;
-		}
-		return 1;
-	}
-	
-	return 0;
-}
-
-
-void run(int id){
-	Threads thread(id);
-	if(!set_cpu_id(id)){return;}
-	thread.pop_n_parse();
-}
-
-
-int main(int argc, char* argv[])
-{
-	/* Read inputs and outputs */
-	if(argc<9){
-		cout<<"Usage:"<<argv[0]<<" -i File(Wikipedia) [-d File(dictionary)] "
-			"-s File(Sentence) -t File(Title) -m min_words -x max_words "
-			"-c min_word_count -g category [-v debug] -l [JP|EN] \n"
-			"Note:\n"
-			" - category is regular expression.\n"
-			" - debug message is shown by setting -v."<<endl;
-		return 0;
-	}
-
-
-	ifstream ifs;
-	ofstream ofs,oft;
-	int result;
-	string dictfile;
-
-	while((result=getopt(argc,argv,"i:d:s:t:m:x:c:g:vl:"))!=-1){
-
-		switch(result){
-		case 'i':
-			ifs.open((string)optarg);
-			if(!ifs){
-				cerr<<"Invalid file "<<(string)optarg<<endl;
-				return 99;
-			}
-			break;
-
-		case 'd':
-			dictfile=(string)optarg;
-			break;
-
-		case 's':
-			ofs.open((string)optarg);
-			if(!ofs){
-				cerr<<"Invalid files "<<(string)optarg<<endl;
-				return 99;
-			}
-			break;
-
-		case 't':
-			oft.open((string)optarg);
-			if(!oft){
-				cerr<<"Invalid files "<<(string)optarg<<endl;
-				return 99;
-			}
-			break;
-
-		case 'm':
-			Params::min_words_doc = atoi(optarg);
-			break;
-
-		case 'x':
-			Params::max_words_doc = atoi(optarg);
-			break;
-
-		case 'c':
-			Params::min_word_cnt = atoi(optarg);
-			break;
-
-		case 'g':
-			Params::category=(string)optarg;
-			break;
-
-		case 'v':
-			Params::debug=true;
-			break;
-
-		case 'l':
-			Params::lang=(string)optarg;
-			if(!(Params::lang=="EN"||Params::lang=="JP")){
-				cerr<<"No such language supported."<<endl;
-			}
-			break;
-
-		default:
-			cerr<<"No such option: "<<result<<"."<<endl;
-			exit(10);
-			break;
-			
-		}
-	}
-
-	Common::finished=false;
-
-	condition c;
-
-	Queue::ifs=&ifs;
-	Queue queue(&c);
-
-	Threads::f.s=&ofs;
-	Threads::f.t=&oft;
-	Threads::read_dict(dictfile);
-	Threads::qobj=&queue;
-	Threads::c=&c;
-
-	unsigned int cpus;
-	cpus=thread::hardware_concurrency();
-	Params::cpus=cpus;
-
-	thread_group g;
-	if(cpus==1){
-		g.create_thread(bind(&run,0));
-	}else{
-		for(unsigned int i=0;i<cpus-1;i++){
-			g.create_thread(bind(&run,i));
-		}
-	}
-
-	if(Params::debug)
-		cout<<"[Info: "<<cpus<<" threads spawned.]"<<endl;
-
-	queue.run();
-
-	queue.finish();
-	g.join_all();
+	workers.join_all();
 
 	return 0;
 }
