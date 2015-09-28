@@ -16,7 +16,7 @@ import (
 	"sync"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/ikawaha/kagome"
+	"github.com/ikawaha/kagome/tokenizer"
 )
 
 var (
@@ -62,7 +62,7 @@ type countWordType struct {
 
 func (ctype *countWordType) CountWordJp() int {
 
-	tkn := kagome.NewTokenizer()
+	tkn := tokenizer.New()
 	morphs := tkn.Tokenize(ctype.text)
 
 	var wc = 0
