@@ -7,7 +7,7 @@
 #include <utility>
 #include <algorithm>
 
-//#include <mecab.h>
+#include <mecab.h>
 
 #include <boost/thread.hpp> // For std::thread::hardware_concurrency()
 #include <boost/thread/thread.hpp>
@@ -24,46 +24,6 @@ namespace po = boost::program_options;
 
 #define semaphore_name "worker_number_control"
 
-class Worker {
-
-	private:
-		vector<string> stopwords;
-
-		po::variables_map args;
-
-		bt::mutex *lockOutBofwFile;
-		ofstream *osOutBofwFile;
-		unordered_map<string,string> *map_dict;
-
-		string page;
-		string bofw;
-		int num_terms_in_doc;
-
-	public:
-		Worker(){};
-		Worker(po::variables_map args,string page,ofstream *osOutBofwFile, bt::mutex *lockOutBofwFile, unordered_map<string,string> *map_dict):
-			args(args),page(page),osOutBofwFile(osOutBofwFile),lockOutBofwFile(lockOutBofwFile),map_dict(map_dict){ set_stopwords(); };
-		~Worker(){};
-		void parse();
-		void save_to_file();
-		void set_stopwords();
-		string get_page(){ return page; }
-
-};
-
-void Worker::set_stopwords(){
-
-	string stopwords = "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your";
-
-	replace(stopwords.begin(),stopwords.end(),',',' ');
-	stringstream ss(stopwords);
-	string stopword;
-	while(!ss.eof()){
-		ss>>stopword;
-		this->stopwords.push_back(stopword);
-	}
-}
-
 struct comparator{
 	bool operator()(const pair<string,int>& a, const pair<string,int>& b) const {
 		int af = a.second;
@@ -72,7 +32,156 @@ struct comparator{
 	}
 };
 
-void Worker::parse(){
+class AbstParser {
+
+	protected:
+
+		po::variables_map args;
+		string page;
+		ofstream *hdlr_out_bofw_file;
+		bt::mutex *lock_out_bofw_file;
+		unordered_map<string,string> *map_dict;
+
+
+		bool is_japanese;
+		vector<string> vec_stopwords;
+
+		string bofw;
+		int num_terms_in_doc;
+
+	public:
+
+		AbstParser(){};
+
+		AbstParser(
+			po::variables_map args,
+			string page,
+			ofstream *hdlr_out_bofw_file,
+			bt::mutex *lock_out_bofw_file,
+			unordered_map<string,string> *map_dict,
+			bool is_japanese
+		) :
+		// XXX: The order to initialize these properties
+		//      is not following this way. It depends on
+		//		what order they are defined in the class
+		//		actually.
+		args(args),
+		page(page),
+		hdlr_out_bofw_file(hdlr_out_bofw_file),
+		lock_out_bofw_file(lock_out_bofw_file),
+		map_dict(map_dict),
+		is_japanese(is_japanese)
+		{};
+
+		virtual ~AbstParser(){};
+
+		virtual void set_stopwords(){};
+		virtual void parse(){};
+
+		void save_to_file();
+
+};
+
+void AbstParser::save_to_file(){
+	if(num_terms_in_doc>0)
+	{
+		bt::mutex::scoped_lock lk(*lock_out_bofw_file);
+		*hdlr_out_bofw_file<<bofw<<endl;
+	}
+}
+
+
+class JapParser : public AbstParser {
+
+	public:
+
+		JapParser(
+			po::variables_map args,
+			string page,
+			ofstream *hdlr_out_bofw_file,
+			bt::mutex *lock_out_bofw_file,
+			unordered_map<string,string> *map_dict,
+			bool is_japanese = true
+		) :
+		AbstParser(
+			args,
+			page,
+			hdlr_out_bofw_file,
+			lock_out_bofw_file,
+			map_dict,
+			is_japanese
+		)
+		{
+			set_stopwords();
+		};
+
+		~JapParser(){};
+
+		void parse();
+		void set_stopwords();
+
+
+};
+
+void JapParser::set_stopwords(){
+
+	string stopwords = "の,に,は,を,た,が,で,て,と,し,れ,さ,ある,いる,も,する,から,な,こと,として,い,や,れる,など,なっ,ない,この,ため,その,あっ,よう,また,もの,という,あり,まで,られ,なる,へ,か,だ,これ,によって,により,おり,より,による,ず,なり,られる,において,ば,なかっ,なく,しかし,について,せ,だっ,その後,できる,それ,う,ので,なお,のみ,でき,き,つ,における,および,いう,さらに,でも,ら,たり,その他,に関する,たち,ます,ん,なら,に対して,特に,せる,及び,これら,とき,では,にて,ほか,ながら,うち,そして,とともに,ただし,かつて,それぞれ,または,お,ほど,ものの,に対する,ほとんど,と共に,といった,です,とも,ところ,ここ";
+
+	replace(stopwords.begin(),stopwords.end(),',',' ');
+	stringstream ss(stopwords);
+	string stopword;
+	while(!ss.eof()){
+		ss>>stopword;
+		vec_stopwords.push_back(stopword);
+	}
+}
+
+
+class EngParser : public AbstParser {
+
+	public:
+
+		EngParser(
+			po::variables_map args,
+			string page,
+			ofstream *hdlr_out_bofw_file,
+			bt::mutex *lock_out_bofw_file,
+			unordered_map<string,string> *map_dict,
+			bool is_japanese = false
+		) :
+		AbstParser(
+			args,
+			page,
+			hdlr_out_bofw_file,
+			lock_out_bofw_file,
+			map_dict,
+			is_japanese
+		)
+		{
+			set_stopwords();
+		};
+
+		~EngParser(){};
+
+		void parse();
+		void set_stopwords();
+
+};
+
+void EngParser::set_stopwords(){
+
+	string stopwords = "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your";
+
+	replace(stopwords.begin(),stopwords.end(),',',' ');
+	stringstream ss(stopwords);
+	string stopword;
+	while(!ss.eof()){
+		ss>>stopword;
+		vec_stopwords.push_back(stopword);
+	}
+}
+
+void EngParser::parse(){
 
 	bt::regex text_reg("<text[^>]*>([\\s\\S]*)</text>");
 	bt::smatch match_text_reg;
@@ -94,8 +203,8 @@ void Worker::parse(){
 		transform(term.begin(),term.end(),term.begin(),::tolower);
 
 		if(!bt::regex_search(term,_smatch,term_reg)) continue;
-		auto itr_stopwords = find(stopwords.begin(),stopwords.end(),term);
-		if(itr_stopwords!=stopwords.end()) continue;
+		auto itr_stopwords = find(vec_stopwords.begin(),vec_stopwords.end(),term);
+		if(itr_stopwords!=vec_stopwords.end()) continue;
 
 		if(map_dict->find(term)!=map_dict->end()) term=(*map_dict)[term];
 
@@ -108,6 +217,7 @@ void Worker::parse(){
 	}
 	this->num_terms_in_doc=num_terms_in_doc;
 
+	// To sort unordered_map, use priority_queue is good practice
 	priority_queue<pair<string,int>,vector<pair<string,int> >, comparator> queue_term_freq;
 	for(auto it=map_term_freq.begin();it!=map_term_freq.end();++it){
 		queue_term_freq.push(*it);
@@ -122,35 +232,58 @@ void Worker::parse(){
 
 		pair_term_freq = queue_term_freq.top();
 		queue_term_freq.pop();
-		
+
 		ss_freq.str("");
 		ss_freq.clear();
 		ss_freq<<pair_term_freq.second;
 		bofw+=pair_term_freq.first+" "+ss_freq.str();
 
 	}
-
 	this->bofw = bofw;
 }
 
-void Worker::save_to_file(){
-	if(num_terms_in_doc>0)
-	{
-		bt::mutex::scoped_lock lk(*lockOutBofwFile);
-		*osOutBofwFile<<bofw<<endl;
-	}
-}
 
-void run_worker(shared_ptr<Worker> worker){
-	worker->parse();
-	worker->save_to_file();
+class Factory {
+
+	public:
+		AbstParser parser;
+
+		Factory(
+			po::variables_map args,
+			string page,
+			ofstream *hdlr_out_bofw_file,
+			bt::mutex *lock_out_bofw_file,
+			unordered_map<string,string> *map_dict,
+			bool is_japanese
+		){
+
+			if(is_japanese){
+
+			}else{
+				parser = EngParser(
+					args,
+					page,
+					hdlr_out_bofw_file,
+					lock_out_bofw_file,
+					map_dict
+				);
+			}
+		};
+
+		~Factory(){};
+
+};
+
+void run_worker(shared_ptr<Factory> worker){
+	worker->parser.parse();
+	worker->parser.save_to_file();
 	ip::named_semaphore semaphore(ip::open_only_t(), semaphore_name);
 	semaphore.post();
 }
 
-void read_dictionary(string inDictFile, unordered_map<string,string> *map_dict){
+void read_dictionary(string in_dict_file, unordered_map<string,string> *map_dict){
 
-	ifstream hInDictFile(inDictFile);
+	ifstream hInDictFile(in_dict_file);
 	string line;
 	stringstream ss;
 	string baseform, transform;
@@ -166,15 +299,17 @@ void read_dictionary(string inDictFile, unordered_map<string,string> *map_dict){
 
 int main(int argc, char *argv[]){
 
-	string inWikiFile,inDictFile,outBofwFile;
-	int minFreqOfTerm;
+	string in_wiki_file,in_dict_file,out_bofw_file;
+	int min_freq_of_term = 1;
+	bool is_japanese = false;
 
 	po::options_description option("ParseWikipediaXML:");
 	option.add_options()
-		("inWikiFile,i",po::value<string>(&inWikiFile),"Input WikipediaXML file.")
-		("inDictFile,d",po::value<string>(&inDictFile),"Input Dictionary file.")
-		("outBofwFile,s",po::value<string>(&outBofwFile),"Output bag-of-words file.")
-		("minFreqOfTerm,c",po::value<int>(&minFreqOfTerm),"How many times a term should appear in a document.")
+		("in_wiki_file,i",po::value<string>(&in_wiki_file),"Input WikipediaXML file.")
+		("in_dict_file,d",po::value<string>(&in_dict_file),"Input Dictionary file.")
+		("out_bofw_file,s",po::value<string>(&out_bofw_file),"Output bag-of-words file.")
+		("min_freq_of_term,c",po::value<int>(&min_freq_of_term),"How many times a term should appear in a document.")
+		("is_japanese,j",po::value<bool>(&is_japanese),"If the document is in Japanese.")
 	;
 
 	po::variables_map args;
@@ -188,37 +323,34 @@ int main(int argc, char *argv[]){
 
 	bt::thread_group workers;
 	// Number of concurrent threads supported.
-	int max_running_workers = boost::thread::hardware_concurrency();
+	int num_max_workers = boost::thread::hardware_concurrency();
 
 	ip::named_semaphore::remove(semaphore_name);
-	ip::named_semaphore(ip::create_only_t(), semaphore_name, max_running_workers);
+	ip::named_semaphore(ip::create_only_t(), semaphore_name, num_max_workers);
 	ip::named_semaphore semaphore(ip::open_only_t(), semaphore_name);
 
-	ifstream hInWikiFile(inWikiFile.c_str());
-	if(!hInWikiFile) return 1;
+	ifstream hdlr_in_wiki_file(in_wiki_file.c_str());
+	if(!hdlr_in_wiki_file) return 1;
 
-	ofstream osOutBofwFile(outBofwFile);
-	bt::mutex lockOutBofwFile;
+	ofstream hdlr_out_bofw_file(out_bofw_file);
+	bt::mutex lock_out_bofw_file;
 
 	unordered_map<string,string> map_dict;
-	read_dictionary(args["inDictFile"].as<string>(),&map_dict);
+	read_dictionary(args["in_dict_file"].as<string>(),&map_dict);
 
 	string line="", page="";
-	int insidePage=0,outsidePage=0;
-	int c=0;
-	while(hInWikiFile && getline(hInWikiFile,line)){
-		if(string::npos!=line.find("<page>",0)) insidePage=1;
-		if(string::npos!=line.find("</page>",0)) outsidePage=1;
-		if(insidePage) page += line;
-		if(outsidePage){
-			c++;
-			//cout<<c<<endl;
+	bool is_inside_page=false,is_outside_page=false;
+	while(hdlr_in_wiki_file && getline(hdlr_in_wiki_file,line)){
+		if(string::npos!=line.find("<page>",0)) is_inside_page=true;
+		if(string::npos!=line.find("</page>",0)) is_outside_page=true;
+		if(is_inside_page) page += line;
+		if(is_inside_page && is_outside_page){
 			semaphore.wait();
-			shared_ptr<Worker> worker =
-				make_shared<Worker>(args,page,&osOutBofwFile,&lockOutBofwFile,&map_dict);
+			shared_ptr<Factory> worker =
+				make_shared<Factory>(args,page,&hdlr_out_bofw_file,&lock_out_bofw_file,&map_dict,is_japanese);
 			workers.create_thread(bt::bind(&run_worker,worker));
 			page = "";
-			insidePage=outsidePage=0;
+			is_inside_page=is_outside_page=false;
 		}
 	}
 	workers.join_all();
