@@ -196,7 +196,9 @@ void JapParser::parse(){
 			(vec_feature[0] == "動詞" || vec_feature[0] == "形容詞" || vec_feature[0] == "副詞") )
 		{
 			if("*" == vec_feature[6]){
-				term = node->surface;
+				// XXX: node->surface is NOT terminated by 0
+				//term = ((string)node->surface).substr(0,node->length);
+				continue;
 			}else{
 				term = vec_feature[6];
 			}
