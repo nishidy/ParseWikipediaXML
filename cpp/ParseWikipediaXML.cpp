@@ -77,7 +77,7 @@ class AbstParser {
 
 		virtual void set_stopwords(){};
 		virtual void parse(){};
-		virtual string get_page(){};
+		virtual string get_page() const { return ""; };
 
 		void save_to_file();
 
@@ -90,6 +90,7 @@ void AbstParser::save_to_file(){
 		*hdlr_out_bofw_file<<bofw<<endl;
 	}
 }
+
 // singleton
 class JapParserMecab {
 
@@ -98,23 +99,25 @@ class JapParserMecab {
 			model = MeCab::createModel(0,NULL);
 			tagger = model->createTagger();
 		};
+		static JapParserMecab* singleton;
 
 	public:
 
 		MeCab::Model *model;
 		MeCab::Tagger *tagger;
 
-		static JapParserMecab& get_instance(){
-			static JapParserMecab instance;
-			return instance;
+		static JapParserMecab* get_instance(){
+			return singleton;
 		}
 
 		~JapParserMecab(){};
 };
+JapParserMecab* JapParserMecab::singleton = new JapParserMecab();
 
 class JapParser : public AbstParser {
 
 	private:
+		JapParserMecab* mecab;
 		MeCab::Lattice *lattice;
 
 	public:
@@ -137,9 +140,8 @@ class JapParser : public AbstParser {
 		)
 		{
 			set_stopwords();
-			*mecab = JapParserMecab::get_instance();
+			mecab = JapParserMecab::get_instance();
 			lattice = mecab->model->createLattice();
-			lattice->set_sentence(page.c_str());
 		};
 
 		~JapParser(){};
@@ -147,8 +149,6 @@ class JapParser : public AbstParser {
 		void parse();
 		void set_stopwords();
 		string get_page(){ return page; };
-
-		JapParserMecab* mecab;
 
 };
 
@@ -165,8 +165,77 @@ void JapParser::set_stopwords(){
 	}
 }
 
-
 void JapParser::parse(){
+
+	bt::regex text_reg("<text[^>]*>([\\s\\S]*)</text>");
+	bt::smatch match_text_reg;
+	string text;
+
+	if(bt::regex_search(page,match_text_reg,text_reg))
+		text=match_text_reg.str(1);
+
+	lattice->set_sentence(text.c_str());
+	if(!mecab->tagger->parse(lattice)){
+		cout << "targger->parse failed." << endl;
+		return ;
+	}
+
+	unordered_map<string,int> map_term_freq;
+
+	MeCab::Node* node = lattice->bos_node();
+	for(; node; node=node->next){
+		istringstream iss(node->feature);
+		string feature;
+		vector<string> vec_feature;
+		while(getline(iss,feature,',')){
+			vec_feature.push_back(feature);
+		}
+
+		string term;
+		if( (vec_feature[0] == "名詞" && vec_feature[1] == "サ変接続") ||
+			(vec_feature[0] == "動詞" || vec_feature[0] == "形容詞" || vec_feature[0] == "副詞") )
+		{
+			if("*" == vec_feature[6]){
+				term = node->surface;
+			}else{
+				term = vec_feature[6];
+			}
+
+			auto itr_stopwords = find(vec_stopwords.begin(),vec_stopwords.end(),term);
+			if(itr_stopwords!=vec_stopwords.end()) continue;
+
+			if(map_term_freq.find(term)==map_term_freq.end()){
+				map_term_freq[term]=1;
+			}else{
+				map_term_freq[term]++;
+			}
+			num_terms_in_doc++;
+		}
+	}
+
+	// To sort unordered_map, use priority_queue is good practice
+	priority_queue<pair<string,int>,vector<pair<string,int> >, comparator> queue_term_freq;
+	for(auto it=map_term_freq.begin();it!=map_term_freq.end();++it){
+		queue_term_freq.push(*it);
+	}
+
+	bofw = "";
+	stringstream ss_freq;
+	pair<string,int> pair_term_freq;
+	while(!queue_term_freq.empty()){
+
+		if(bofw.length()>0) bofw+=" ";
+
+		pair_term_freq = queue_term_freq.top();
+		queue_term_freq.pop();
+
+		ss_freq.str("");
+		ss_freq.clear();
+		ss_freq<<pair_term_freq.second;
+		bofw+=pair_term_freq.first+" "+ss_freq.str();
+
+	}
+
 }
 
 class EngParser : public AbstParser {
@@ -225,7 +294,6 @@ void EngParser::parse(){
 
 	unordered_map<string,int> map_term_freq;
 	stringstream ss_text(text);
-	int num_terms_in_doc=0;
 	string term;
 
 	bt::regex term_reg("^[a-z][0-9a-z'-]*[0-9a-z]$");
@@ -248,7 +316,6 @@ void EngParser::parse(){
 		}
 		num_terms_in_doc++;
 	}
-	this->num_terms_in_doc=num_terms_in_doc;
 
 	// To sort unordered_map, use priority_queue is good practice
 	priority_queue<pair<string,int>,vector<pair<string,int> >, comparator> queue_term_freq;
@@ -272,7 +339,7 @@ void EngParser::parse(){
 		bofw+=pair_term_freq.first+" "+ss_freq.str();
 
 	}
-	this->bofw = bofw;
+
 }
 
 
@@ -342,16 +409,19 @@ void read_dictionary(string in_dict_file, unordered_map<string,string> *map_dict
 int main(int argc, char *argv[]){
 
 	string in_wiki_file,in_dict_file,out_bofw_file;
-	int min_freq_of_term = 1;
-	bool is_japanese = false;
+	int min_freq_of_term;
+	bool is_japanese;
 
 	po::options_description option("ParseWikipediaXML:");
 	option.add_options()
 		("in_wiki_file,i",po::value<string>(&in_wiki_file),"Input WikipediaXML file.")
 		("in_dict_file,d",po::value<string>(&in_dict_file),"Input Dictionary file.")
 		("out_bofw_file,s",po::value<string>(&out_bofw_file),"Output bag-of-words file.")
-		("min_freq_of_term,c",po::value<int>(&min_freq_of_term),"How many times a term should appear in a document.")
-		("is_japanese,j",po::value<bool>(&is_japanese),"If the document is in Japanese.")
+		("min_freq_of_term,c",
+		 po::value<int>(&min_freq_of_term)->default_value(1),
+		 "How many times a term should appear in a document."
+		)
+		("is_japanese,j","If the document is in Japanese.")
 	;
 
 	po::variables_map args;
@@ -362,6 +432,12 @@ int main(int argc, char *argv[]){
 		cout << e.what() << endl;
 	}
 	po::notify(args);
+
+	if(args.count("is_japanese")){
+		 is_japanese = true;
+	}else{
+		 is_japanese = false;
+	}
 
 	bt::thread_group workers;
 	// Number of concurrent threads supported.
@@ -378,7 +454,8 @@ int main(int argc, char *argv[]){
 	bt::mutex lock_out_bofw_file;
 
 	unordered_map<string,string> map_dict;
-	read_dictionary(args["in_dict_file"].as<string>(),&map_dict);
+	if(!is_japanese)
+		read_dictionary(args["in_dict_file"].as<string>(),&map_dict);
 
 	string line="", page="";
 	bool is_inside_page=false,is_outside_page=false;
