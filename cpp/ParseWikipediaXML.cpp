@@ -42,15 +42,15 @@ class AbstParser {
 		bt::mutex *lock_out_bofw_file;
 		unordered_map<string,string> *map_dict;
 
-
 		bool is_japanese;
 		vector<string> vec_stopwords;
 
 		string bofw;
-		int num_terms_in_doc;
+		int num_terms_in_doc = 0;
 
 	public:
 
+		// Factory needs this to initialize its AbstParser member
 		AbstParser(){};
 
 		AbstParser(
@@ -63,8 +63,8 @@ class AbstParser {
 		) :
 		// XXX: The order to initialize these properties
 		//      is not following this way. It depends on
-		//		what order they are defined in the class
-		//		actually.
+		//      what order they are defined in the class
+		//      actually.
 		args(args),
 		page(page),
 		hdlr_out_bofw_file(hdlr_out_bofw_file),
@@ -77,6 +77,7 @@ class AbstParser {
 
 		virtual void set_stopwords(){};
 		virtual void parse(){};
+		virtual string get_page(){};
 
 		void save_to_file();
 
@@ -89,9 +90,32 @@ void AbstParser::save_to_file(){
 		*hdlr_out_bofw_file<<bofw<<endl;
 	}
 }
+// singleton
+class JapParserMecab {
 
+	private:
+		JapParserMecab(){
+			model = MeCab::createModel(0,NULL);
+			tagger = model->createTagger();
+		};
+
+	public:
+
+		MeCab::Model *model;
+		MeCab::Tagger *tagger;
+
+		static JapParserMecab& get_instance(){
+			static JapParserMecab instance;
+			return instance;
+		}
+
+		~JapParserMecab(){};
+};
 
 class JapParser : public AbstParser {
+
+	private:
+		MeCab::Lattice *lattice;
 
 	public:
 
@@ -113,13 +137,18 @@ class JapParser : public AbstParser {
 		)
 		{
 			set_stopwords();
+			*mecab = JapParserMecab::get_instance();
+			lattice = mecab->model->createLattice();
+			lattice->set_sentence(page.c_str());
 		};
 
 		~JapParser(){};
 
 		void parse();
 		void set_stopwords();
+		string get_page(){ return page; };
 
+		JapParserMecab* mecab;
 
 };
 
@@ -136,6 +165,9 @@ void JapParser::set_stopwords(){
 	}
 }
 
+
+void JapParser::parse(){
+}
 
 class EngParser : public AbstParser {
 
@@ -165,6 +197,7 @@ class EngParser : public AbstParser {
 
 		void parse();
 		void set_stopwords();
+		string get_page(){ return page; };
 
 };
 
@@ -246,7 +279,7 @@ void EngParser::parse(){
 class Factory {
 
 	public:
-		AbstParser parser;
+		AbstParser* parser;
 
 		Factory(
 			po::variables_map args,
@@ -259,8 +292,17 @@ class Factory {
 
 			if(is_japanese){
 
+				parser = new JapParser(
+					args,
+					page,
+					hdlr_out_bofw_file,
+					lock_out_bofw_file,
+					map_dict
+				);
+
 			}else{
-				parser = EngParser(
+
+				parser = new EngParser(
 					args,
 					page,
 					hdlr_out_bofw_file,
@@ -275,8 +317,8 @@ class Factory {
 };
 
 void run_worker(shared_ptr<Factory> worker){
-	worker->parser.parse();
-	worker->parser.save_to_file();
+	worker->parser->parse();
+	worker->parser->save_to_file();
 	ip::named_semaphore semaphore(ip::open_only_t(), semaphore_name);
 	semaphore.post();
 }
