@@ -10,6 +10,7 @@ $(PROG):$(PROG).o
 $(PROG).o:$(PROG).cpp
 	$(GCC) -c $^ $(CFLAGS) -std=$(STD)
 
+.PHONY: clean
 clean:
-	rm -rf $(PROG).o
+	rm $(PROG).o
 
