@@ -226,16 +226,16 @@ void JapParser::parse(){
 	pair<string,int> pair_term_freq;
 	while(!queue_term_freq.empty()){
 
-		if(bofw.length()>0) bofw+=" ";
-
 		pair_term_freq = queue_term_freq.top();
 		queue_term_freq.pop();
 
-		ss_freq.str("");
-		ss_freq.clear();
-		ss_freq<<pair_term_freq.second;
-		bofw+=pair_term_freq.first+" "+ss_freq.str();
-
+		if(pair_term_freq.second>=args["min_freq_of_term"].as<int>()){
+			ss_freq.str("");
+			ss_freq.clear();
+			ss_freq<<pair_term_freq.second;
+			if(bofw.length()>0) bofw+=" ";
+			bofw+=pair_term_freq.first+" "+ss_freq.str();
+		}
 	}
 
 }
@@ -319,6 +319,10 @@ void EngParser::parse(){
 		num_terms_in_doc++;
 	}
 
+	if(num_terms_in_doc<args["min_terms_in_doc"].as<int>() ||
+	   num_terms_in_doc>args["max_terms_in_doc"].as<int>() )
+		return;
+
 	// To sort unordered_map, use priority_queue is good practice
 	priority_queue<pair<string,int>,vector<pair<string,int> >, comparator> queue_term_freq;
 	for(auto it=map_term_freq.begin();it!=map_term_freq.end();++it){
@@ -330,16 +334,16 @@ void EngParser::parse(){
 	pair<string,int> pair_term_freq;
 	while(!queue_term_freq.empty()){
 
-		if(bofw.length()>0) bofw+=" ";
-
 		pair_term_freq = queue_term_freq.top();
 		queue_term_freq.pop();
 
-		ss_freq.str("");
-		ss_freq.clear();
-		ss_freq<<pair_term_freq.second;
-		bofw+=pair_term_freq.first+" "+ss_freq.str();
-
+		if(pair_term_freq.second>=args["min_freq_of_term"].as<int>()){
+			ss_freq.str("");
+			ss_freq.clear();
+			ss_freq<<pair_term_freq.second;
+			if(bofw.length()>0) bofw+=" ";
+			bofw+=pair_term_freq.first+" "+ss_freq.str();
+		}
 	}
 
 }
@@ -410,19 +414,21 @@ void read_dictionary(string in_dict_file, unordered_map<string,string> *map_dict
 
 int main(int argc, char *argv[]){
 
-	string in_wiki_file,in_dict_file,out_bofw_file;
-	int min_freq_of_term;
+	string out_bofw_file;
 	bool is_japanese;
 
 	po::options_description option("ParseWikipediaXML:");
 	option.add_options()
-		("in_wiki_file,i",po::value<string>(&in_wiki_file),"Input WikipediaXML file.")
-		("in_dict_file,d",po::value<string>(&in_dict_file),"Input Dictionary file.")
+		("help,h","Show help message.")
+		("in_wiki_file,i",po::value<string>(),"Input WikipediaXML file.")
+		("in_dict_file,d",po::value<string>(),"Input Dictionary file.")
 		("out_bofw_file,s",po::value<string>(&out_bofw_file),"Output bag-of-words file.")
-		("min_freq_of_term,c",
-		 po::value<int>(&min_freq_of_term)->default_value(1),
-		 "How many times a term should appear in a document."
-		)
+		("min_freq_of_term,c",po::value<int>()->default_value(2), "How many times a term "
+		 "should appear in a document.")
+		("min_terms_in_doc,m",po::value<int>()->default_value(1), "How many terms a document "
+		 "should contain at least.")
+		("max_terms_in_doc,x",po::value<int>()->default_value(65535), "How many terms a document "
+		 "should contain at most.")
 		("is_japanese,j","If the document is in Japanese.")
 	;
 
@@ -434,6 +440,11 @@ int main(int argc, char *argv[]){
 		cout << e.what() << endl;
 	}
 	po::notify(args);
+
+	if(args.count("help")){
+		cout << option << endl;
+		return 0;
+	}
 
 	if(args.count("is_japanese")){
 		 is_japanese = true;
@@ -449,7 +460,7 @@ int main(int argc, char *argv[]){
 	ip::named_semaphore(ip::create_only_t(), semaphore_name, num_max_workers);
 	ip::named_semaphore semaphore(ip::open_only_t(), semaphore_name);
 
-	ifstream hdlr_in_wiki_file(in_wiki_file.c_str());
+	ifstream hdlr_in_wiki_file(args["in_wiki_file"].as<string>().c_str());
 	if(!hdlr_in_wiki_file) return 1;
 
 	ofstream hdlr_out_bofw_file(out_bofw_file);
