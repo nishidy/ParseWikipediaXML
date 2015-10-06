@@ -55,7 +55,7 @@ class ArgStore {
 		else if(oftfidf.equals("")) throw new ParseException("i is not specified.");
 
 		if(cl.hasOption("d")) ifdict = cl.getOptionValue("d");
-		else if(oftfidf.equals("") && !isJap) ifdict = "";
+		else if(oftfidf.equals("") && !isJap) throw new ParseException("d is not specified.");
 
 		if(cl.hasOption("s")) ofcont = cl.getOptionValue("s");
 		else ofcont = null;
