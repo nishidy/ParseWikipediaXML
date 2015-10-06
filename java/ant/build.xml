@@ -4,6 +4,7 @@
 
 	<property name="src" value="."/>
 	<property name="build" value="build"/>
+	<property name="jar" value="jar"/>
 	<property name="ivy.lib" value="lib"/>
 	<!--<property name="output" value="output.txt"/>-->
 
@@ -15,21 +16,34 @@
 
 	<target name="compile" depends="resolve">
 		<mkdir dir="${build}"/>
+		<mkdir dir="${jar}"/>
 		<javac includeantruntime="false" srcdir="${src}" destdir="${build}">
 			<classpath refid="ivy.path"/>
+			<exclude name="app/*java"/>
 			<compilerarg value="-Xlint:unchecked"/>
 		</javac>
 	</target>
 
+	<target name="build" depends="compile">
+		<jar basedir="build" destfile="${jar}/${ant.project.name}.jar"/>
+	</target>
+
+	<target name="app" depends="compile">
+		<javac srcdir="app" destdir="${jar}" classpath="${jar}">
+			<include name="*jar"/>
+		</javac>
+	</target>
+
 	<target name="test" depends="compile">
-		<java classname="${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
+		<java classname="com.github.nishidy.${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
 			<arg line="-i ../../share/enwiki-test-5000"/>
 			<arg line="-d ../../share/morph_english.flat"/>
-			<arg line="-n 2"/>
-			<arg line="-l"/>
-			<!--<arg line="-v"/>-->
 		</java>
-		<java classname="${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
+		<java classname="com.github.nishidy.${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
+			<arg line="-i ../../share/enwiki-test-5000"/>
+			<arg line="-d ../../share/dictionary.msgpack"/>
+		</java>
+		<java classname="com.github.nishidy.${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
 			<arg line="-i ../../share/jawiki-test-5000"/>
 			<arg line="-c 3"/>
 			<arg line="-n 3"/>
@@ -39,7 +53,7 @@
 		</java>
 	</target>
 
-	<target name="tfidf" depends="compile">
+	<target name="testall" depends="test">
 		<java classname="${ant.project.name}" classpath="${build}" classpathref="ivy.path" fork="true" failonerror="true">
 			<arg line="-i ../../share/enwiki-test-50000"/>
 			<arg line="-s ../../share/enwiki-test-50000-bow"/>
@@ -57,6 +71,7 @@
 
 	<target name="clean">
 		<delete dir="${build}"/>
+		<delete dir="${jar}"/>
 		<!--<delete file="${output}"/>-->
 	</target>
 
