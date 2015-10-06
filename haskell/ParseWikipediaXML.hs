@@ -239,6 +239,7 @@ getBaseformFromDict mapDict term =
 		Nothing -> term
 
 -- The shorter function name is better for frequent use
+-- Take Key from map
 tk :: M.Map S S -> S -> S
 tk m s =
 	case M.lookup s m of
@@ -251,7 +252,7 @@ notEmptyWriteToFile "" bofw = putStrLn bofw
 notEmptyWriteToFile outBofwFile bofw = appendFile outBofwFile $ bofw++"\n"
 
 -- insertWithKey takes 4 arguments (in this case)
--- (key->initvalue->oldvalue->newvalue) key initvalue ExistentingMap
+-- (key->initvalue->oldvalue->newvalue)->key->initvalue->ExistentingMap
 -- (makeBagofwords xs) recursively returns back to M.empty for xs
 -- M.insertWithKey then starts to run its job like foldr
 makeBagofwords :: [S] -> M.Map S Int
