@@ -37,7 +37,7 @@ class bofwThread(threading.Thread):
 				word = word.lower()
 				if len(word)==1: continue
 				if word in stopwords: continue
-				if re.search("^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$",word) is None: continue
+				if re.search("^[a-z][a-z0-9'-]*[a-z0-9]$",word) is None: continue
 				dictBofw[dictMap.get(word,word)] += 1 # defaultdict initializes the fist value of a key
 
 			docCount=sum(dictBofw.values())
@@ -67,6 +67,8 @@ class JapParser(AbstParser):
 	def __init__(self,args):
 		self.args = args
 
+		stopwords = "の,に,は,を,た,が,で,て,と,し,れ,さ,ある,いる,も,する,から,な,こと,として,い,や,れる,など,なっ,ない,この,ため,その,あっ,よう,また,もの,という,あり,まで,られ,なる,へ,か,だ,これ,によって,により,おり,より,による,ず,なり,られる,において,ば,なかっ,なく,しかし,について,せ,だっ,その後,できる,それ,う,ので,なお,のみ,でき,き,つ,における,および,いう,さらに,でも,ら,たり,その他,に関する,たち,ます,ん,なら,に対して,特に,せる,及び,これら,とき,では,にて,ほか,ながら,うち,そして,とともに,ただし,かつて,それぞれ,または,お,ほど,ものの,に対する,ほとんど,と共に,といった,です,とも,ところ,ここ"
+		self.stopwords=stopwords.split(",")
 
 class EngParser(AbstParser):
 
@@ -133,6 +135,6 @@ if __name__ == "__main__":
 		parser = JapParser(args)
 	else:
 		parser = EngParser(args)
-	parser.readDictionary()
+		parser.readDictionary()
 	parser.startParse()
 
