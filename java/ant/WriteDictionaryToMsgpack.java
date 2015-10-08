@@ -2,6 +2,7 @@ import org.msgpack.MessagePack;
 import org.msgpack.packer.Packer;
 import org.msgpack.unpacker.Unpacker;
 import org.msgpack.template.Template;
+import org.msgpack.MessageTypeException;
 import static org.msgpack.template.Templates.tMap;
 import static org.msgpack.template.Templates.TString;
 import java.io.*;
@@ -18,6 +19,7 @@ class WriteDictionaryToMsgpack {
 			while((line=br.readLine())!=null){
 				if(line.indexOf(";;;")>=0) continue;
 				String cols[] = line.split("[ \\t]");
+				if(cols[0].equals(cols[3])) continue;
 				mapDict.put(cols[0],cols[3]);
 			}
 		} catch (IOException e){
@@ -45,18 +47,25 @@ class WriteDictionaryToMsgpack {
 		File file = new File("../../share/dictionary.msgpack");
 		byte [] bytes = new byte[(int) file.length() ];;
 		InputStream inputStream = new FileInputStream("../../share/dictionary.msgpack");
-		inputStream.read(bytes);
+		try{
+			inputStream.read(bytes);
+			ByteArrayInputStream in = new ByteArrayInputStream(bytes);
+			Unpacker unpacker = msgpack.createUnpacker(in);
 
-		ByteArrayInputStream in = new ByteArrayInputStream(bytes);
-		Unpacker unpacker = msgpack.createUnpacker(in);
+			Template<Map<String,String>> mapTmpl = tMap(TString,TString);
+			Map<String,String> inMapDict = unpacker.read(mapTmpl);
 
-		Template<Map<String,String>> mapTmpl = tMap(TString,TString);
-		Map<String,String> inMapDict = unpacker.read(mapTmpl);
+			// Show map to check
+			for(Map.Entry<String,String> e : inMapDict.entrySet()){
+				System.out.println(e.getKey() + " : " + e.getValue());
+			}
 
-		// Show map to check
-		for(Map.Entry<String,String> e : inMapDict.entrySet()){
-			System.out.println(e.getKey() + " : " + e.getValue());
+		} catch(MessageTypeException e){
+			System.err.println("MessageTypeException!");
+			throw e;
 		}
+
+
 
 	}
 }
