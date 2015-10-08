@@ -58,33 +58,21 @@ class AbstParser:
 	def __init__(self):
 		pass
 
-	def parseArgs(self,argv):
-		parser = argparse.ArgumentParser(description="Parse WikipediaXML to make bag-of-words.")
-		parser.add_argument('-i','--ifwiki',required=True)
-		parser.add_argument('-d','--ifdict',required=True)
-		parser.add_argument('-s','--ofcont',required=True)
-		parser.add_argument('-t','--oftitle')
-		parser.add_argument('-m','--minw',default=1,type=int)
-		parser.add_argument('-x','--maxw',default=65535,type=int)
-		parser.add_argument('-c','--minc',default=2,type=int)
-		parser.add_argument('-g','--recateg',default=".*")
-		parser.add_argument('-b','--notcarebaseform',action="store_const",const=True,default=False)
-
-		self.args = parser.parse_args(argv[1:])
-
 	def startParse(self,argv):
 		return NotImplementedError
 
 
 class JapParser(AbstParser):
 
-	def __init__(self):
-		pass
+	def __init__(self,args):
+		self.args = args
 
 
 class EngParser(AbstParser):
 
-	def __init__(self):
+	def __init__(self,args):
+		self.args = args
+
 		stopwords="a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your"
 		self.stopwords=stopwords.split(",")
 
@@ -122,9 +110,29 @@ class EngParser(AbstParser):
 		queue.put("Finished")
 
 
+def parseArgs(argv):
+
+	parser = argparse.ArgumentParser(description="Parse WikipediaXML to make bag-of-words.")
+	parser.add_argument('-i','--ifwiki',required=True)
+	parser.add_argument('-d','--ifdict',required=True)
+	parser.add_argument('-s','--ofcont',required=True)
+	parser.add_argument('-t','--oftitle')
+	parser.add_argument('-m','--minw',default=1,type=int)
+	parser.add_argument('-x','--maxw',default=65535,type=int)
+	parser.add_argument('-c','--minc',default=2,type=int)
+	parser.add_argument('-g','--recateg',default=".*")
+	parser.add_argument('-b','--notcarebaseform',action="store_const",const=True,default=False)
+	parser.add_argument('-j','--isjapanese',action="store_const",const=True,default=False)
+
+	return parser.parse_args(argv[1:])
+
+
 if __name__ == "__main__":
-	parser = EngParser()
-	parser.parseArgs(sys.argv)
+	args = parseArgs(sys.argv)
+	if args.isjapanese:
+		parser = JapParser(args)
+	else:
+		parser = EngParser(args)
 	parser.readDictionary()
 	parser.startParse()
 
