@@ -10,6 +10,17 @@ from igo.Tagger import Tagger
 
 lock = threading.Lock()
 
+def cmp_dict(a,b):
+	if a[1]>b[1]:
+		return -1
+	elif a[1]<b[1]:
+		return 1
+	else:
+		if a[0]>b[0]:
+			return 1
+		else:
+			return -1
+
 class bofwThread(threading.Thread):
 
 	def __init__(self, parser, queue):
@@ -43,7 +54,7 @@ class bofwThread(threading.Thread):
 				dictBofw[dictMap.get(word,word)] += 1 # defaultdict initializes the fist value of a key
 
 			docCount=sum(dictBofw.values())
-			listTupleBofw = sorted(dictBofw.items(), key=lambda x:(-x[1],x[0]))
+			listTupleBofw = sorted(dictBofw.items(), cmp=cmp_dict)
 			if docCount >= args.minw and docCount <= args.maxw:
 				cont = reduce(lambda i,t: i+t[0]+" "+str(t[1])+" " if t[1] >= args.minc else i+"", listTupleBofw, "").rstrip()
 				if len(cont) > 1:
