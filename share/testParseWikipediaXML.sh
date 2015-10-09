@@ -30,7 +30,7 @@ for n in $(seq 0 $numTest);do
 	./makeTestDocuments $nthbofwfile > $nthdocfile
 
 	echo "Run '$prog' to make bag-of-wrods file from $nthdocfile."
-	$prog -i "$nthdocfile" -s "$nthoutfile" -d "morph_english.flat" -c 1 -b
+	$prog -i "$nthdocfile" -s "$nthoutfile" -c 1
 
 	echo "Check diff betwen $nthbofwfile and $nthoutfile."
 	if diff $nthbofwfile $nthoutfile > /dev/null; then
