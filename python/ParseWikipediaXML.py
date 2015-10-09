@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import sys
 import argparse
 import re
@@ -41,7 +43,7 @@ class bofwThread(threading.Thread):
 				dictBofw[dictMap.get(word,word)] += 1 # defaultdict initializes the fist value of a key
 
 			docCount=sum(dictBofw.values())
-			listTupleBofw = sorted(dictBofw.items(), key=lambda x:x[1], reverse=True)
+			listTupleBofw = sorted(dictBofw.items(), key=lambda x:(-x[1],x[0]))
 			if docCount >= args.minw and docCount <= args.maxw:
 				cont = reduce(lambda i,t: i+t[0]+" "+str(t[1])+" " if t[1] >= args.minc else i+"", listTupleBofw, "").rstrip()
 				if len(cont) > 1:
@@ -58,6 +60,7 @@ class AbstParser:
 	def __init__(self):
 		pass
 
+	# This forces inheritances to implement this method
 	def startParse(self,argv):
 		return NotImplementedError
 
@@ -80,7 +83,7 @@ class EngParser(AbstParser):
 
 	def readDictionary(self):
 		self.dictMap = {}
-		if self.args.notcarebaseform: return
+		if self.args.ifdict == "": return
 		for line in open(self.args.ifdict,'r'):
 			if line.find(";;;")>=0: continue
 			words = line.split("\t")
@@ -116,14 +119,13 @@ def parseArgs(argv):
 
 	parser = argparse.ArgumentParser(description="Parse WikipediaXML to make bag-of-words.")
 	parser.add_argument('-i','--ifwiki',required=True)
-	parser.add_argument('-d','--ifdict',required=True)
+	parser.add_argument('-d','--ifdict',default="")
 	parser.add_argument('-s','--ofcont',required=True)
 	parser.add_argument('-t','--oftitle')
 	parser.add_argument('-m','--minw',default=1,type=int)
 	parser.add_argument('-x','--maxw',default=65535,type=int)
 	parser.add_argument('-c','--minc',default=2,type=int)
 	parser.add_argument('-g','--recateg',default=".*")
-	parser.add_argument('-b','--notcarebaseform',action="store_const",const=True,default=False)
 	parser.add_argument('-j','--isjapanese',action="store_const",const=True,default=False)
 
 	return parser.parse_args(argv[1:])
