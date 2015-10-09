@@ -14,7 +14,7 @@ bofwfile="test/bofw"
 docfile="test/doc"
 outfile="test/out"
 
-for n in $(seq 0 $numTest);do
+for n in $(seq 1 $numTest);do
 	echo "[Test #${n}]"
 
 	nthbofwfile="$bofwfile$n.txt"

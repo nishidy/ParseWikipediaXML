@@ -8,7 +8,6 @@ import Queue
 from collections import defaultdict
 from igo.Tagger import Tagger
 
-lock = threading.Lock()
 
 def cmp_dict(a,b):
 	if a[1]>b[1]:
@@ -58,18 +57,18 @@ class bofwThread(threading.Thread):
 			if docCount >= args.minw and docCount <= args.maxw:
 				cont = reduce(lambda i,t: i+t[0]+" "+str(t[1])+" " if t[1] >= args.minc else i+"", listTupleBofw, "").rstrip()
 				if len(cont) > 1:
-					lock.acquire()
+					parser.lock.acquire()
 					with open(args.ofcont,'a') as f:
 						f.write(cont+"\n")
-					lock.release()
+					parser.lock.release()
 
 			# put() counts up and task_done() counts down
 			self.queue.task_done()
 
-class AbstParser:
+class AbstParser():
 
 	def __init__(self):
-		pass
+		self.lock = threading.Lock()
 
 	# This forces inheritances to implement this method
 	def startParse(self,argv):
@@ -79,6 +78,7 @@ class AbstParser:
 class JapParser(AbstParser):
 
 	def __init__(self,args):
+		AbstParser.__init__(self)
 		self.args = args
 
 		stopwords = "の,に,は,を,た,が,で,て,と,し,れ,さ,ある,いる,も,する,から,な,こと,として,い,や,れる,など,なっ,ない,この,ため,その,あっ,よう,また,もの,という,あり,まで,られ,なる,へ,か,だ,これ,によって,により,おり,より,による,ず,なり,られる,において,ば,なかっ,なく,しかし,について,せ,だっ,その後,できる,それ,う,ので,なお,のみ,でき,き,つ,における,および,いう,さらに,でも,ら,たり,その他,に関する,たち,ます,ん,なら,に対して,特に,せる,及び,これら,とき,では,にて,ほか,ながら,うち,そして,とともに,ただし,かつて,それぞれ,または,お,ほど,ものの,に対する,ほとんど,と共に,といった,です,とも,ところ,ここ"
@@ -87,6 +87,7 @@ class JapParser(AbstParser):
 class EngParser(AbstParser):
 
 	def __init__(self,args):
+		AbstParser.__init__(self)
 		self.args = args
 
 		stopwords="a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your"
