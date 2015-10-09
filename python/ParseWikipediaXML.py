@@ -36,7 +36,7 @@ class bofwThread(threading.Thread):
 			if page == "Finished": break
 
 			# Do not use re.match for this purpose. Instead, we can use re.search as well.
-			if re.search("<category[^<>]*>[^<>]+</category>",page) is not None:
+			if re.search("<category[^<>]*?>.*</category>",page) is not None:
 				if re.search("<category[^<>]*>%s</category>"%args.recateg,page) is None: continue
 
 			match = re.search("<text[^<>]*>([^<>]+)</text>",page)
@@ -56,8 +56,14 @@ class AbstParser():
 
 	def startParse(self):
 		queue = Queue.Queue()
-		bowthread = bofwThread(self,queue)
-		bowthread.start()
+
+		bofwthreads = []
+
+		for i in range(self.args.workers):
+			bofwthreads.append(bofwThread(self,queue))
+
+		for i in range(self.args.workers):
+			bofwthreads[i].start()
 
 		page=""
 		startFlag=endFlag=False
@@ -87,6 +93,8 @@ class AbstParser():
 		listTupleBofw = sorted(dictBofw.items(), cmp=cmp_dict)
 
 		if docCount >= args.minw and docCount <= args.maxw:
+
+			# Make string from list of tuples of bag-of-words
 			cont = reduce(lambda i,t: i+t[0]+" "+str(t[1])+" " if t[1] >= args.minc else i+"", listTupleBofw, "").rstrip()
 
 			if len(cont) > 1:
@@ -162,6 +170,7 @@ def parseArgs(argv):
 	parser.add_argument('-c','--minc',default=2,type=int)
 	parser.add_argument('-g','--recateg',default=".*")
 	parser.add_argument('-j','--isjapanese',action="store_const",const=True,default=False)
+	parser.add_argument('-w','--workers',default=1,type=int)
 
 	return parser.parse_args(argv[1:])
 
