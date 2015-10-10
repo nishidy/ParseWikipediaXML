@@ -1,4 +1,4 @@
-//package com.github.nishidy8;
+package com.github.nishidy;
 
 import java.io.*;
 import java.util.regex.*;
@@ -10,13 +10,20 @@ import java.util.HashMap;
 import java.util.concurrent.*;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Iterator;
 import org.apache.commons.cli.*;
 import java.lang.Runtime;
-
 import org.atilika.kuromoji.Token;
 import org.atilika.kuromoji.Tokenizer;
-
 import org.apache.commons.lang.*;
+
+import org.msgpack.MessagePack;
+import org.msgpack.packer.Packer;
+import org.msgpack.unpacker.Unpacker;
+import org.msgpack.template.Template;
+import org.msgpack.MessageTypeException;
+import static org.msgpack.template.Templates.tMap;
+import static org.msgpack.template.Templates.TString;
 
 class ArgStore {
 
@@ -101,11 +108,11 @@ class ArgStore {
 	}
 }
 
-abstract class AbstParse {
+abstract class AbstParser {
 
 	List<String> stopwords= null;
 
-	abstract void createBaseWords(String file) throws IOException;
+	abstract void createMapDictionary(String file) throws IOException;
 	abstract String convertToBaseWord(String line);
 	abstract boolean isJap();
 	abstract String[] getWordList(String text);
@@ -127,14 +134,14 @@ abstract class AbstParse {
 }
 
 // Singleton
-class EngParse extends AbstParse {
+class EngParser extends AbstParser {
 
-	private EngParse(){
+	private EngParser(){
 		stopwords= Arrays.asList( "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your".split(",") );
 	}
 
-	private static final EngParse instance = new EngParse();
-	public static EngParse getInstance(){ return instance; }
+	private static final EngParser instance = new EngParser();
+	public static EngParser getInstance(){ return instance; }
 
 	Map<String,String> mapDict = new HashMap<String,String>();
 
@@ -142,17 +149,46 @@ class EngParse extends AbstParse {
 	boolean isJap(){ return false; }
 
 	@Override
-	void createBaseWords(String file) throws IOException {
+	void createMapDictionary(String file) throws IOException {
 
-		String line;
-		try( BufferedReader br = new BufferedReader(new FileReader(file)) ){
-			while((line=br.readLine())!=null){
-				if(line.indexOf(";;;")>=0) continue;
-				String cols[] = line.split("\\t\\t");
-				mapDict.put(cols[0],cols[1]);
+		try{ // try MessagePack format first
+
+			MessagePack msgpack = new MessagePack();
+
+			File f = new File(file);
+			byte [] bytes = new byte[(int) f.length() ];;
+
+			InputStream inputStream = new FileInputStream(f);
+			inputStream.read(bytes);
+
+			ByteArrayInputStream in = new ByteArrayInputStream(bytes);
+			Unpacker unpacker = msgpack.createUnpacker(in);
+
+			Template<Map<String,String>> mapTmpl = tMap(TString,TString);
+			mapDict = unpacker.read(mapTmpl);
+
+			final Iterator<String> mapIter = mapDict.keySet().iterator();
+			while(mapIter.hasNext()){
+				String key = mapIter.next();
+				if(key.equals(mapDict.get(key))){
+					mapIter.remove();
+				}
 			}
-		} catch (IOException e){
-			throw e;
+
+		} catch (MessageTypeException e) {
+
+			String line;
+			try( BufferedReader br = new BufferedReader(new FileReader(file)) ){
+				while((line=br.readLine())!=null){
+					if(line.indexOf(";;;")>=0) continue;
+					String cols[] = line.split("[ \\t]");
+					if(cols[0].equals(cols[3])) continue;
+					mapDict.put(cols[0],cols[3]);
+				}
+			} catch (IOException io){
+				throw io;
+			}
+
 		}
 
 	}
@@ -185,19 +221,19 @@ class EngParse extends AbstParse {
 }
 
 // Singleton
-class JapParse extends AbstParse {
+class JapParser extends AbstParser {
 
 	Tokenizer tokenizer;
 
-	private JapParse(){
+	private JapParser(){
 		stopwords= Arrays.asList( "の,に,は,を,た,が,で,て,と,し,れ,さ,ある,いる,も,する,から,な,こと,として,い,や,れる,など,なっ,ない,この,ため,その,あっ,よう,また,もの,という,あり,まで,られ,なる,へ,か,だ,これ,によって,により,おり,より,による,ず,なり,られる,において,ば,なかっ,なく,しかし,について,せ,だっ,その後,できる,それ,う,ので,なお,のみ,でき,き,つ,における,および,いう,さらに,でも,ら,たり,その他,に関する,たち,ます,ん,なら,に対して,特に,せる,及び,これら,とき,では,にて,ほか,ながら,うち,そして,とともに,ただし,かつて,それぞれ,または,お,ほど,ものの,に対する,ほとんど,と共に,といった,です,とも,ところ,ここ".split(",") );
 
 		tokenizer=Tokenizer.builder().build();
 
 	}
 
-	private static final JapParse instance = new JapParse();
-	public static JapParse getInstance(){ return instance; }
+	private static final JapParser instance = new JapParser();
+	public static JapParser getInstance(){ return instance; }
 
 	@Override
 	boolean isJap(){ return true; }
@@ -208,7 +244,7 @@ class JapParse extends AbstParse {
 	}
 
 	@Override
-	void createBaseWords(String file) { }
+	void createMapDictionary(String file) { }
 
 	@Override
 	String[] getWordList(String text){
@@ -244,23 +280,23 @@ class JapParse extends AbstParse {
 
 }
 
-//class ChiParse extends AbstParse {
+//class ChiParser extends AbstParser {}
 
-class RunParse implements Runnable {
+class RunParser implements Runnable {
 
 	String page;
 	BufferedWriter bw;
-	AbstParse parse;
+	AbstParser parser;
 
 	//Collection<String> ngrams; /* list can manipulate set with sort */
 	List<String> ngrams = new ArrayList<>();
 
 	private final static Object lock = new Object();
 
-	public RunParse(String page, BufferedWriter bw, AbstParse parse){
+	public RunParser(String page, BufferedWriter bw, AbstParser parser){
 		this.page= page;
 		this.bw= bw;
-		this.parse= parse;
+		this.parser= parser;
 	}
 
 	boolean isTooShortWord(String word){
@@ -305,11 +341,11 @@ class RunParse implements Runnable {
 				ngramcnt<=ArgStore.ngram;
 				ngramcnt++){
 
-			for(String word: parse.getWordList(text)){
+			for(String word: parser.getWordList(text)){
 
 				if(isTooShortWord(word)) continue;
-				if(!parse.isWord(word)) continue;
-				if(parse.isCommonWord(word)) continue;
+				if(!parser.isWord(word)) continue;
+				if(parser.isCommonWord(word)) continue;
 
 				if(isDupInNgram(word)) continue;
 
@@ -324,7 +360,7 @@ class RunParse implements Runnable {
 				}
 
 				String ngramstr= StringUtils.join(ngrams,":");
-				String bowWord= parse.convertToBaseWord(ngramstr);
+				String bowWord= parser.convertToBaseWord(ngramstr);
 
 				if(mapbow.containsKey(bowWord)){
 					mapbow.put(bowWord,mapbow.get(bowWord)+1);
@@ -333,7 +369,7 @@ class RunParse implements Runnable {
 				}
 				wordcnt+=1;
 
-				if(ArgStore.isVerb && !parse.isJap()){
+				if(ArgStore.isVerb && !parser.isJap()){
 					System.out.printf("%s -> %s.\n",ngramstr,bowWord);
 				}
 
@@ -399,7 +435,7 @@ public class ParseWikipediaXML {
 
 	public static void main(String... args){
 
-		BasicParser parser = new BasicParser();
+		BasicParser basicparser = new BasicParser();
 		Options options = new Options();
 
 		options.addOption("i","input-file",true,"Input File(Wikipedia)");
@@ -421,7 +457,7 @@ public class ParseWikipediaXML {
 		HelpFormatter help = new HelpFormatter();
 
 		try{
-			CommandLine cl = parser.parse(options, args);
+			CommandLine cl = basicparser.parse(options, args);
 			ArgStore.init(cl);
 
 		} catch (ParseException e){
@@ -430,22 +466,22 @@ public class ParseWikipediaXML {
 		}
 
 
-		AbstParse parse;
+		AbstParser parser;
 		if(ArgStore.isJap){
-			parse = JapParse.getInstance();
+			parser = JapParser.getInstance();
 		}else{
-			parse = EngParse.getInstance();
+			parser = EngParser.getInstance();
 		}
 
 		if(ArgStore.oftfidf.equals("")){
-			outputBofw(parse);
+			outputBofw(parser);
 		}else{
-			inputBofwForTfidf(parse);
+			inputBofwForTfidf(parser);
 		}
 
 	}
 
-	private static void inputBofwForTfidf(AbstParse parse) {
+	private static void inputBofwForTfidf(AbstParser parser) {
 
 		BufferedWriter bw = null;
 		try{
@@ -480,7 +516,7 @@ public class ParseWikipediaXML {
 
 		} catch (IOException e){
 			System.err.println("BufferedReader error "+e);
-			System.exit(11);
+			System.exit(111);
 		}
 
 		int cntDoc = 0;
@@ -536,7 +572,7 @@ public class ParseWikipediaXML {
 
 	}
 
-	private static void outputBofw(AbstParse parse) {
+	private static void outputBofw(AbstParser parser) {
 
 		BufferedWriter bw = null;
 		try{
@@ -555,9 +591,9 @@ public class ParseWikipediaXML {
 		ExecutorService ex = Executors.newFixedThreadPool(numofcpus);
 
 		try{
-			parse.createBaseWords(ArgStore.ifdict);
+			parser.createMapDictionary(ArgStore.ifdict);
 		} catch (IOException e){
-			System.exit(11);
+			System.exit(211);
 		}
 
 		try( BufferedReader br = new BufferedReader(new FileReader(ArgStore.ifwiki)) ){
@@ -568,13 +604,13 @@ public class ParseWikipediaXML {
 
 			while((line=br.readLine())!=null){
 
-				if(parse.ifPageStart(line)) sflag = true;
-				if(parse.ifPageEnd(line))   eflag = true;
+				if(parser.ifPageStart(line)) sflag = true;
+				if(parser.ifPageEnd(line))   eflag = true;
 
 				if(sflag){
 					buf.append(line);
 					if(eflag){
-						ex.execute(new RunParse(buf.toString(),bw,parse));
+						ex.execute(new RunParser(buf.toString(),bw,parser));
 						sflag=eflag=false;
 						buf.delete(0, buf.length());
 					}

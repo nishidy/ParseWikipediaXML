@@ -20,14 +20,17 @@ dependencies {
 		'commons-cli:commons-cli:1.2',
 		'commons-lang:commons-lang:2.6',
 		'org.atilika.kuromoji:kuromoji:0.7.7',
+		'org.msgpack:msgpack:0.6.12',
+		'com.googlecode.json-simple:json-simple:1.1',
+		'org.javassist:javassist:3.12.1',
 	)
 }
 
 apply plugin: 'application'
-
+//mainClassName = "org.github.nishidy.ParseWikipediaXML"
 
 task runTestEng(type: JavaExec) {
-	main = 'ParseWikipediaXML'
+	main = 'com.github.nishidy.ParseWikipediaXML'
 	classpath = sourceSets.main.runtimeClasspath
 	args = [
 		"-i", "../../share/enwiki-test-5000",
@@ -38,7 +41,7 @@ task runTestEng(type: JavaExec) {
 }
 
 task runTestJap(type: JavaExec) {
-	main = 'ParseWikipediaXML'
+	main = 'com.github.nishidy.ParseWikipediaXML'
 	classpath = sourceSets.main.runtimeClasspath
 	args = [
 		"-i", "../../share/jawiki-test-5000",
