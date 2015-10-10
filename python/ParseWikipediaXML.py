@@ -7,6 +7,7 @@ import threading
 import Queue
 from collections import defaultdict
 import MeCab
+import msgpack
 
 def cmp_dict(a,b):
 	if a[1]>b[1]:
@@ -21,18 +22,18 @@ def cmp_dict(a,b):
 
 class bofwThread(threading.Thread):
 
-	def __init__(self, parser, queue):
+	def __init__(self, parser):
 		super(bofwThread,self).__init__()
 		self.parser = parser
-		self.queue = queue
 
 	def run(self):
 
 		args = self.parser.args
+		queue = self.parser.queue
 
 		while True:
 
-			page = self.queue.get()
+			page = queue.get()
 			if page == "Finished": break
 
 			# Do not use re.match for this purpose. Instead, we can use re.search as well.
@@ -42,46 +43,53 @@ class bofwThread(threading.Thread):
 			match = re.search("<text[^<>]*>([^<>]+)</text>",page)
 			text = match.group(1)
 
-			dictBofw = parser.parseText(text)
-			parser.writeToFile(dictBofw)
+			dictBofw = self.parser.parseText(text)
+			self.parser.writeToFile(dictBofw)
 
 			# put() counts up and task_done() counts down
-			self.queue.task_done()
+			queue.task_done()
 
 class AbstParser():
 
 	def __init__(self,args):
 		self.lock = threading.Lock()
 		self.args = args
+		self.queue = Queue.Queue()
+
+	def stopWorkers(self):
+		for i in range(self.args.workers):
+			self.queue.put("Finished")
 
 	def startParse(self):
-		queue = Queue.Queue()
 
 		bofwthreads = []
 
 		for i in range(self.args.workers):
-			bofwthreads.append(bofwThread(self,queue))
-
-		for i in range(self.args.workers):
+			bofwthreads.append(bofwThread(self))
 			bofwthreads[i].start()
 
 		page=""
 		startFlag=endFlag=False
-		for line in open(self.args.ifwiki,'r'):
-			if line.find("<page>")>=0:
-				startFlag=True
-			if line.find("</page>")>=0:
-				endFlag=True
-			if startFlag:
-				page+=line
-			if endFlag:
-				queue.put(page)
-				startFlag=endFlag=False
-				page=""
+		try:
+			for line in open(self.args.ifwiki,'r'):
+				if line.find("<page>")>=0: startFlag=True
+				if line.find("</page>")>=0: endFlag=True
+
+				if startFlag: page+=line
+
+				if startFlag and endFlag:
+					self.queue.put(page)
+					startFlag=endFlag=False
+					page=""
+
+		except IOError as e:
+			print >> sys.stderr, e
+			self.stopWorkers()
+			return
 
 		# Leave out when count is zero
-		queue.join()
-		queue.put("Finished")
+		self.queue.join()
+		self.stopWorkers()
 
 	# This forces inheritances to implement this method
 	def parseText(self,text):
@@ -92,16 +100,16 @@ class AbstParser():
 		docCount=sum(dictBofw.values())
 		listTupleBofw = sorted(dictBofw.items(), cmp=cmp_dict)
 
-		if docCount >= args.minw and docCount <= args.maxw:
+		if docCount >= self.args.minw and docCount <= self.args.maxw:
 
 			# Make string from list of tuples of bag-of-words
-			cont = reduce(lambda i,t: i+t[0]+" "+str(t[1])+" " if t[1] >= args.minc else i+"", listTupleBofw, "").rstrip()
+			cont = reduce(lambda i,t: i+t[0]+" "+str(t[1])+" " if t[1] >= self.args.minc else i+"", listTupleBofw, "").rstrip()
 
 			if len(cont) > 1:
-				parser.lock.acquire()
-				with open(args.ofcont,'a') as f:
+				self.lock.acquire()
+				with open(self.args.ofcont,'a') as f:
 					f.write(cont+"\n")
-				parser.lock.release()
+				self.lock.release()
 
 
 class JapParser(AbstParser):
@@ -141,11 +149,29 @@ class EngParser(AbstParser):
 	def readDictionary(self):
 		self.dictMap = {}
 		if self.args.ifdict == "": return
-		for line in open(self.args.ifdict,'r'):
-			if line.find(";;;")>=0: continue
-			words = line.split("\t")
-			if words[0] == words[2]: continue
-			self.dictMap[words[0].rstrip()] = words[2].rstrip()
+
+		# try message pack format first
+		try:
+			hdlr = open(self.args.ifdict,'r')
+		except IOError as e:
+			print >> sys.stderr, e
+			sys.exit(1)
+
+		unpacker = msgpack.Unpacker(hdlr)
+		for msg in unpacker:
+			if type(msg) == type({}):
+				self.dictMap = msg
+				return
+
+		try:
+			for line in open(self.args.ifdict,'r'):
+				if line.find(";;;")>=0: continue
+				words = line.split("\t")
+				if words[0] == words[2]: continue
+				self.dictMap[words[0].rstrip()] = words[2].rstrip()
+		except IOError as e:
+			print >> sys.stderr, e
+			sys.exit(1)
 
 	def parseText(self,text):
 		dictBofw=defaultdict(int) # python >= 2.5
@@ -157,30 +183,37 @@ class EngParser(AbstParser):
 			dictBofw[self.dictMap.get(word,word)] += 1 # defaultdict initializes the fist value of a key
 		return dictBofw
 
+class Main():
 
-def parseArgs(argv):
+	def __init__(self,argv):
+		self.parseArgs(argv)
 
-	parser = argparse.ArgumentParser(description="Parse WikipediaXML to make bag-of-words.")
-	parser.add_argument('-i','--ifwiki',required=True)
-	parser.add_argument('-d','--ifdict',default="")
-	parser.add_argument('-s','--ofcont',required=True)
-	parser.add_argument('-t','--oftitle')
-	parser.add_argument('-m','--minw',default=1,type=int)
-	parser.add_argument('-x','--maxw',default=65535,type=int)
-	parser.add_argument('-c','--minc',default=2,type=int)
-	parser.add_argument('-g','--recateg',default=".*")
-	parser.add_argument('-j','--isjapanese',action="store_const",const=True,default=False)
-	parser.add_argument('-w','--workers',default=1,type=int)
+	def parseArgs(self,argv):
 
-	return parser.parse_args(argv[1:])
+		parser = argparse.ArgumentParser(description="Parse WikipediaXML to make bag-of-words.")
+		parser.add_argument('-i','--ifwiki',required=True)
+		parser.add_argument('-d','--ifdict',default="")
+		parser.add_argument('-s','--ofcont',required=True)
+		parser.add_argument('-t','--oftitle')
+		parser.add_argument('-m','--minw',default=1,type=int)
+		parser.add_argument('-x','--maxw',default=65535,type=int)
+		parser.add_argument('-c','--minc',default=2,type=int)
+		parser.add_argument('-g','--recateg',default=".*")
+		parser.add_argument('-j','--isjapanese',action="store_const",const=True,default=False)
+		parser.add_argument('-w','--workers',default=1,type=int)
+
+		self.args = parser.parse_args(argv[1:])
+
+	def go(self):
+		if self.args.isjapanese:
+			parser = JapParser(self.args)
+		else:
+			parser = EngParser(self.args)
+			parser.readDictionary()
+		parser.startParse()
 
 
 if __name__ == "__main__":
-	args = parseArgs(sys.argv)
-	if args.isjapanese:
-		parser = JapParser(args)
-	else:
-		parser = EngParser(args)
-		parser.readDictionary()
-	parser.startParse()
+	main = Main(sys.argv)
+	main.go()
 
