@@ -204,7 +204,7 @@ class Main():
 
 		self.args = parser.parse_args(argv[1:])
 
-	def go(self):
+	def start(self):
 		if self.args.isjapanese:
 			parser = JapParser(self.args)
 		else:
@@ -214,6 +214,5 @@ class Main():
 
 
 if __name__ == "__main__":
-	main = Main(sys.argv)
-	main.go()
+	Main(sys.argv).start()
 
