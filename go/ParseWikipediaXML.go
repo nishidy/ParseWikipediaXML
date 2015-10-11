@@ -37,7 +37,11 @@ func (l List) Len() int {
 }
 
 func (l List) Less(i, j int) bool {
-	return l[i].freq > l[j].freq
+	if l[i].freq != l[j].freq {
+		return l[i].freq > l[j].freq
+	} else {
+		return l[i].word < l[j].word
+	}
 }
 
 func (l List) Swap(i, j int) {
@@ -108,20 +112,15 @@ func (ctype *countWordType) CountWordEn() int {
 
 	var re *regexp.Regexp
 
-	re = regexp.MustCompile("[" + regexp.QuoteMeta("[[]]();|") + "(, )(. )( -)]")
-	text := re.ReplaceAllString(ctype.text, " ")
+	//re = regexp.MustCompile("[" + regexp.QuoteMeta("[[]]();|") + "(, )(. )( -)]")
+	//text := re.ReplaceAllString(ctype.text, " ")
 
-	re, _ = regexp.Compile("^[0-9a-z][-|0-9a-z]+$")
-	words := strings.Split(text, " ")
+	re, _ = regexp.Compile("^[a-z][a-z0-9'-]*[a-z0-9]$")
 
 	var wc = 0
-	for _, word := range words {
+	for _, word := range strings.Split(ctype.text, " ") {
 		word = strings.ToLower(word)
 		if re.MatchString(word) {
-
-			if len(word) == 1 {
-				continue
-			}
 
 			if Any(word, ctype.stopWords) {
 				continue
@@ -172,7 +171,8 @@ func CategoryCheck(catreg, text string) bool {
 	case 2:
 		cat = ret[1]
 	default:
-		return false
+		// no category, no check
+		return true
 	}
 
 	re, _ = regexp.Compile(catreg)
@@ -370,6 +370,7 @@ type Args struct {
 	matchCategory string
 	outFormatJson bool
 	isJapanese    bool
+	workers       int
 }
 
 func main() {
@@ -391,6 +392,7 @@ func main() {
 	flag.StringVar(&args.matchCategory, "g", ".*", "Category(regular expression)")
 	flag.BoolVar(&args.outFormatJson, "n", false, "Generate bug-of-words in JSON format")
 	flag.BoolVar(&args.isJapanese, "j", false, "If this is for Japanese text")
+	flag.IntVar(&args.workers, "w", 1, "# of workers")
 
 	flag.Parse()
 
@@ -412,13 +414,13 @@ func main() {
 	}
 
 	mapDict := make(map[string]string)
-	if !args.isJapanese {
+	if !args.isJapanese && args.inDictFile != "" {
 		ReadDictionary(args.inDictFile, mapDict)
 	}
 
-	cpus := runtime.NumCPU()
-	fmt.Printf("# of CPU is %d\n", cpus)
-	runtime.GOMAXPROCS(cpus)
+	//cpus := runtime.NumCPU()
+	//runtime.GOMAXPROCS(cpus)
+	runtime.GOMAXPROCS(args.workers)
 
 	// Mutex for write
 	chanMutex := make(chan int, 1)
@@ -446,7 +448,7 @@ func main() {
 	defer hInWikiFile.Close()
 
 	// Semaphore for limiting # of goroutines
-	chanSem := make(chan int, cpus)
+	chanSem := make(chan int, args.workers)
 	defer close(chanSem)
 
 	var wait sync.WaitGroup
