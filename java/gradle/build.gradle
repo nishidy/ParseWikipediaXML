@@ -27,17 +27,48 @@ dependencies {
 }
 
 apply plugin: 'application'
-//mainClassName = "org.github.nishidy.ParseWikipediaXML"
 
-task runTestEng(type: JavaExec) {
-	main = 'com.github.nishidy.ParseWikipediaXML'
-	classpath = sourceSets.main.runtimeClasspath
-	args = [
-		"-i", "../../share/enwiki-test-5000",
-		"-d", "../../share/morph_english.flat",
-		"-n", "2",
-		"-l",
-	]
+task runTestEng {
+
+	def directory = new File("test")
+	if( directory.exists() ){
+		println "Must have removed 'test' directory."
+		System.exit(1)
+	}else{
+		directory.mkdir()
+	}
+
+	def bofwfile="test/bofw"
+	def docfile="test/doc"
+	def outfile="test/out"
+
+	for(n in 1..10)
+	{
+
+		def nthbofwfile="${bofwfile}${n}.txt"
+		def nthdocfile="${docfile}${n}.txt"
+		def nthoutfile="${outfile}${n}.txt"
+
+		def makebofwfile = "../../share/makeTestBagofwords 100 100 50 100"
+		new File(nthbofwfile).text = makebofwfile.execute().text
+
+		def makedocfile = "../../share/makeTestDocuments ${nthbofwfile}"
+		new File(nthdocfile).text = makedocfile.execute().text
+
+		task "testEng${n}" (type: JavaExec) {
+			main = 'com.github.nishidy.ParseWikipediaXML'
+			classpath = sourceSets.main.runtimeClasspath
+			args = [
+				"-i", nthdocfile,
+				"-s", nthoutfile,
+				"-d", "../../share/dictionary.msgpack",
+			]
+		}
+
+	}
+
+	dependsOn << (1..10).collect{ "testEng${it}" }
+
 }
 
 task runTestJap(type: JavaExec) {

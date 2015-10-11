@@ -288,8 +288,8 @@ class RunParser implements Runnable {
 	BufferedWriter bw;
 	AbstParser parser;
 
-	//Collection<String> ngrams; /* list can manipulate set with sort */
-	List<String> ngrams = new ArrayList<>();
+	//Collection<String> listNgrams; /* list can manipulate set with sort */
+	List<String> listNgrams = new ArrayList<>();
 
 	private final static Object lock = new Object();
 
@@ -305,16 +305,16 @@ class RunParser implements Runnable {
 	}
 
 	boolean isDupInNgram(String word){
-		if(ngrams.size()==0) return false;
+		if(listNgrams.size()==0) return false;
 
-		//if( ngrams instanceof Set<String> )
+		//if( listNgrams instanceof Set<String> )
 		if( ArgStore.preferListNgram ){
-			if(ngrams.get(ngrams.size()-1).equals(word)){
+			if(listNgrams.get(listNgrams.size()-1).equals(word)){
 				if(ArgStore.isVerb) System.out.printf("%s is duplicated.\n",word);
 				return true;
 			}
 		}else{
-			if(ngrams.contains(word)){
+			if(listNgrams.contains(word)){
 				if(ArgStore.isVerb) System.out.printf("%s is duplicated.\n",word);
 				return true;
 			}
@@ -326,7 +326,9 @@ class RunParser implements Runnable {
 	void bowCreator(String text){
 
 		Map<String,Integer> mapbow = new HashMap<String,Integer>();
-		List<String> ngramsorder = new ArrayList<>();
+
+		// To remove the last one in listNgrams in case preferListNgram is not set.
+		List<String> listSaveNgramsOrder = new ArrayList<>();
 
 		int wordcnt= 0;
 
@@ -349,17 +351,17 @@ class RunParser implements Runnable {
 
 				if(isDupInNgram(word)) continue;
 
-				ngrams.add(word);
-				ngramsorder.add(word);
-				if(!ArgStore.preferListNgram) Collections.sort(ngrams);
+				listNgrams.add(word.toLowerCase());
+				listSaveNgramsOrder.add(word.toLowerCase());
+				if(!ArgStore.preferListNgram) Collections.sort(listNgrams);
 
-				if(ngrams.size()<ngramcnt) continue;
-				if(ngrams.size()>ngramcnt){
-					ngrams.remove(ngramsorder.get(0));
-					ngramsorder.remove(0);
+				if(listNgrams.size()<ngramcnt) continue;
+				if(listNgrams.size()>ngramcnt){
+					listNgrams.remove(listSaveNgramsOrder.get(0));
+					listSaveNgramsOrder.remove(0);
 				}
 
-				String ngramstr= StringUtils.join(ngrams,":");
+				String ngramstr= StringUtils.join(listNgrams,":");
 				String bowWord= parser.convertToBaseWord(ngramstr);
 
 				if(mapbow.containsKey(bowWord)){
@@ -408,15 +410,17 @@ class RunParser implements Runnable {
 	}
 
 	public void run(){
-		Pattern cpat= Pattern.compile("\\[\\[:*Category:([^\\[\\]\\|]+)\\|*[^\\[\\]]*\\]\\]");
-		Matcher cmat= cpat.matcher(page);
+		Pattern categoryTagPattern =
+			Pattern.compile("\\[\\[:*Category:([^\\[\\]\\|]+)\\|*[^\\[\\]]*\\]\\]");
+		Matcher categoryTagMatcher= categoryTagPattern.matcher(page);
 
-		boolean cmatflag= false;
-		while(cmat.find()){
-			String category= cmat.group(1);
-			Pattern rcpat= Pattern.compile(ArgStore.recateg);
-			Matcher rcmat= rcpat.matcher(category);
-			if(rcmat.find()){ cmatflag= true; break; }
+		boolean cmatflag= true; // no category, no check
+		while(categoryTagMatcher.find()){
+			cmatflag= false;
+			String category= categoryTagMatcher.group(1);
+			Pattern categoryPattern= Pattern.compile(ArgStore.recateg);
+			Matcher categoryMatcher= categoryPattern.matcher(category);
+			if(categoryMatcher.find()){ cmatflag= true; break; }
 		}
 		if(!cmatflag) return;
 
