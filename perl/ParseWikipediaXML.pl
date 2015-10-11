@@ -5,7 +5,6 @@ use List::Util qw/reduce/;
 use Data::Dumper;
 use threads;
 use Thread::Queue;
-use DBI;
 
 my $ap = Getopt::ArgParse->new_parser(
 	prog => 'ParseWikipediaXML',
@@ -14,7 +13,7 @@ my $ap = Getopt::ArgParse->new_parser(
 );
 
 $ap->add_arg('--ifwiki','-i',required=>1,help=>"Wikipedia XML file as input");
-$ap->add_arg('--ifdict','-d',required=>1,help=>"Dictionary file as input ");
+$ap->add_arg('--ifdict','-d',default=>"",help=>"Dictionary file as input ");
 $ap->add_arg('--ofcont','-s',required=>1,help=>"Output file with bag-of-words of each page");
 $ap->add_arg('--oftitle','-t',help=>"Output file with title of each page");
 $ap->add_arg('--minw','-m',default=>1,help=>"Minimum number of words which each page should contain");
@@ -24,23 +23,25 @@ $ap->add_arg('--recateg','-g',default=>".*",help=>"Regular expresion which each 
 $ap->add_arg('--ngram','-n',default=>1, help=>"The N number for N-gram");
 my $args = $ap->parse_args();
 
-my $dbh = DBI->
 my $stopword="a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your";
 my @stopwords=split(/,/,$stopword);
 
 my %hashDict;
 my $fh;
-open $fh, '<', $args->ifdict or die "Cannot open $args->ifdict :$!";
+if( $args->ifdict ne "" ){
+	open $fh, '<', $args->ifdict or die "Cannot open $args->ifdict :$!";
 
-while(<$fh>){
-	if( index($_,";;;") == -1 ){
-		my @words = map { $_ =~ s/\s*$//; $_ } split(/\t/, $_);
-		$hashDict{$words[0]} = $words[2];
+	while(<$fh>){
+		if( index($_,";;;") == -1 ){
+			my @words = map { $_ =~ s/\s*$//; $_ } split(/\t/, $_);
+			$hashDict{$words[0]} = $words[2];
+		}
 	}
+
+	close $fh;
 }
 #warn Dumper %hashDict;
 
-close $fh;
 
 my $fout;
 open $fout, '>', $args->ofcont or die "Cannot open $args->ofcont:$!";
@@ -117,7 +118,7 @@ sub bowCreate {
 		my @ngrams;
 		my @words = split(/ /,$text);
 		foreach my $word ( map { chomp; lc } @words ) {
-			next unless $word =~ "^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]\$";
+			next unless $word =~ "^[a-z][a-z0-9'-]*[a-z0-9]\$";
 			next if grep { $_ eq $word } @stopwords;
 
 			my $dword;
@@ -149,7 +150,7 @@ sub bowCreate {
 			reduce {
 				$hashDoc{$b} >= $args->minc ?
 					( defined($a) ? $a." ".$b." ".$hashDoc{$b} : $b." ".$hashDoc{$b} ) : $a
-			} undef, sort{ $hashDoc{$b} <=> $hashDoc{$a} } keys %hashDoc;
+			} undef, sort{ $hashDoc{$b} <=> $hashDoc{$a} || $a cmp $b } keys %hashDoc;
 
 		if(defined($output)){
 			lock($outmtx);
