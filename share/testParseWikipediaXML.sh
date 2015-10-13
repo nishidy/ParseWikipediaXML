@@ -24,7 +24,7 @@ for n in $(seq 1 $numTest);do
 	#./makeTestBagofwords numDocs maxNumTermsInDocs maxNumCharOfTerm maxFreq
 
 	echo "Make bag-of-words file $nthbofwfile."
-	./makeTestBagofwords $numDoc 100 50 100 > $nthbofwfile
+	./makeTestBagofwords $numDoc 1000 20 100 > $nthbofwfile
 
 	echo "Make documents file $nthdocfile from $nthbofwfile."
 	./makeTestDocuments $nthbofwfile > $nthdocfile
