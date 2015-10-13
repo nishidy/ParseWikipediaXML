@@ -29,17 +29,28 @@ sub parseArgs {
 		epilog => ''
 	);
 
-	$ap->add_arg('--inWikiFile','-i',required=>1,help=>"Wikipedia XML file as input");
-	$ap->add_arg('--inDictFile','-d',default=>undef,help=>"Dictionary file as input ");
-	$ap->add_arg('--outBofwFile','-s',default=>undef,help=>"Output file with bag-of-words of each page");
-	$ap->add_arg('--outTitleFile','-t',help=>"Output file with title of each page");
-	$ap->add_arg('--minTermsInPage','-m',default=>1,help=>"How many terms page should have at least");
-	$ap->add_arg('--maxTermsInPage','-x',default=>65535,help=>"How many terms page should have at most");
-	$ap->add_arg('--minFreqsOfTerm','-c',default=>2,help=>"How many times a term should appear in a page");
-	$ap->add_arg('--recateg','-g',default=>".*",help=>"Regular expresion which each page should match with its category title");
-	$ap->add_arg('--ngram','-n',default=>1, help=>"The N number for N-gram");
-	$ap->add_arg('--isJapanese','-j',default=>undef, help=>"If this is for Japanese text");
-	$ap->add_arg('--workers','-w',default=>1, help=>"# of workers");
+	$ap->add_arg('--inWikiFile', '-i',
+		required => 1, help => "Wikipedia XML file as input");
+	$ap->add_arg('--inDictFile', '-d',
+		default => undef, help => "Dictionary file as input ");
+	$ap->add_arg('--outBofwFile', '-s',
+		default => undef, help => "Output file with bag-of-words of each page");
+	$ap->add_arg('--outTitleFile', '-t',
+		help => "Output file with title of each page");
+	$ap->add_arg('--minTermsInPage', '-m',
+		default => 1, help => "How many terms page should have at least");
+	$ap->add_arg('--maxTermsInPage', '-x',
+		default => 65535, help => "How many terms page should have at most");
+	$ap->add_arg('--minFreqsOfTerm', '-c',
+		default => 2, help => "How many times a term should appear in a page");
+	$ap->add_arg('--recateg', '-g',
+		default => ".*", help => "Regex that should match with the category title");
+	$ap->add_arg('--ngram', '-n',
+		default => 1, help => "The N number for N-gram");
+	$ap->add_arg('--isJapanese', '-j',
+		default => undef, type => 'Bool', help => "If this is for Japanese text");
+	$ap->add_arg('--workers', '-w',
+		default => 1, help => "# of workers");
 
 	return $ap->parse_args();
 }
@@ -61,6 +72,8 @@ sub start {
 
 
 package AbstParser;
+use Encode;
+use Devel::Peek;
 
 sub new {
 	my ($class, $args) = @_;
@@ -92,7 +105,8 @@ sub startParse {
 	#my $nthread = @threads;
 
 	my $fh;
-	open $fh, '<', $self->{Args}->inWikiFile or die "Cannot open $self->{Args}->inWikiFile:$!";
+	# This will lead auto decode by 'use utf8;' from UTF8 to UTF8-flagged
+	open $fh, '<:utf8', $self->{Args}->inWikiFile or die "Cannot open $self->{Args}->inWikiFile:$!";
 
 	my $sflag=0;
 	my $eflag=0;
@@ -102,6 +116,11 @@ sub startParse {
 		$eflag=1 if index($_, "</page>") > -1;
 		$page.=$_ if $sflag;
 		if($eflag){
+
+			# Devel::Peek::Dump($page);
+			#   UTF8-flagged if explicitly open for UTF8 (auto decode)
+			#   UTF8(not flagged) otherwise
+
 			$self->{PageQueue}->enqueue($page);
 			$sflag=$eflag=0;
 			$page="";
@@ -125,7 +144,8 @@ sub writeToFile {
 
 	if(defined($bofw)){
 		lock($self->{WriteMutex});
-		print {$self->{hdlrOutBofwFile}?$self->{hdlrOutBofwFile}:*STDOUT} $bofw."\n";
+		# Encode to UTF8
+		print {$self->{hdlrOutBofwFile}?$self->{hdlrOutBofwFile}:*STDOUT} encode('utf-8',$bofw."\n");
 	}
 }
 
@@ -134,7 +154,10 @@ sub writeToFile {
 
 package EngParser;
 use base 'AbstParser';
+use strict;
+use utf8;
 use List::Util qw/reduce/;
+use Devel::Peek;
 
 sub new {
 	my ($class,$args) = @_;
@@ -158,7 +181,7 @@ sub readDictionary {
 
 	my $fh;
 	if( $self->{Args}->inDictFile ){
-		open $fh, '<', $self->{Args}->inDictFile or die "Cannot open $self->{Args}->inDictFile :$!";
+		open $fh, '<:utf8', $self->{Args}->inDictFile or die "Cannot open $self->{Args}->inDictFile :$!";
 
 		while(<$fh>){
 			if( index($_,";;;") == -1 ){
@@ -181,8 +204,7 @@ sub parseText {
 
 	foreach my $word ( map { chomp; lc } @words ) {
 		next unless $word =~ "^[a-z][a-z0-9'-]*[a-z0-9]\$";
-		#next if grep { $_ eq $word } @{$self->{stopwords}};
-		next if grep { $_ eq $word } @{$self->{stopwords}};
+		next if grep { @_ eq $word } @{$self->{stopwords}};
 
 		my $dword;
 		if(exists $self->{hashDict}{$word}){
@@ -226,7 +248,13 @@ sub parseText {
 
 package JapParser;
 use base 'AbstParser';
+use strict;
+use warnings;
+use utf8;
 use Text::MeCab;
+use Data::Dumper;
+use List::Util qw/reduce/;
+use Encode;
 
 sub new {
 	my ($class, $args) = @_;
@@ -237,10 +265,54 @@ sub new {
 
 	my $self = {
 		stopwords => \@stopwords,
+		mecab => Text::MeCab->new(),
 	};
 
 	$self = {%$super, %$self};
 	return bless $self, $class;
+}
+
+sub parseText {
+	my( $self, $text ) = @_;
+	my %hashDoc;
+	my $docCount=0;
+
+	# MeCab dictionary is compiled as UTF8
+	# Thus need to give strings encoded with UTF8 to MeCab
+
+	for( my $node = $self->{mecab}->parse(encode("utf-8",$text)); $node->surface ; $node = $node->next ){
+
+		# FIXME: grep does not work and is too slow...
+		#next if grep { @_ eq decode("utf-8",$node->surface) } @{$self->{stopwords}};
+
+		# Decode to UTF8-flagged to compare with UTF8-flagged strings
+		my @feature = split(/,/,decode("utf-8",$node->feature));
+		my $baseform = $feature[6];
+
+		next if( $baseform eq "*" );
+		unless( $feature[0] eq "名詞" or\
+			$feature[0] eq "動詞" or\
+			$feature[0] eq "副詞" or\
+			$feature[0] eq "形容詞" ){ next; }
+
+		if (exists $hashDoc{$baseform}){
+			$hashDoc{$baseform}++;
+		}else{
+			$hashDoc{$baseform}=1;
+		}
+
+		$docCount++;
+	}
+	return if $docCount < $self->{Args}->minTermsInPage or $docCount > $self->{Args}->maxTermsInPage;
+
+	my $output =
+		reduce {
+			$hashDoc{$b} >= $self->{Args}->minFreqsOfTerm ?
+				( defined($a) ? $a." ".$b." ".$hashDoc{$b} : $b." ".$hashDoc{$b} ) : $a
+		} undef, sort{ $hashDoc{$b} <=> $hashDoc{$a} || $a cmp $b } keys %hashDoc;
+
+	return $output;
+
 }
 
 1;
