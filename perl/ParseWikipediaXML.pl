@@ -181,7 +181,8 @@ sub parseText {
 
 	foreach my $word ( map { chomp; lc } @words ) {
 		next unless $word =~ "^[a-z][a-z0-9'-]*[a-z0-9]\$";
-		next if grep { $_ eq $word } $self->{stopwords};
+		#next if grep { $_ eq $word } @{$self->{stopwords}};
+		next if grep { $_ eq $word } @{$self->{stopwords}};
 
 		my $dword;
 		if(exists $self->{hashDict}{$word}){
@@ -229,7 +230,7 @@ use Text::MeCab;
 
 sub new {
 	my ($class, $args) = @_;
-	my %super = $class->SUPER::new($args);
+	my $super = $class->SUPER::new($args);
 
 	my $stopword = "の,に,は,を,た,が,で,て,と,し,れ,さ,ある,いる,も,する,から,な,こと,として,い,や,れる,など,なっ,ない,この,ため,その,あっ,よう,また,もの,という,あり,まで,られ,なる,へ,か,だ,これ,によって,により,おり,より,による,ず,なり,られる,において,ば,なかっ,なく,しかし,について,せ,だっ,その後,できる,それ,う,ので,なお,のみ,でき,き,つ,における,および,いう,さらに,でも,ら,たり,その他,に関する,たち,ます,ん,なら,に対して,特に,せる,及び,これら,とき,では,にて,ほか,ながら,うち,そして,とともに,ただし,かつて,それぞれ,または,お,ほど,ものの,に対する,ほとんど,と共に,といった,です,とも,ところ,ここ";
 	my @stopwords = split(/,/,$stopword);
@@ -239,7 +240,7 @@ sub new {
 	};
 
 	$self = {%$super, %$self};
-	return bless %self, $class;
+	return bless $self, $class;
 }
 
 1;
@@ -251,7 +252,6 @@ sub bowCreate {
 
 	for(;;){
 
-		# "my" creates another $page in this scope
 		my $page = $parser->{PageQueue}->dequeue();
 		if( $page eq $parser->{Finished} ) { last; }
 
