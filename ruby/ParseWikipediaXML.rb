@@ -42,7 +42,7 @@ class EngParser < AbstParser
 					/<text[^>]*>([^<>]*)<\/text>/ =~ page_
 					text = $1
 					hash_bofw = {}
-					text.split.map!(&:downcase).each { |word|
+					text.split.map(&:downcase).each { |word|
 						next unless word =~ /^[a-z][0-9a-z'-]*[0-9a-z]$/
 						next if @stopwords.include? word
 						word = @hash_dict[word] if @hash_dict.key? word
