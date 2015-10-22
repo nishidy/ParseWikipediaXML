@@ -1,10 +1,12 @@
 require 'thor'
+require 'redis'
 
 class AbstParser
-	attr :options, :write_lock, :hdlr_bofw
+	attr :options, :write_lock, :hdlr_bofw, :redis
 	def initialize(options)
 		@options = options
 		@write_lock = Mutex.new
+		@redis = Redis.new
 		begin
 			@hdlr_bofw = File.open(options[:outBofwFile],"a")
 		rescue => e
@@ -42,6 +44,8 @@ class EngParser < AbstParser
 					/<text[^>]*>([^<>]*)<\/text>/ =~ page_
 					text = $1
 					hash_bofw = {}
+					total_num_of_words = 0
+
 					text.split.map(&:downcase).each { |word|
 						next unless word =~ /^[a-z][0-9a-z'-]*[0-9a-z]$/
 						next if @stopwords.include? word
@@ -51,18 +55,32 @@ class EngParser < AbstParser
 						else
 							hash_bofw[word] = 1
 						end
+						total_num_of_words += 1
 					}
-					save_to_file(
-						hash_bofw.sort{ |(k1,v1),(k2,v2)|
-							if v1 == v2
-								k1 <=> k2
-							else
-								v2 <=> v1
-							end
-						}.inject("") { |bofw,arr|
-							bofw + arr[0] + " " + arr[1].to_s + " "
-						}.rstrip+"\n"
-					) unless hash_bofw.empty?
+
+					unless hash_bofw.empty? or
+						total_num_of_words > @options[:"max-page-words"] or
+						total_num_of_words < @options[:"min-page-words"] or
+
+						save_to_file(
+							hash_bofw.sort{ |(k1,v1),(k2,v2)|
+								if v1 == v2
+									k1 <=> k2
+								else
+									v2 <=> v1
+								end
+							}.inject("") { |bofw,arr|
+								bofw + arr[0] + " " + arr[1].to_s + " "
+							}.rstrip+"\n"
+						)
+
+						if @redis.connected?
+							num_of_words = hash_bofw.keys.size
+							@redis.zincrby "total_num",1,(total_num_of_words/10*10).to_s
+							@redis.zincrby "num",1,(num_of_words/10*10).to_s
+						end
+
+					end
 				}
 				begin
 					fiber.resume page

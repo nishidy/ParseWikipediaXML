@@ -1,0 +1,10 @@
+<table>
+	<tr><th>Total num of wrods range</th><th>Count</th></tr>
+<%
+	@total_num.each { |line|
+%>
+<tr><td><%=line[0]%>-<%=line[0].to_i+10-1%></td><td><%=line[1]%></td></tr>
+<%
+	}
+%>
+</table>
