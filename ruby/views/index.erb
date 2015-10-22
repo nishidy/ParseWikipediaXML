@@ -1,10 +1,55 @@
+<style type="text/css">
+<!--
+table {
+	table-layout: fixed;
+}
+
+th.title { width: 50%; }
+td.value { width: 50%; }
+
+-->
+</style>
+
 <table>
-	<tr><th>Total num of wrods range</th><th>Count</th></tr>
+<tr>
+
+<td valign=top>
+<table border=1 width=75%>
+<tr>
+	<th class="title">Total num of words range</th>
+	<th class="value">Count</th>
+</tr>
 <%
-	@total_num.each { |line|
+	@total_num.each { |num|
 %>
-<tr><td><%=line[0]%>-<%=line[0].to_i+10-1%></td><td><%=line[1]%></td></tr>
+<tr>
+	<td><%=num[0]%>-<%=num[0].to_i+10-1%></td>
+	<td><%=num[1].to_i%></td>
 <%
 	}
 %>
+</tr>
+</table>
+</td>
+
+<td valign=top>
+<table border=1 width=75%>
+<tr>
+	<th class="title">Num of words range</th>
+	<th class="value">Count</th>
+</tr>
+<%
+	@num.each { |num|
+%>
+<tr>
+	<td><%=num[0]%>-<%=num[0].to_i+10-1%></td>
+	<td><%=num[1].to_i%></td>
+<%
+	}
+%>
+</tr>
+</table>
+</td>
+
+</tr>
 </table>

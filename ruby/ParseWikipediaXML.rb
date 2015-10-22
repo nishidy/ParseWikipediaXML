@@ -8,6 +8,11 @@ class AbstParser
 		@write_lock = Mutex.new
 		@redis = Redis.new
 		begin
+			@redis.ping
+		rescue
+			puts "Redis server is not running."
+		end
+		begin
 			@hdlr_bofw = File.open(options[:outBofwFile],"a")
 		rescue => e
 			e.message
@@ -60,7 +65,7 @@ class EngParser < AbstParser
 
 					unless hash_bofw.empty? or
 						total_num_of_words > @options[:"max-page-words"] or
-						total_num_of_words < @options[:"min-page-words"] or
+						total_num_of_words < @options[:"min-page-words"]
 
 						save_to_file(
 							hash_bofw.sort{ |(k1,v1),(k2,v2)|
