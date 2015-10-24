@@ -1,14 +1,20 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
 import sys
 import argparse
 import re
 import threading
-import Queue
 from collections import defaultdict
 import MeCab
-import msgpack
 import redis
+
+
+def python_sorted(lst):
+	if sys.version_info[0] == 2:
+		return sorted(lst,cmp=cmp_dict)
+	else:
+		return sorted(lst,key=cmp_to_key(cmp_dict))
 
 def cmp_dict(a,b):
 	if a[1]>b[1]:
@@ -85,7 +91,7 @@ class AbstParser():
 					page=""
 
 		except IOError as e:
-			print >> sys.stderr, e
+			print(e,file=sys.stderr)
 			self.stopWorkers()
 			return
 
@@ -100,7 +106,7 @@ class AbstParser():
 	def writeToFile(self,dictBofw):
 
 		docCount=sum(dictBofw.values())
-		listTupleBofw = sorted(dictBofw.items(), cmp=cmp_dict)
+		listTupleBofw = python_sorted(dictBofw.items())
 
 		if docCount >= self.args.minw and docCount <= self.args.maxw:
 
@@ -125,7 +131,7 @@ class AbstParser():
 		except redis.exceptions.ConnectionError:
 			pass
 		except Exception as e:
-			print e
+			print(e)
 
 	def getSetVal(self,n):
 		return str(n/100*100)
@@ -172,14 +178,15 @@ class EngParser(AbstParser):
 		try:
 			hdlr = open(self.args.ifdict,'r')
 		except IOError as e:
-			print >> sys.stderr, e
+			print(e,file=sys.stderr)
 			sys.exit(1)
 
-		unpacker = msgpack.Unpacker(hdlr)
-		for msg in unpacker:
-			if type(msg) == type({}):
-				self.dictMap = msg
-				return
+		if sys.version_info[0] == 2:
+			unpacker = msgpack.Unpacker(hdlr)
+			for msg in unpacker:
+				if type(msg) == type({}):
+					self.dictMap = msg
+					return
 
 		try:
 			for line in open(self.args.ifdict,'r'):
@@ -188,7 +195,7 @@ class EngParser(AbstParser):
 				if words[0] == words[2]: continue
 				self.dictMap[words[0].rstrip()] = words[2].rstrip()
 		except IOError as e:
-			print >> sys.stderr, e
+			print(e,file=sys.stderr)
 			sys.exit(1)
 
 	def parseText(self,text):
@@ -220,7 +227,7 @@ class Main():
 		parser.add_argument('-t','--oftitle')
 		parser.add_argument('-m','--minw',default=1,type=int)
 		parser.add_argument('-x','--maxw',default=65535,type=int)
-		parser.add_argument('-c','--minc',default=2,type=int)
+		parser.add_argument('-c','--minc',default=1,type=int)
 		parser.add_argument('-g','--recateg',default=".*")
 		parser.add_argument('-j','--isjapanese',action="store_const",const=True,default=False)
 		parser.add_argument('-w','--workers',default=1,type=int)
@@ -237,5 +244,13 @@ class Main():
 
 
 if __name__ == "__main__":
+
+	if sys.version_info[0] == 2:
+		import Queue
+		import msgpack
+	else:
+		import queue as Queue
+		from functools import cmp_to_key, reduce
+
 	Main(sys.argv).start()
 
