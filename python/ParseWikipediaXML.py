@@ -103,7 +103,11 @@ class AbstParser():
 		if docCount >= self.args.minw and docCount <= self.args.maxw:
 
 			# Make string from list of tuples of bag-of-words
-			cont = reduce(lambda i,t: i+t[0]+" "+str(t[1])+" " if t[1] >= self.args.minc else i+"", listTupleBofw, "").rstrip()
+			cont = reduce(
+				lambda _cont, _bofw: _cont+_bofw[0]+" "+str(_bofw[1])+" ",
+				[ _bofw for _bofw in listTupleBofw if _bofw[1] >= self.args.minc ],
+				""
+			).rstrip()
 
 			if len(cont) > 1:
 				self.lock.acquire()
@@ -177,7 +181,6 @@ class EngParser(AbstParser):
 		dictBofw=defaultdict(int) # python >= 2.5
 		for word in text.split():
 			word = word.lower()
-			if len(word)==1: continue
 			if word in self.stopwords: continue
 			if re.search("^[a-z][a-z0-9'-]*[a-z0-9]$",word) is None: continue
 			dictBofw[self.dictMap.get(word,word)] += 1 # defaultdict initializes the fist value of a key
