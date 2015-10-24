@@ -55,11 +55,7 @@ class EngParser < AbstParser
 						next unless word =~ /^[a-z][0-9a-z'-]*[0-9a-z]$/
 						next if @stopwords.include? word
 						word = @hash_dict[word] if @hash_dict.key? word
-						if hash_bofw.key? word
-							hash_bofw[word] += 1
-						else
-							hash_bofw[word] = 1
-						end
+						hash_bofw.key?(word) ? hash_bofw[word] += 1 : hash_bofw[word] = 1
 						total_num_of_words += 1
 					}
 
@@ -69,11 +65,7 @@ class EngParser < AbstParser
 
 						save_to_file(
 							hash_bofw.sort{ |(k1,v1),(k2,v2)|
-								if v1 == v2
-									k1 <=> k2
-								else
-									v2 <=> v1
-								end
+								v1 == v2 ? k1 <=> k2 : v2 <=> v1
 							}.inject("") { |bofw,arr|
 								bofw + arr[0] + " " + arr[1].to_s + " "
 							}.rstrip+"\n"
