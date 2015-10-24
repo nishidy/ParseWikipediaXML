@@ -1,0 +1,51 @@
+<style type="text/css">
+<!--
+table {
+	table-layout: fixed;
+	width: 75%;
+}
+
+th.title { width: 50%; }
+td.value { width: 50%; }
+
+-->
+</style>
+
+<table border=1>
+	<tr class=title>
+		<th>Total number of words range</th>
+		<th>Count</th>
+	</tr>
+{% for line in total %}
+{% set key = line[0] %}
+{% set val = line[1] %}
+	<tr class=value>
+		<td>
+			{{ key }} - {{ int(key)+100-1 }}
+		</td>
+		<td>
+			{{ int(val) }}
+		</td>
+	</tr>
+{% end %}
+</table>
+
+<table border=1>
+	<tr class=title>
+		<th>Number of words range</th>
+		<th>Count</th>
+	</tr>
+{% for line in num %}
+{% set key = line[0] %}
+{% set val = line[1] %}
+	<tr class=value>
+		<td>
+			{{ key }} - {{ int(key)+100-1 }}
+		</td>
+		<td>
+			{{ int(val) }}
+		</td>
+	</tr>
+{% end %}
+</table>
+

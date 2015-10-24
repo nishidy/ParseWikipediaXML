@@ -8,6 +8,7 @@ import Queue
 from collections import defaultdict
 import MeCab
 import msgpack
+import redis
 
 def cmp_dict(a,b):
 	if a[1]>b[1]:
@@ -55,6 +56,7 @@ class AbstParser():
 		self.lock = threading.Lock()
 		self.args = args
 		self.queue = Queue.Queue()
+		self.redis = redis.StrictRedis()
 
 	def stopWorkers(self):
 		for i in range(self.args.workers):
@@ -115,6 +117,18 @@ class AbstParser():
 					f.write(cont+"\n")
 				self.lock.release()
 
+	def saveToRedis(self,total,num):
+		try:
+			self.redis.ping()
+			self.redis.zincrby("sorted_total",self.getSetVal(total))
+			self.redis.zincrby("sorted_num",self.getSetVal(num))
+		except redis.exceptions.ConnectionError:
+			pass
+		except Exception as e:
+			print e
+
+	def getSetVal(self,n):
+		return str(n/100*100)
 
 class JapParser(AbstParser):
 
@@ -178,12 +192,18 @@ class EngParser(AbstParser):
 			sys.exit(1)
 
 	def parseText(self,text):
+		totalNumOfWords = 0
 		dictBofw=defaultdict(int) # python >= 2.5
 		for word in text.split():
 			word = word.lower()
 			if word in self.stopwords: continue
 			if re.search("^[a-z][a-z0-9'-]*[a-z0-9]$",word) is None: continue
-			dictBofw[self.dictMap.get(word,word)] += 1 # defaultdict initializes the fist value of a key
+			 # defaultdict initializes the fist value of a key
+			dictBofw[self.dictMap.get(word,word)] += 1
+			totalNumOfWords +=1
+
+		self.saveToRedis(totalNumOfWords,len(dictBofw.keys()))
+
 		return dictBofw
 
 class Main():
