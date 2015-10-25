@@ -8,6 +8,7 @@ import threading
 from collections import defaultdict
 import MeCab
 import redis
+import time
 
 
 def python_sorted(lst):
@@ -76,6 +77,8 @@ class AbstParser():
 			bofwthreads.append(bofwThread(self))
 			bofwthreads[i].start()
 
+		self.redis.set("start_time",time.time())
+
 		page=""
 		startFlag=endFlag=False
 		try:
@@ -95,8 +98,11 @@ class AbstParser():
 			self.stopWorkers()
 			return
 
-		# Leave out when count is zero
+
+		# Leave out of this join() when the count becomes zero
 		self.queue.join()
+		self.redis.set("finish_time",time.time())
+
 		self.stopWorkers()
 
 	# This forces inheritances to implement this method
@@ -123,7 +129,7 @@ class AbstParser():
 					f.write(cont+"\n")
 				self.lock.release()
 
-	def saveToRedis(self,total,num):
+	def saveWordCountsToRedis(self,total,num):
 		try:
 			self.redis.ping()
 			self.redis.zincrby("sorted_total",self.getSetVal(total))
@@ -174,6 +180,8 @@ class EngParser(AbstParser):
 		self.dictMap = {}
 		if self.args.ifdict == "": return
 
+		print("Begin reading dictionary...", end=" ")
+
 		# try message pack format first
 		try:
 			hdlr = open(self.args.ifdict,'r')
@@ -198,9 +206,13 @@ class EngParser(AbstParser):
 			print(e,file=sys.stderr)
 			sys.exit(1)
 
+		print("Finish.")
+
 	def parseText(self,text):
+
 		totalNumOfWords = 0
 		dictBofw=defaultdict(int) # python >= 2.5
+
 		for word in text.split():
 			word = word.lower()
 			if word in self.stopwords: continue
@@ -209,7 +221,7 @@ class EngParser(AbstParser):
 			dictBofw[self.dictMap.get(word,word)] += 1
 			totalNumOfWords +=1
 
-		self.saveToRedis(totalNumOfWords,len(dictBofw.keys()))
+		self.saveWordCountsToRedis(totalNumOfWords,len(dictBofw.keys()))
 
 		return dictBofw
 

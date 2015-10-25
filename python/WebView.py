@@ -2,17 +2,38 @@ import tornado.ioloop
 import tornado.web
 import os
 import redis
+import sys
 
 class MainHandler(tornado.web.RequestHandler):
 	def get(self):
 		try:
 			r = redis.Redis()
+
+			st =float(r.get("start_time"))
+			fn =float(r.get("finish_time"))
+			duration = fn - st if fn > st else r.time() - st
+
+			total=map(lambda x: (int(float(x[0])),int(x[1])),
+					r.zrevrange("sorted_total",0,-1,withscores=True))
+
+			num=map(lambda x: (int(float(x[0])),int(x[1])),
+					r.zrevrange("sorted_num",0,-1,withscores=True))
+
+			pages = reduce( lambda pages,line: pages+line[1], total, 0 )
+
 			self.render("index.html",
-				total=r.zrevrange("sorted_total",0,-1,withscores=True),
-				num=r.zrevrange("sorted_num",0,-1,withscores=True),
+				total=total,
+				num=num,
+				pages=pages,
+				duration=duration,
 			)
+
 		except Exception as e:
 			self.write("%s"%e)
+
+
+if sys.version_info[0] > 2:
+	from functools import reduce
 
 app = tornado.web.Application(
 	[("/", MainHandler)],
@@ -22,4 +43,5 @@ app = tornado.web.Application(
 if __name__ == "__main__":
 	app.listen(8888)
 	tornado.ioloop.IOLoop.instance().start()
+
 
