@@ -9,9 +9,22 @@ class MainHandler(tornado.web.RequestHandler):
 		try:
 			r = redis.Redis()
 
-			st =float(r.get("start_time"))
-			fn =float(r.get("finish_time"))
-			duration = fn - st if fn > st else r.time() - st
+			st = r.get("start_time")
+			if st == None:
+				st = 0
+			else:
+				st = float(st)
+
+			fn = r.get("finish_time")
+			if fn == None:
+				fn = 0
+			else:
+				fn = float(fn)
+
+			if fn > st:
+				duration = fn - st
+			else:
+				duration = float(".".join([str(x) for x in r.time()])) - st
 
 			total=map(lambda x: (int(float(x[0])),int(x[1])),
 					r.zrevrange("sorted_total",0,-1,withscores=True))

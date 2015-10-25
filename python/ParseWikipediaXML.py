@@ -221,7 +221,8 @@ class EngParser(AbstParser):
 			dictBofw[self.dictMap.get(word,word)] += 1
 			totalNumOfWords +=1
 
-		self.saveWordCountsToRedis(totalNumOfWords,len(dictBofw.keys()))
+		if totalNumOfWords > 0:
+			self.saveWordCountsToRedis(totalNumOfWords,len(dictBofw.keys()))
 
 		return dictBofw
 
