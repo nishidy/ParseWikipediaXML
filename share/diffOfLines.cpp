@@ -1,7 +1,6 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
-#include <map>
 
 using namespace std;
 
@@ -19,13 +18,13 @@ int main(int argc, char* argv[])
 	ifstream ifs1(inputFile1);
 	if(ifs1.fail()){
 		cerr << "Failed to open " << inputFile1 << "." << endl;
-		return -1;
+		return -2;
 	}
 
 	ifstream ifs2(inputFile2);
 	if(ifs2.fail()){
 		cerr << "Failed to open " << inputFile2 << "." << endl;
-		return -1;
+		return -3;
 	}
 
 	vector<int> vec_int_file1;
