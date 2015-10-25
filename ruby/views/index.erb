@@ -10,20 +10,35 @@ td.value { width: 50%; }
 -->
 </style>
 
+<table border=1>
+<tr>
+<%
+	pages = @total_num.inject(0) { |pages,num|
+		pages + num[1].to_i
+	}
+%>
+	<td>Total parsed pages : <%= pages %> pages</td>
+	<td>Duration : <%= "%.2f" % (@duration) %> sec</td>
+	<td>Speed to parse : <%= "%.2f" % (pages / @duration ) %> pages/sec</td>
+</tr>
+</table>
+
+<br>
+
 <table>
 <tr>
 
 <td valign=top>
 <table border=1 width=75%>
 <tr>
-	<th class="title">Total num of words range</th>
-	<th class="value">Count</th>
+	<th class="title">Range of total words in a page</th>
+	<th class="value">Count of pages</th>
 </tr>
 <%
 	@total_num.each { |num|
 %>
 <tr>
-	<td><%=num[0]%>-<%=num[0].to_i+10-1%></td>
+	<td><%=num[0]%>-<%=num[0].to_i+100-1%></td>
 	<td><%=num[1].to_i%></td>
 </tr>
 <%
@@ -35,14 +50,14 @@ td.value { width: 50%; }
 <td valign=top>
 <table border=1 width=75%>
 <tr>
-	<th class="title">Num of words range</th>
-	<th class="value">Count</th>
+	<th class="title">Range of words in a page</th>
+	<th class="value">Count of pages</th>
 </tr>
 <%
 	@num.each { |num|
 %>
 <tr>
-	<td><%=num[0]%>-<%=num[0].to_i+10-1%></td>
+	<td><%=num[0]%>-<%=num[0].to_i+100-1%></td>
 	<td><%=num[1].to_i%></td>
 </tr>
 <%

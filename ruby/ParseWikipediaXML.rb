@@ -40,6 +40,9 @@ class EngParser < AbstParser
 	def run_parse
 		startflag = stopflag = false
 		page = ""
+
+		@redis.set "start_time", Time.now.to_f
+
 		File.readlines(@options[:inWikiFile]).each { |line|
 			startflag = true if line.include? "<page>"
 			stopflag = true if line.include? "</page>"
@@ -73,8 +76,8 @@ class EngParser < AbstParser
 
 						if @redis.connected?
 							num_of_words = hash_bofw.keys.size
-							@redis.zincrby "total_num",1,(total_num_of_words/10*10).to_s
-							@redis.zincrby "num",1,(num_of_words/10*10).to_s
+							@redis.zincrby "total_num",1,get_set_val(total_num_of_words)
+							@redis.zincrby "num",1,get_set_val(num_of_words)
 						end
 
 					end
@@ -89,6 +92,9 @@ class EngParser < AbstParser
 				startflag = stopflag = false
 			end
 		}
+
+		@redis.set "finish_time", Time.now.to_f
+
 	end
 	def read_dictionary
 		@hash_dict = {}
@@ -103,6 +109,9 @@ class EngParser < AbstParser
 			print "Finshded reading from dictionary.\n"
 		else
 		end
+	end
+	def get_set_val(num)
+		return (num/100*100).to_s
 	end
 end
 
@@ -119,14 +128,26 @@ class CLI < Thor
 	package_name "ParseWikipediaXML"
 	default_command :bagofwords
 
-	option :inWikiFile, type: :string, aliases: '-i', required: true, desc: 'Input file of Wikipedia'
-	option :inDictFile, type: :string, aliases: '-d', desc: 'Input file of dictionary'
-	option :outBofwFile, type: :string, aliases: '-s', required: true, desc: 'Ouput file for bag-of-words'
-	option :outTitleFile, type: :string, aliases: '-t', desc: 'Ouput file for title'
+	option :inWikiFile,
+		type: :string, aliases: '-i', required: true, desc: 'Input file of Wikipedia'
 
-	option :"min-page-words", type: :numeric, aliases: '-m', default: 1, desc: 'How many terms at least a page should contain'
-	option :"max-page-words", type: :numeric, aliases: '-x', default: 65535,  desc: 'How many terms at most a page should contain'
-	option :"min-word-count", type: :numeric, aliases: '-c', default: 1, desc: 'How many times a term should appear in a page'
+	option :inDictFile,
+		type: :string, aliases: '-d', desc: 'Input file of dictionary'
+
+	option :outBofwFile,
+		type: :string, aliases: '-s', required: true, desc: 'Ouput file for bag-of-words'
+
+	option :outTitleFile,
+		type: :string, aliases: '-t', desc: 'Ouput file for title'
+
+	option :"min-page-words",
+		type: :numeric, aliases: '-m', default: 1, desc: 'How many terms at least a page should contain'
+
+	option :"max-page-words",
+		type: :numeric, aliases: '-x', default: 65535,  desc: 'How many terms at most a page should contain'
+
+	option :"min-word-count",
+		type: :numeric, aliases: '-c', default: 1, desc: 'How many times a term should appear in a page'
 
 	method_option :japanese, aliases: '-j', desc: "If it is in Japanese"
 
