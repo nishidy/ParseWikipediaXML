@@ -1,0 +1,43 @@
+- hosts : ec2-spot-instance
+  user: ec2-user
+  sudo: yes
+
+  vars:
+    branch: master
+    dest: ParseWikipediaXML
+    user: ec2-user
+
+  tasks:
+    - name: install packages
+      yum: name={{ item }} state=present
+      with_items:
+        - ruby
+        - ruby-devel
+        - ruby20-devel
+        - gcc-c++
+        - gem
+
+    - name: install gems
+      shell: gem install {{ item }}
+      with_items:
+        - io-console
+        - bundler
+
+    - name: local repository existence check
+      shell: test -d {{dest}}
+      register: result
+    - name: copy the code from repository
+      git: repo=http://github.com/nishidy/ParseWikipediaXML.git dest={{dest}} version={{branch}}
+      when: result|failed
+
+    - name: bundle install
+      shell: /usr/local/bin/bundle install
+      args:
+        chdir: /home/{{user}}/{{dest}}/ruby
+
+    - file: path={{dest}}/share/testParseWikipediaXML.sh mode=0744
+    - name: run test
+      shell: ./testParseWikipediaXML.sh  "ruby ../ruby/ParseWikipediaXML.rb" 5 1 100
+      args:
+        chdir: /home/{{user}}/{{dest}}/share
+
