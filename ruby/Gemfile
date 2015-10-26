@@ -1,0 +1,6 @@
+source 'https://rubygems.rog'
+
+gem 'thor'
+gem 'sinatra'
+gem 'redis'
+
