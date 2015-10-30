@@ -41,12 +41,12 @@ class EngParser < AbstParser
 		startflag = stopflag = false
 		page = ""
 
-		@redis.set "start_time", Time.now.to_f
+		@redis.set "start_time", Time.now.to_f if @redis.connected?
 
 		File.readlines(@options[:inWikiFile]).each { |line|
 			startflag = true if line.include? "<page>"
 			stopflag = true if line.include? "</page>"
-			page += line if startflag
+			page << line if startflag
 			if startflag && stopflag
 				fiber = Fiber.new { |page_|
 					/<text[^>]*>([^<>]*)<\/text>/ =~ page_
@@ -93,7 +93,7 @@ class EngParser < AbstParser
 			end
 		}
 
-		@redis.set "finish_time", Time.now.to_f
+		@redis.set "finish_time", Time.now.to_f if @redis.connected?
 
 	end
 	def read_dictionary
@@ -148,6 +148,9 @@ class CLI < Thor
 
 	option :"min-word-count",
 		type: :numeric, aliases: '-c', default: 1, desc: 'How many times a term should appear in a page'
+
+	option :"workers",
+		type: :numeric, aliases: '-w', default: 1, desc: '# of worker but thread is not implemented, this is only for the common test parameter.'
 
 	method_option :japanese, aliases: '-j', desc: "If it is in Japanese"
 
