@@ -3,6 +3,7 @@ require 'redis'
 
 class App < Sinatra::Base
   set :redis, Redis.new
+  set :environment, :production
 
   get '/' do
     @total_num = settings.redis.zrevrange('total_num', 0, -1, withscores: true)
