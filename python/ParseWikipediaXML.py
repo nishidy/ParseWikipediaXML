@@ -57,7 +57,24 @@ class bofwThread(threading.Thread):
 			# put() counts up and task_done() counts down
 			queue.task_done()
 
-def check(func):
+def store_redis(func):
+	import functools
+	@functools.wraps(func)
+	def wrapper(*args,**kwargs):
+		try:
+			args[0].redis.ping()
+		except redis.exceptions.ConnectionError:
+			pass
+		except Exception as e:
+			print(e)
+		else:
+			args[0].redis.set("start_time",time.time())
+			result = func(*args,**kwargs)
+			args[0].redis.set("finish_time",time.time())
+		return result
+	return wrapper
+
+def check_time(func):
 	import functools
 	@functools.wraps(func)
 	def wrapper(*args,**kwargs):
@@ -81,7 +98,8 @@ class AbstParser():
 		for i in range(self.args.workers):
 			self.queue.put("Finished")
 
-	@check
+	@store_redis
+	@check_time
 	def startParse(self):
 
 		bofwthreads = []
@@ -89,8 +107,6 @@ class AbstParser():
 		for i in range(self.args.workers):
 			bofwthreads.append(bofwThread(self))
 			bofwthreads[i].start()
-
-		self.redis.set("start_time",time.time())
 
 		page=""
 		startFlag=endFlag=False
@@ -111,11 +127,8 @@ class AbstParser():
 			self.stopWorkers()
 			return
 
-
 		# Leave out of this join() when the count becomes zero
 		self.queue.join()
-		self.redis.set("finish_time",time.time())
-
 		self.stopWorkers()
 
 	# This forces inheritances to implement this method
@@ -189,7 +202,7 @@ class EngParser(AbstParser):
 		stopwords="a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your"
 		self.stopwords=stopwords.split(",")
 
-	@check
+	@check_time
 	def readDictionary(self):
 		self.dictMap = {}
 		if self.args.ifdict == "": return
