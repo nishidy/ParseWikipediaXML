@@ -57,6 +57,18 @@ class bofwThread(threading.Thread):
 			# put() counts up and task_done() counts down
 			queue.task_done()
 
+def check(func):
+	import functools
+	@functools.wraps(func)
+	def wrapper(*args,**kwargs):
+		import time
+		start = time.time()
+		print("Begin %s."%(func.__name__))
+		result = func(*args,**kwargs)
+		print("Finished %s in %.2f sec."%(func.__name__,time.time()-start))
+		return result
+	return wrapper
+
 class AbstParser():
 
 	def __init__(self,args):
@@ -69,6 +81,7 @@ class AbstParser():
 		for i in range(self.args.workers):
 			self.queue.put("Finished")
 
+	@check
 	def startParse(self):
 
 		bofwthreads = []
@@ -167,17 +180,6 @@ class JapParser(AbstParser):
 				dictBofw[baseform] += 1 # defaultdict initializes the fist value of a key
 
 		return dictBofw
-
-def check(func):
-	import functools
-	@functools.wraps(func)
-	def wrapper(*args,**kwargs):
-		import time
-		start = time.time() * 1000
-		print("Begin %s."%(func.__name__))
-		func(*args,**kwargs)
-		print("Finished %s in %d msec."%(func.__name__,time.time()*1000-start))
-	return wrapper
 
 class EngParser(AbstParser):
 
