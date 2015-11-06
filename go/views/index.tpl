@@ -2,6 +2,7 @@
 <!--
 table {
 	table-layout: fixed;
+	width: 75%;
 }
 
 th.title { width: 50%; }
@@ -21,28 +22,29 @@ td.value { width: 50%; }
 <br>
 
 <table border=1>
-	<tr>
+	<tr class=title>
 		<th>Range of total number of words in a page</th>
 		<th>Count of pages</th>
 	</tr>
 	{{range $index, $report := .Total_num}}
-	<tr>
-		<td>{{$report.Member}}</td>
+	<tr class=value>
+		<td>{{$report.Member}} - {{Func $report.Member}}</td>
 		<td>{{$report.Score}}</td>
 	</tr>
 	{{end}}
 </table>
 
+
 <br>
 
 <table border=1>
-	<tr>
+	<tr class=title>
 		<th>Range of number of words in a page</th>
 		<th>Count of pages</th>
 	</tr>
 	{{range $index, $report := .Num}}
-	<tr>
-		<td>{{$report.Member}}</td>
+	<tr class=value>
+		<td>{{$report.Member}} - {{Func $report.Member}}</td>
 		<td>{{$report.Score}}</td>
 	</tr>
 	{{end}}

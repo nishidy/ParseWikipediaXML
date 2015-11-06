@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"gopkg.in/redis.v3"
 	"net/http"
+	"strconv"
 	"text/template"
 )
 
@@ -13,6 +14,14 @@ type Report struct {
 	Throughput float64
 	Total_num  []redis.Z
 	Num        []redis.Z
+	Func       func(m string) int
+}
+
+func GetUpperNum(m string) int {
+	if i, err := strconv.Atoi(m); err == nil {
+		return i + 100 - 1
+	}
+	return 0
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +65,15 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		Num:        num.Val(),
 	}
 
-	tmpl := template.Must(template.ParseFiles("views/index.tpl"))
+	tmpl, err :=
+		template.New("index.tpl").
+			Funcs(template.FuncMap{"Func": GetUpperNum}).
+			ParseFiles("views/index.tpl")
+
+	if err != nil {
+		panic(err)
+	}
+
 	err = tmpl.Execute(w, report)
 	if err != nil {
 		panic(err)
