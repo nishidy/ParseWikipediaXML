@@ -12,11 +12,14 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/ikawaha/kagome/tokenizer"
+	"gopkg.in/redis.v3"
 )
 
 var (
@@ -254,6 +257,7 @@ type routineType struct {
 	hOutTitleFile *os.File
 	hOutBofwFile  *os.File
 	wait          *sync.WaitGroup
+	client        *redis.Client
 }
 
 func (rtype *routineType) ParseAndWriteRoutine(args Args, data []string) {
@@ -284,12 +288,19 @@ func (rtype *routineType) ParseAndWriteRoutine(args Args, data []string) {
 		make(map[string]int),
 	}
 
+	var wordCount int
 	if args.isJapanese {
-		if wc := ctype.CountWordJp(); wc == 0 || wc > args.maxWordsInDoc || wc < args.minWordsInDoc {
+		wordCount = ctype.CountWordJp()
+		if wordCount == 0 ||
+			wordCount > args.maxWordsInDoc ||
+			wordCount < args.minWordsInDoc {
 			return
 		}
 	} else {
-		if wc := ctype.CountWordEn(); wc == 0 || wc > args.maxWordsInDoc || wc < args.minWordsInDoc {
+		wordCount = ctype.CountWordEn()
+		if wordCount == 0 ||
+			wordCount > args.maxWordsInDoc ||
+			wordCount < args.minWordsInDoc {
 			return
 		}
 	}
@@ -356,6 +367,17 @@ func (rtype *routineType) ParseAndWriteRoutine(args Args, data []string) {
 		rtype.hOutBofwFile.WriteString(strText)
 		rtype.hOutTitleFile.WriteString(fmt.Sprintf("%s\n", title))
 		<-rtype.chanMutex
+
+		err := rtype.client.ZIncrBy("total_num", 1, strconv.Itoa(wordCount/100*100)).Err()
+		if err != nil {
+			panic(err)
+		}
+
+		err = rtype.client.ZIncrBy("num", 1, strconv.Itoa(len(structWordFreq)/100*100)).Err()
+		if err != nil {
+			panic(err)
+		}
+
 	}
 }
 
@@ -415,7 +437,9 @@ func main() {
 
 	mapDict := make(map[string]string)
 	if !args.isJapanese && args.inDictFile != "" {
+		fmt.Println("Begin reading the dictionary file...")
 		ReadDictionary(args.inDictFile, mapDict)
+		fmt.Println("Finished.")
 	}
 
 	//cpus := runtime.NumCPU()
@@ -453,6 +477,12 @@ func main() {
 
 	var wait sync.WaitGroup
 
+	client := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "",
+		DB:       0,
+	})
+
 	rtype := routineType{
 		chanMutex,
 		chanSem,
@@ -461,6 +491,12 @@ func main() {
 		hOutTitleFile,
 		hOutBofwFile,
 		&wait,
+		client,
+	}
+
+	err = client.Set("start_time", time.Now().UnixNano()/int64(time.Millisecond), 0).Err()
+	if err != nil {
+		panic(err)
 	}
 
 	scanner := bufio.NewScanner(hInWikiFile)
@@ -487,9 +523,11 @@ func main() {
 		}
 	}
 
-	fmt.Println("Finished reading from the input file.")
-
 	wait.Wait()
 
-	fmt.Println("Finished writing to the output file.")
+	err = client.Set("finish_time", time.Now().UnixNano()/int64(time.Millisecond), 0).Err()
+	if err != nil {
+		panic(err)
+	}
+
 }
