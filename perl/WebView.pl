@@ -1,5 +1,4 @@
 use Plack::Builder;
-use Plack::Request;
 use Template;
 use Redis;
 
@@ -25,7 +24,7 @@ sub arr_in_arr {
 my $app = sub {
 	my $env = shift;
 
-	my $redis = Redis->new(server => "127.0.0.1:6379");
+	my $redis = Redis->new;
 
 	my @total_num = $redis->zrevrange('total_num',0,-1,'withscores');
 	my @num = $redis->zrevrange('num',0,-1,'withscores');
@@ -52,8 +51,8 @@ my $app = sub {
 		num => \@num,
 	};
 
-	my $tt = new Template;
-	$tt->process('views/index.html', $vars , \my $html) or die $tt->error;
+	my $tmpl = new Template;
+	$tmpl->process('views/index.html', $vars , \my $html) or die $tmpl->error;
 
 	return [ 200, [ "Content-Type" => "text/html" ], [ $html ] ];
 
