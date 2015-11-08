@@ -7,16 +7,15 @@ using namespace std;
 
 #define ASCII_LOWER_START 97
 #define ASCII_LOWER_END 122
+#define CHAR_SET_NUM (ASCII_LOWER_END-ASCII_LOWER_START+1)
 
 #define ASCII_APOSTROPHE 39
 #define ASCII_DASH 45
 
-#define CHAR_SET_NUM ((ASCII_LOWER_END-ASCII_LOWER_START+1)-1+2)
-
 string stopwords= "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your";
 
-uniform_int_distribution<int> gGenCharAlphabet(0,CHAR_SET_NUM-2);
-uniform_int_distribution<int> gGenCharAlphabetDashApostrophe(0,CHAR_SET_NUM);
+uniform_int_distribution<int> gGenCharAlphabet(0,CHAR_SET_NUM);
+uniform_int_distribution<int> gGenCharAlphabetDashApostrophe(0,CHAR_SET_NUM+2);
 
 char selectAlphabet(mt19937* mt){
 
@@ -25,13 +24,13 @@ char selectAlphabet(mt19937* mt){
 
 }
 
-char selectAlphabetDash(mt19937* mt){
+char selectAlphabetDashApostrophe(mt19937* mt){
 
 	int ichar = gGenCharAlphabetDashApostrophe(*mt);
 
-	if(ichar < ASCII_LOWER_END-ASCII_LOWER_START+1){
+	if(ichar < CHAR_SET_NUM){
 		return (char)(ichar+ASCII_LOWER_START);
-	}else if(ichar < ASCII_LOWER_END-ASCII_LOWER_START+2){
+	}else if(ichar < CHAR_SET_NUM+1){
 		return (char)(ASCII_APOSTROPHE);
 	}else{
 		return (char)(ASCII_DASH);
@@ -50,7 +49,7 @@ string makeRandomTerm(mt19937* mt, int maxNumCharOfTerm){
 		if(i==0||i==length-1){
 			a = selectAlphabet(mt);
 		}else{
-			a = selectAlphabetDash(mt);
+			a = selectAlphabetDashApostrophe(mt);
 		}
 		term += a;
 	}
