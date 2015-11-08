@@ -9,6 +9,8 @@ use Data::Dumper;
 use Getopt::ArgParse;
 use threads;
 use Thread::Queue;
+use Redis;
+use Time::HiRes qw/ gettimeofday /;
 
 main->new()->start();
 
@@ -58,6 +60,8 @@ sub parseArgs {
 sub start {
 	my $self = shift;
 
+	my $redis = Redis->new(server => "127.0.0.1:6379");
+
 	my $parser;
 	if($self->{Args}->isJapanese){
 		$parser = JapParser->new($self->{Args});
@@ -65,7 +69,11 @@ sub start {
 		$parser = EngParser->new($self->{Args});
 		$parser->readDictionary();
 	}
+
+	$redis->set( start_time => gettimeofday()."");
 	$parser->startParse();
+	$redis->set( finish_time => gettimeofday()."");
+
 }
 
 1;
@@ -198,7 +206,7 @@ sub parseText {
 	my( $self, $text ) = @_;
 
 	my %hashDoc;
-	my $docCount=0;
+	my $totalWordNum=0;
 	my @ngrams;
 	my @words = split(/ /,$text);
 
@@ -227,19 +235,24 @@ sub parseText {
 		}
 		#print "$keyword:$hashDoc{$keyword}\n";
 
-		$docCount++;
+		$totalWordNum++;
 
 		shift(@ngrams);
 	}
-	return if $docCount < $self->{Args}->minTermsInPage or $docCount > $self->{Args}->maxTermsInPage;
 
-	my $output =
-		reduce {
-			$hashDoc{$b} >= $self->{Args}->minFreqsOfTerm ?
-				( defined($a) ? $a." ".$b." ".$hashDoc{$b} : $b." ".$hashDoc{$b} ) : $a
-		} undef, sort{ $hashDoc{$b} <=> $hashDoc{$a} || $a cmp $b } keys %hashDoc;
+	if( $totalWordNum< $self->{Args}->minTermsInPage or
+		$totalWordNum> $self->{Args}->maxTermsInPage ) {
+		return ("",0,0);
+	} else {
+		my $output =
+			reduce {
+				$hashDoc{$b} >= $self->{Args}->minFreqsOfTerm ?
+					( defined($a) ? $a." ".$b." ".$hashDoc{$b} : $b." ".$hashDoc{$b} ) : $a
+			} undef, sort{ $hashDoc{$b} <=> $hashDoc{$a} || $a cmp $b } keys %hashDoc;
 
-	return $output;
+		my $wordNum = keys %hashDoc;
+		return ($output, $totalWordNum, $wordNum);
+	}
 
 }
 
@@ -279,7 +292,7 @@ sub new {
 sub parseText {
 	my( $self, $text ) = @_;
 	my %hashDoc;
-	my $docCount=0;
+	my $totalWordNum=0;
 
 	# MeCab dictionary is compiled as UTF8
 	# Thus need to give strings encoded with UTF8 to MeCab
@@ -306,17 +319,22 @@ sub parseText {
 			$hashDoc{$baseform}=1;
 		}
 
-		$docCount++;
+		$totalWordNum++;
 	}
-	return if $docCount < $self->{Args}->minTermsInPage or $docCount > $self->{Args}->maxTermsInPage;
 
-	my $output =
-		reduce {
-			$hashDoc{$b} >= $self->{Args}->minFreqsOfTerm ?
-				( defined($a) ? $a." ".$b." ".$hashDoc{$b} : $b." ".$hashDoc{$b} ) : $a
-		} undef, sort{ $hashDoc{$b} <=> $hashDoc{$a} || $a cmp $b } keys %hashDoc;
+	if( $totalWordNum < $self->{Args}->minTermsInPage or
+		$totalWordNum > $self->{Args}->maxTermsInPage ) {
+		return ("",0,0);
+	} else {
+		my $output =
+			reduce {
+				$hashDoc{$b} >= $self->{Args}->minFreqsOfTerm ?
+					( defined($a) ? $a." ".$b." ".$hashDoc{$b} : $b." ".$hashDoc{$b} ) : $a
+			} undef, sort{ $hashDoc{$b} <=> $hashDoc{$a} || $a cmp $b } keys %hashDoc;
 
-	return $output;
+		my $wordNum = keys %hashDoc;
+		return ($output, $totalWordNum, $wordNum);
+	}
 
 }
 
@@ -324,8 +342,11 @@ sub parseText {
 
 
 package ThreadWorker;
+
 sub bowCreate {
 	my $parser = shift;
+
+	my $redis = Redis->new(server => "127.0.0.1:6379");
 
 	for(;;){
 
@@ -343,8 +364,12 @@ sub bowCreate {
 			next;
 		}
 
-		my $bofw = $parser->parseText($text);
-		$parser->writeToFile($bofw);
+		my ($bofw,$totalNum,$num) = $parser->parseText($text);
+		if($totalNum>0){
+			$parser->writeToFile($bofw);
+			$redis->zincrby('total_num', 1, int($totalNum/100)*100);
+			$redis->zincrby('num', 1, int($num/100)*100);
+		}
 
 	}
 }

@@ -1,0 +1,53 @@
+<style type="text/css">
+<!--
+table {
+	table-layout: fixed;
+	width: 75%;
+}
+
+th.title { width: 50%; }
+td.value { width: 50%; }
+
+-->
+</style>
+
+[% USE fmt = format('%.2f') %]
+
+<table border=1>
+<tr>
+	<td>Total parsed pages : [%= pages %] pages</td>
+	<td>Duration : [% fmt(duration) %] sec</td>
+	<td>Throughput (Speed to parse) : [% fmt( pages / duration ) %] pages/sec</td>
+</tr>
+</table>
+
+<br>
+
+<table border=1 width=75%>
+<tr>
+	<th class="title">Range of total words in a page</th>
+	<th class="value">Count of pages</th>
+</tr>
+[% FOREACH elem IN total_num %]
+<tr>
+	<td>[% elem.key %] - [% elem.key + 100 - 1 %] </td>
+	<td>[% elem.value %]</td>
+</tr>
+[% END # FOREACH %]
+</table>
+
+<br>
+
+<table border=1 width=75%>
+<tr>
+	<th class="title">Range of words in a page</th>
+	<th class="value">Count of pages</th>
+</tr>
+[% FOREACH elem IN num %]
+<tr>
+	<td>[% elem.key %] - [% elem.key + 100 - 1 %] </td>
+	<td>[% elem.value %]</td>
+</tr>
+[% END # FOREACH %]
+</table>
+
