@@ -24,10 +24,13 @@ dependencies {
 		'com.googlecode.json-simple:json-simple:1.1',
 		'org.javassist:javassist:3.12.1',
 		'com.google.guava:guava:15.0',
+		'com.sparkjava:spark-core:2.3',
+		'com.sparkjava:spark-template-mustache:1.0.0',
 	)
 }
 
 apply plugin: 'application'
+mainClassName = 'WebView'
 
 task runTestEng {
 
@@ -43,7 +46,7 @@ task runTestEng {
 	def docfile="test/doc"
 	def outfile="test/out"
 
-	for(n in 1..10)
+	for(n in 0..9)
 	{
 
 		def nthbofwfile="${bofwfile}${n}.txt"
@@ -68,7 +71,7 @@ task runTestEng {
 
 	}
 
-	dependsOn << (1..10).collect{ "testEng${it}" }
+	dependsOn << (0..9).collect{ "testEng${it}" }
 
 }
 
