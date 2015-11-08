@@ -11,16 +11,20 @@ use threads;
 use Thread::Queue;
 use Redis;
 use Time::HiRes qw/ gettimeofday /;
+use Mouse;
+
+has Args => (
+	is => "ro",
+	isa => "Getopt::ArgParse::Namespace",
+	default => sub { parseArgs() },
+	required => 0,
+);
+
+__PACKAGE__->meta->make_immutable();
+
+no Mouse;
 
 main->new()->start();
-
-sub new {
-	my $class = shift;
-	my $self = {
-		Args => parseArgs(),
-	};
-	return bless $self, $class;
-}
 
 sub parseArgs {
 	my $self = shift;
