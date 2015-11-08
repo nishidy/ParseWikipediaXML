@@ -24,6 +24,8 @@ import org.msgpack.template.Template;
 import org.msgpack.MessageTypeException;
 import static org.msgpack.template.Templates.tMap;
 import static org.msgpack.template.Templates.TString;
+import com.google.common.base.Function;
+import com.google.common.collect.Lists;
 
 class ArgStore {
 
@@ -115,7 +117,7 @@ abstract class AbstParser {
 	abstract void createMapDictionary(String file) throws IOException;
 	abstract String convertToBaseWord(String line);
 	abstract boolean isJap();
-	abstract String[] getWordList(String text);
+	abstract List<String> getWordList(String text);
 	abstract boolean isWord(String word);
 
 	boolean isCommonWord(String word){
@@ -203,13 +205,18 @@ class EngParser extends AbstParser {
 	}
 
 	@Override
-	String[] getWordList(String text){
-		return text.split(" ");
+	List<String> getWordList(String text){
+		return Lists.transform( Arrays.asList(text.split(" ")), new Function<String, String>() {
+			@Override
+			public String apply(String arg0) {
+				return arg0.toLowerCase();
+			}
+		});
 	}
 
 	@Override
 	boolean isWord(String word){
-		Pattern wpat= Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]$");
+		Pattern wpat= Pattern.compile("^[a-z][a-z0-9'-]*[a-z0-9]$");
 		Matcher wmat= wpat.matcher(word);
 		if(wmat.find()){
 			return true;
@@ -247,7 +254,7 @@ class JapParser extends AbstParser {
 	void createMapDictionary(String file) { }
 
 	@Override
-	String[] getWordList(String text){
+	List<String> getWordList(String text){
 		List<Token> tokens = tokenizer.tokenize(text);
 		List<String> words = new ArrayList<>();
 
@@ -270,7 +277,7 @@ class JapParser extends AbstParser {
 				System.out.printf("%s: %s\n",token.getSurfaceForm(),token.getAllFeatures());
 			}
 		}
-		return words.toArray(new String[words.size()]);
+		return words;
 	}
 
 	@Override
@@ -351,8 +358,8 @@ class RunParser implements Runnable {
 
 				if(isDupInNgram(word)) continue;
 
-				listNgrams.add(word.toLowerCase());
-				listSaveNgramsOrder.add(word.toLowerCase());
+				listNgrams.add(word);
+				listSaveNgramsOrder.add(word);
 				if(!ArgStore.preferListNgram) Collections.sort(listNgrams);
 
 				if(listNgrams.size()<ngramcnt) continue;
