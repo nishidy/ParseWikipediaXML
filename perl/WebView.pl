@@ -2,19 +2,44 @@ use Plack::Builder;
 use Plack::Request;
 use Template;
 use Redis;
+use Data::Dumper;
+
+sub arr_in_arr {
+	my $in_arr = shift;
+
+	my @arr_in_arr;
+	my @arr;
+	my $c = 0;
+	for my $a (@{$in_arr}) {
+		print $a;
+		if(($c+=1)%2){
+			@arr = ();
+			push(@arr,$a);
+		}else{
+			push(@arr,$a);
+			push(@arr_in_arr,[@arr]);
+		}
+	}
+
+	return \@arr_in_arr;
+};
 
 my $app = sub {
 	my $env = shift;
 
 	my $redis = Redis->new(server => "127.0.0.1:6379");
 
-	my %total_num = $redis->zrange('total_num',0,-1,'withscores');
-	my %num = $redis->zrange('num',0,-1,'withscores');
+	my @total_num = $redis->zrevrange('total_num',0,-1,'withscores');
+	my @num = $redis->zrevrange('num',0,-1,'withscores');
+
+	my $total_num = arr_in_arr(\@total_num),
+	my $num = arr_in_arr(\@num),
 
 	my $pages = 0;
-	foreach my $key (keys(%total_num)) {
-		$pages += $hash_total_num{$key};
+	foreach my $key (@{$total_num}) {
+		$pages += ${$key}[1];
 	}
+	print $pages;
 
 	my $start_time = $redis->get('start_time');
 	my $finish_time = $redis->get('finish_time');
@@ -23,8 +48,8 @@ my $app = sub {
 	my $vars =  +{
 		pages => $pages,
 		duration => $duration,
-		total_num => \%total_num,
-		num => \%num,
+		total_num => $total_num,
+		num => $num,
 	};
 
 	my $tt = new Template;

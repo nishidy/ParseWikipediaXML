@@ -30,8 +30,8 @@ td.value { width: 50%; }
 </tr>
 [% FOREACH elem IN total_num %]
 <tr>
-	<td>[% elem.key %] - [% elem.key + 100 - 1 %] </td>
-	<td>[% elem.value %]</td>
+	<td>[% elem.0 %] - [% elem.0 + 100 - 1 %] </td>
+	<td>[% elem.1 %]</td>
 </tr>
 [% END # FOREACH %]
 </table>
@@ -45,8 +45,8 @@ td.value { width: 50%; }
 </tr>
 [% FOREACH elem IN num %]
 <tr>
-	<td>[% elem.key %] - [% elem.key + 100 - 1 %] </td>
-	<td>[% elem.value %]</td>
+	<td>[% elem.0 %] - [% elem.0 + 100 - 1 %] </td>
+	<td>[% elem.1 %]</td>
 </tr>
 [% END # FOREACH %]
 </table>
