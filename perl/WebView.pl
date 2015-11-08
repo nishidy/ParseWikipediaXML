@@ -19,7 +19,7 @@ sub arr_in_arr {
 		}
 	}
 
-	return \@arr_in_arr;
+	return @arr_in_arr;
 };
 
 my $app = sub {
@@ -30,11 +30,14 @@ my $app = sub {
 	my @total_num = $redis->zrevrange('total_num',0,-1,'withscores');
 	my @num = $redis->zrevrange('num',0,-1,'withscores');
 
-	my $total_num = arr_in_arr(\@total_num),
-	my $num = arr_in_arr(\@num),
+	@total_num = arr_in_arr(\@total_num),
+	@num = arr_in_arr(\@num),
 
 	my $pages = 0;
-	foreach my $key (@{$total_num}) {
+	#foreach my @key (@total_num) {
+	#	$pages += $key[1];
+	#}
+	foreach my $key (@total_num) {
 		$pages += ${$key}[1];
 	}
 
@@ -45,8 +48,8 @@ my $app = sub {
 	my $vars =  +{
 		pages => $pages,
 		duration => $duration,
-		total_num => $total_num,
-		num => $num,
+		total_num => \@total_num,
+		num => \@num,
 	};
 
 	my $tt = new Template;
