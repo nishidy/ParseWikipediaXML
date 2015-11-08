@@ -170,6 +170,7 @@ use strict;
 use utf8;
 use List::Util qw/reduce/;
 use Devel::Peek;
+use Time::HiRes qw/ gettimeofday /;
 
 sub new {
 	my ($class,$args) = @_;
@@ -191,6 +192,9 @@ sub new {
 sub readDictionary {
 	my $self = shift;
 
+	printf("Begin %s.\n", (caller 0)[3]);
+	my $start = gettimeofday();
+
 	my $fh;
 	if( $self->{Args}->inDictFile ){
 		open $fh, '<:utf8', $self->{Args}->inDictFile or die "Cannot open $self->{Args}->inDictFile :$!";
@@ -204,6 +208,7 @@ sub readDictionary {
 
 		close $fh;
 	}
+	printf("Finished %s in %.2f sec.\n", (caller 0)[3],gettimeofday()-$start);
 }
 
 sub parseText {
