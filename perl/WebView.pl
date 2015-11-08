@@ -2,7 +2,6 @@ use Plack::Builder;
 use Plack::Request;
 use Template;
 use Redis;
-use Data::Dumper;
 
 sub arr_in_arr {
 	my $in_arr = shift;
@@ -11,7 +10,6 @@ sub arr_in_arr {
 	my @arr;
 	my $c = 0;
 	for my $a (@{$in_arr}) {
-		print $a;
 		if(($c+=1)%2){
 			@arr = ();
 			push(@arr,$a);
@@ -39,7 +37,6 @@ my $app = sub {
 	foreach my $key (@{$total_num}) {
 		$pages += ${$key}[1];
 	}
-	print $pages;
 
 	my $start_time = $redis->get('start_time');
 	my $finish_time = $redis->get('finish_time');
