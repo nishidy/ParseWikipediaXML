@@ -24,7 +24,7 @@ object ParseWikipediaXML{
         workers: Int = 1
     )
 
-    case class Text(text:String, mapDict:Map[String,String], minl:Int, maxl:Int, minc:Int, writer:StreamWriter)
+    case class Text(page:String, mapDict:Map[String,String], minl:Int, maxl:Int, minc:Int, writer:StreamWriter)
 
     val stopwords = "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your".split(",")
 
@@ -32,7 +32,9 @@ object ParseWikipediaXML{
 
         def receive = {
 
-            case Text(text,mapDict,minl,maxl,minc,writer) =>
+            case Text(page,mapDict,minl,maxl,minc,writer) =>
+
+                val text = ( XML.loadString(page) \ "revision" \ "text" ).text
 
                 // allwords is list
                 // exclude stopwords and words that include symbols
@@ -53,6 +55,9 @@ object ParseWikipediaXML{
                     if( zipped.size>0 )
                         synchronized {
                             writer.write( zipped.filter( _._2.toInt>=minc )
+                            .sortWith{ (a,b) =>
+                                if(a._2==b._2) a._1 < b._1 else a._2 > b._2
+                            }
                             .map( x => List(x._1,x._2) )
                             .flatten.mkString(""," ","\n") )
                         }
@@ -117,6 +122,7 @@ object ParseWikipediaXML{
 
 
         parser.parse(args, Args()) match {
+
             case Some(c) => {
 
                 val system = ActorSystem("system")
@@ -131,25 +137,23 @@ object ParseWikipediaXML{
                 val page = new StringBuilder
                 val s = Source.fromFile(c.ifwiki)
                 try{
-                    for( line <- s.getLines ) {
 
+                    for( line <- s.getLines ) {
                         if( line.contains("<page>") || page.size > 0 ){
                             page.append(line)
                         }
 
                         if( line.contains("</page>") ){
-
-                            for{ node <- XML.loadString( page.toString ) \ "revision" \ "text"
-                                 text = node text }{
-                                actor ! new Text(text,dictionary,c.minl,c.maxl,c.minc,writer)
-                            }
+                            actor ! new Text(page.toString,dictionary,c.minl,c.maxl,c.minc,writer)
                             page.clear
                         }
-
                     }
                     s.close
+
                 } finally {
+
                     println("Finished to read from the input file.")
+
                     try {
                         implicit val timeout = Timeout(10,MINUTES)
                         val future = Await.result( actor ? "Finished", timeout.duration )
@@ -158,8 +162,10 @@ object ParseWikipediaXML{
                     }
 
                     println("Finished to write to the output file.")
+
                     system.shutdown()
                     writer.close
+
                 }
             }
 
