@@ -147,6 +147,7 @@ object ParseWikipediaXML{
                         }
 
                     }
+                    s.close
                 } finally {
                     println("Finished to read from the input file.")
                     try {
@@ -158,7 +159,7 @@ object ParseWikipediaXML{
 
                     println("Finished to write to the output file.")
                     system.shutdown()
-                    s.close
+                    writer.close
                 }
             }
 
