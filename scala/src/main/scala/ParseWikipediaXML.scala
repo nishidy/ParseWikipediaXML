@@ -156,12 +156,11 @@ object ParseWikipediaXML{
 
                     try {
                         implicit val timeout = Timeout(10,MINUTES)
-                        val future = Await.result( actor ? "Finished", timeout.duration )
+                        val msg: String = Await.result( actor ? "Finished", timeout.duration ).asInstanceOf[String]
+                        println(msg + " to write to the output file.")
                     } catch {
                         case e :TimeoutException => println("Too long to wait. Timeout happened.")
                     }
-
-                    println("Finished to write to the output file.")
 
                     system.shutdown()
                     writer.close
