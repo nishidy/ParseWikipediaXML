@@ -8,6 +8,6 @@ This repository contains word count programs which creates bag-of-words in vario
 * Web interface to check the intermediate report including throughput
 * Test program to check if the program produces correct results with or without threads (in share directory)
 
-Hoping to provide as a module in these programming languages. In terms of it, this repository is like an ecosystem to try and learn implementations in a better way.
+Hoping to provide as a module in these programming languages for general purpose, not specifically for Wikipedia database. In terms of it, this repository is like an ecosystem to try and learn implementations in a better way.
 
 
