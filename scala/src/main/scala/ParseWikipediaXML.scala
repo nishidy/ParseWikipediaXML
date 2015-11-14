@@ -39,8 +39,8 @@ object ParseWikipediaXML{
                 // allwords is list
                 // exclude stopwords and words that include symbols
                 val allwords =
-                    text.split( Array(' ',',','.') )
-                    .filter( x => (!stopwords.contains(x)) && isWord(x) )
+                    text.split( Array(' ') )
+                    .filter( x => !stopwords.contains(x) && isWord(x) )
                     .map( x => mapDict.get(x) match { case None =>  x; case Some(v) => v } )
 
                 // onewords is list in which redundant words are excluded
@@ -53,15 +53,9 @@ object ParseWikipediaXML{
                             yield ( word, allwords.filter( _==word ).size.toString )
 
                     if( zipped.size>0 )
-                        synchronized {
-                            writer.write( zipped.filter( _._2.toInt>=minc )
-                            .sortWith{ (a,b) =>
-                                if(a._2==b._2) a._1 < b._1 else a._2 > b._2
-                            }
-                            .map( x => List(x._1,x._2) )
-                            .flatten.mkString(""," ","\n") )
-                        }
-                    else ()
+                        synchronized { saveToFile(writer,zipped.filter(_._2.toInt>=minc)) }
+                    else
+                        ()
                 }
 
             case "Finished" => sender ! "Finished"
@@ -70,12 +64,21 @@ object ParseWikipediaXML{
 
         }
 
-        def isWord(x:String): Boolean = {
+        def isWord(x: String): Boolean = {
             val reg = """^([a-z][a-z0-9'-]+[a-z0-9])$""".r
             x match{
                 case reg(_) => true
                 case _ => false
             }
+        }
+
+        def saveToFile(w:StreamWriter, z: List[(String,String)]): Unit = {
+            w.write(
+                z.sortWith{ (a,b) => if(a._2==b._2) a._1 < b._1 else a._2 > b._2 }
+                .map( x => List(x._1,x._2) )
+                .flatten
+                .mkString(""," ","\n")
+            )
         }
 
     }
