@@ -19,7 +19,7 @@ object ParseWikipediaXML{
         ofcont: String = "",
         oftitle: String = "",
         minl: Int = 2,
-        maxl: Int = 64,
+        maxl: Int = 65535,
         minc: Int = 1,
         workers: Int = 1
     )
@@ -50,7 +50,7 @@ object ParseWikipediaXML{
                 else {
                     val zipped =
                         for( word <- onewords )
-                            yield ( word, allwords.filter( _==word ).size.toString )
+                            yield ( word, allwords.filter( _==word ).size )
 
                     if( zipped.size>0 )
                         synchronized { saveToFile(writer,zipped.filter(_._2.toInt>=minc)) }
@@ -72,7 +72,7 @@ object ParseWikipediaXML{
             }
         }
 
-        def saveToFile(w:StreamWriter, z: List[(String,String)]): Unit = {
+        def saveToFile(w:StreamWriter, z: List[(String,Int)]): Unit = {
             w.write(
                 z.sortWith{ (a,b) => if(a._2==b._2) a._1 < b._1 else a._2 > b._2 }
                 .map( x => List(x._1,x._2) )
