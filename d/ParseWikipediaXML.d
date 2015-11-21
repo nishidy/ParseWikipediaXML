@@ -1,5 +1,10 @@
 import std.stdio, std.string, std.conv, std.regex, std.algorithm, std.c.stdlib;
 
+struct Bofw {
+	string term;
+	uint freq;
+};
+
 void main(string argv[]) {
 
 	if(argv.length!=3){
@@ -19,41 +24,46 @@ void main(string argv[]) {
 
 		if(beginpage) page ~= line;
 		if(endpage){
-			auto hashBofw= parsePage(page);
-			outfile.writef("%s\n",hashToString(hashBofw));
+			auto arrBofw= parsePage(page);
+			outfile.writef("%s\n",arrayToString(arrBofw));
 			beginpage=endpage=false;
 		}
 	}
 
 }
 
-string hashToString(int[string] hashBofw){
+string arrayToString(Bofw[] arrBofw){
 	char[] sliceBofw;
-	foreach(k,v;hashBofw) {
-		sliceBofw ~= k ~ " " ~ to!string(v) ~ " ";
+	foreach(bofw;arrBofw) {
+		sliceBofw ~= bofw.term ~ " " ~ to!string(bofw.freq) ~ " ";
 	}
 	--sliceBofw.length;
 
 	return to!string(sliceBofw);
 }
 
-int[string] parsePage(char[] page){
+Bofw[] parsePage(char[] page){
 
-	int[string] hashDict;
+	Bofw[] bofw;
+	ulong[string] bofwIndex;
 
 	foreach(string word; page.split().map!(to!string).filter!matchWord()){
-		if(word in hashDict){
-			++hashDict[word];
+		if(word in bofwIndex){
+			++bofw[bofwIndex[word]].freq;
 		}else{
-			hashDict[word] = 1;
+			auto cnt=bofwIndex.keys.length;
+			bofwIndex[word]=cnt;
+			bofw ~= Bofw(word,1);
 		}
 	}
 
-	return hashDict;
+	multiSort!("a.freq > b.freq","a.term < b.term",SwapStrategy.unstable)(bofw);
+	return bofw;
 
 }
 
 bool matchWord(string word){
 	return match(word, r"^[a-z][a-z0-9'-]*[a-z0-9]$").to!bool;
 }
+
 
