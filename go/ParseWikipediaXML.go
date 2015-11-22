@@ -1,4 +1,5 @@
-package ParseWikipediaXML
+//package ParseWikipediaXML
+package main
 
 import (
 	"bufio"
@@ -6,6 +7,7 @@ import (
 	"io"
 	//"io/ioutil"
 	//"compress/bzip2"
+	"encoding/json"
 	"flag"
 	"net/http"
 	"os"
@@ -49,6 +51,28 @@ func (l List) Less(i, j int) bool {
 
 func (l List) Swap(i, j int) {
 	l[i], l[j] = l[j], l[i]
+}
+
+func (l List) FilterByCnt(args Args) List {
+	nlist := List{}
+	for _, e := range l {
+		if e.freq < args.minWord {
+			continue
+		}
+		nlist = append(nlist, e)
+	}
+	return nlist
+}
+
+func (l List) ToString() string {
+	var strs []string
+	for i, entry := range l {
+		if i > 0 {
+			strs = append(strs, fmt.Sprintf(" "))
+		}
+		strs = append(strs, fmt.Sprintf("%s %d", entry.word, entry.freq))
+	}
+	return strings.Join(strs, "")
 }
 
 func Any(w string, list []string) bool {
@@ -312,79 +336,44 @@ func (rtype *routineType) ParseAndWriteRoutine(args Args, data []string) {
 	}
 
 	structWordFreq := List{}
+
+	// Put map into List{} to sort them by value
 	for k, v := range ctype.MapWordFreq {
 		e := Entry{k, v}
 		structWordFreq = append(structWordFreq, e)
 	}
+
 	sort.Sort(structWordFreq)
 
-	var listText []string
-
+	var strText string
 	if args.outFormatJson {
-		st, err := rtype.hOutBofwFile.Stat()
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(11)
-		}
-		if st.Size() == 0 {
-			listText = append(listText, "[\n    { ")
-		} else {
-			listText = append(listText, ",\n    { ")
-		}
+		byteText, _ := json.Marshal(structWordFreq)
+		strText = string(byteText)
+	} else {
+		strText = structWordFreq.FilterByCnt(args).ToString()
 	}
+	strText += "\n"
 
-	k := 0
-	for _, entry := range structWordFreq {
+	/* Only one thread can write the result into file at the same time */
+	rtype.chanMutex <- 1
+	rtype.hOutBofwFile.WriteString(strText)
+	rtype.hOutTitleFile.WriteString(fmt.Sprintf("%s\n", title))
+	<-rtype.chanMutex
 
-		word := entry.word
-		freq := entry.freq
-
-		if freq < args.minWord {
-			continue
-		}
-
-		if k > 0 {
-			if args.outFormatJson {
-				listText = append(listText, ", ")
-			} else {
-				listText = append(listText, " ")
-			}
-		}
-		if args.outFormatJson {
-			listText = append(listText, fmt.Sprintf("%s:%d", word, freq))
-		} else {
-			listText = append(listText, fmt.Sprintf("%s %d", word, freq))
-		}
-		k++
-	}
-
-	if len(listText) > 0 {
-
-		if args.outFormatJson {
-			listText = append(listText, " }")
-		} else {
-			listText = append(listText, "\n")
-		}
-
-		strText := strings.Join(listText, "")
-
-		/* Only one thread can write the result into file at the same time */
-		rtype.chanMutex <- 1
-		rtype.hOutBofwFile.WriteString(strText)
-		rtype.hOutTitleFile.WriteString(fmt.Sprintf("%s\n", title))
-		<-rtype.chanMutex
-
+	if rtype.client != nil {
 		err := rtype.client.ZIncrBy("total_num", 1, strconv.Itoa(wordCount/100*100)).Err()
 		if err != nil {
 			panic(err)
 		}
+	}
 
-		err = rtype.client.ZIncrBy("num", 1, strconv.Itoa(len(structWordFreq)/100*100)).Err()
+	if rtype.client != nil {
+		err := rtype.client.ZIncrBy("num", 1, strconv.Itoa(len(structWordFreq)/100*100)).Err()
 		if err != nil {
 			panic(err)
 		}
-
 	}
+
 }
 
 type Args struct {
@@ -435,7 +424,6 @@ func main() {
 			stopWords = append(stopWords, word)
 		}
 	} else {
-		stopWords := make([]string, 0, 256)
 		for _, word := range strings.Split(stopWordsEn, ",") {
 			stopWords = append(stopWords, word)
 		}
@@ -461,12 +449,6 @@ func main() {
 	defer hOutTitleFile.Close()
 	defer hOutBofwFile.Close()
 
-	if args.outFormatJson {
-		defer func() {
-			hOutBofwFile.WriteString("\n]")
-		}()
-	}
-
 	var page = make([]string, 0, 65535)
 	var beginAppend, finishAppend = false, false
 	var str string
@@ -489,6 +471,11 @@ func main() {
 		DB:       0,
 	})
 
+	_, err = client.Ping().Result()
+	if err != nil {
+		client = nil
+	}
+
 	rtype := routineType{
 		chanMutex,
 		chanSem,
@@ -500,9 +487,11 @@ func main() {
 		client,
 	}
 
-	err = client.Set("start_time", time.Now().UnixNano()/int64(time.Millisecond), 0).Err()
-	if err != nil {
-		panic(err)
+	if client != nil {
+		err = client.Set("start_time", time.Now().UnixNano()/int64(time.Millisecond), 0).Err()
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	scanner := bufio.NewScanner(hInWikiFile)
@@ -531,9 +520,11 @@ func main() {
 
 	wait.Wait()
 
-	err = client.Set("finish_time", time.Now().UnixNano()/int64(time.Millisecond), 0).Err()
-	if err != nil {
-		panic(err)
+	if client != nil {
+		err = client.Set("finish_time", time.Now().UnixNano()/int64(time.Millisecond), 0).Err()
+		if err != nil {
+			panic(err)
+		}
 	}
 
 }
