@@ -1,24 +1,30 @@
 require 'thor'
 require 'redis'
 
+# Abstract Parser class
+# Params:
+# +options+:: command line arguments
 class AbstParser
-
   attr_reader :options, :write_lock, :hdlr_bofw, :redis
   attr_reader :tospexp, :splexp, :termexp
 
   def initialize(options)
     @options = options
     @write_lock = Mutex.new
+    begin
+      @hdlr_bofw = File.open(options[:outBofwFile], 'a')
+    rescue => e
+      e.message
+    end
+  end
+
+  def set_redis
     @redis = Redis.new
     begin
       @redis.ping
     rescue
       puts 'Redis server is not running.'
-    end
-    begin
-      @hdlr_bofw = File.open(options[:outBofwFile], 'a')
-    rescue => e
-      e.message
+      @redis = nil
     end
   end
 
@@ -31,14 +37,16 @@ class AbstParser
     end
   end
 
-  def set_exps()
-    @tospexp = "[,.;]"
+  def set_exps
+    @tospexp = '[,.;]'
     @splexp = "[ \n]"
     @termexp = "^[a-z][0-9a-z'-]*[0-9a-z]$"
   end
-
 end
 
+# English Parser class inherited from Abstract Parser class
+# Params:
+# +options+:: command line arguments
 class EngParser < AbstParser
   attr_reader :hash_dict, :stopwords
 
@@ -48,79 +56,87 @@ class EngParser < AbstParser
     @stopwords = stopwords.split(/,/)
   end
 
+  def start_parse(page)
+    fiber = Fiber.new do |page_|
+      %r{<text[^>]*>([^<>]*)<\/text>} =~ page_
+      text = Regexp.last_match(1)
+
+      h, n = parse_bofw(text)
+      post_parse(h, n)
+    end
+
+    begin
+      fiber.resume page
+    rescue => e
+      p e.message
+    end
+  end
+
+  def parse_bofw(text)
+    hash_bofw = {}
+    total_num_of_words = 0
+    text.gsub(/#{@tospexp}/, ' ').split(/#{@splexp}/).map(&:downcase)
+      .select { |w| !@stopwords.include?(w) }
+      .select { |w| w =~ /#{@termexp}/ }.each do |word|
+      word = @hash_dict[word] if @hash_dict.key? word
+      hash_bofw.key?(word) ? hash_bofw[word] += 1 : hash_bofw[word] = 1
+      total_num_of_words += 1
+    end
+    [hash_bofw, total_num_of_words]
+  end
+
+  def post_parse(hash_bofw, total_num_of_words)
+    return if hash_bofw.empty? ||
+         total_num_of_words > @options[:"max-page-words"] ||
+         total_num_of_words < @options[:"min-page-words"]
+
+    save_to_file(
+      hash_bofw.sort do |(k1, v1), (k2, v2)|
+        v1 == v2 ? k1 <=> k2 : v2 <=> v1
+      end.inject('') do |bofw, arr|
+        bofw + arr[0] + ' ' + arr[1].to_s + ' '
+      end.rstrip + "\n"
+    )
+
+    redis_save(total_num_of_words, hash_bofw.keys.size) unless @redis.nil?
+  end
+
+  def redis_save(t, n)
+    @redis.zincrby 'total_num', 1, get_set_val(t)
+    @redis.zincrby 'num', 1, get_set_val(n)
+  end
+
   def run_parse
-    startflag = stopflag = false
-    page = ''
+    @redis.set 'start_time', Time.now.to_f unless @redis.nil?
 
-    @redis.set 'start_time', Time.now.to_f if @redis.connected?
-
+    startflag = stopflag = false, page = ''
     File.readlines(@options[:inWikiFile]).each do |line|
       startflag = true if line.include? '<page>'
       stopflag = true if line.include? '</page>'
       page << line if startflag
-      if startflag && stopflag
-        fiber = Fiber.new do |page_|
-          %r{<text[^>]*>([^<>]*)<\/text>} =~ page_
-          text = Regexp.last_match(1)
-          hash_bofw = {}
-          total_num_of_words = 0
+      next unless startflag && stopflag
 
-          text.gsub(/#{@tospexp}/," ")
-		  .split(/#{@splexp}/)
-		  .map(&:downcase)
-		  .select{|w|!@stopwords.include?(w)}
-		  .select{|w|w=~/#{@termexp}/}
-		  .each do |word|
-            word = @hash_dict[word] if @hash_dict.key? word
-            hash_bofw.key?(word) ? hash_bofw[word] += 1 : hash_bofw[word] = 1
-            total_num_of_words += 1
-          end
+      start_parse page
 
-          unless hash_bofw.empty? ||
-                 total_num_of_words > @options[:"max-page-words"] ||
-                 total_num_of_words < @options[:"min-page-words"]
-            save_to_file(
-              hash_bofw.sort do |(k1, v1), (k2, v2)|
-                v1 == v2 ? k1 <=> k2 : v2 <=> v1
-              end.inject('') do |bofw, arr|
-                bofw + arr[0] + ' ' + arr[1].to_s + ' '
-              end.rstrip + "\n"
-            )
-            if @redis.connected?
-              num_of_words = hash_bofw.keys.size
-              @redis.zincrby 'total_num', 1, get_set_val(total_num_of_words)
-              @redis.zincrby 'num', 1, get_set_val(num_of_words)
-            end
-          end
-
-        end
-
-        begin
-          fiber.resume page
-        rescue => e
-          p e.message
-        end
-
-        page = ''
-        startflag = stopflag = false
-      end
+      page = ''
+      startflag = stopflag = false
     end
 
-    @redis.set 'finish_time', Time.now.to_f if @redis.connected?
+    @redis.set 'finish_time', Time.now.to_f unless @redis.nil?
   end
 
   def read_dictionary
     @hash_dict = {}
-    unless @options[:inDictFile].nil?
-      print 'Begin reading from dictionary... '
-      File.readlines(@options[:inDictFile]).each do |line|
-        items = line.split(/[ \t]/)
-        trans = items[0]
-        base = items[3]
-        @hash_dict[trans] = base unless trans == base
-      end
-      print "Finshded reading from dictionary.\n"
+    return if @options[:inDictFile].nil?
+
+    print 'Begin reading from dictionary... '
+    File.readlines(@options[:inDictFile]).each do |line|
+      items = line.split(/[ \t]/)
+      trans = items[0]
+      base = items[3]
+      @hash_dict[trans] = base unless trans == base
     end
+    print "Finshded reading from dictionary.\n"
   end
 
   def get_set_val(num)
@@ -129,41 +145,60 @@ class EngParser < AbstParser
 end
 
 class JapParser < AbstParser
-  def initialize(options)
-    super(options)
-  end
-
-  def run_parse
-  end
 end
 
+# Command Line Parse class
+# Params:
 class CLI < Thor
   package_name 'ParseWikipediaXML'
   default_command :bagofwords
 
   option :inWikiFile,
-         type: :string, aliases: '-i', required: true, desc: 'Input file of Wikipedia'
+         type: :string,
+         aliases: '-i',
+         required: true,
+         desc: 'Input file of Wikipedia'
 
   option :inDictFile,
-         type: :string, aliases: '-d', desc: 'Input file of dictionary'
+         type: :string,
+         aliases: '-d',
+         desc: 'Input file of dictionary'
 
   option :outBofwFile,
-         type: :string, aliases: '-s', required: true, desc: 'Ouput file for bag-of-words'
+         type: :string,
+         aliases: '-s',
+         required: true,
+         desc: 'Ouput file for bag-of-words'
 
   option :outTitleFile,
-         type: :string, aliases: '-t', desc: 'Ouput file for title'
+         type: :string,
+         aliases: '-t',
+         desc: 'Ouput file for title'
 
   option :"min-page-words",
-         type: :numeric, aliases: '-m', default: 1, desc: 'How many terms at least a page should contain'
+         type: :numeric,
+         aliases: '-m',
+         default: 1,
+         desc: 'How many terms at least a page should contain'
 
   option :"max-page-words",
-         type: :numeric, aliases: '-x', default: 65_535, desc: 'How many terms at most a page should contain'
+         type: :numeric,
+         aliases: '-x',
+         default: 65_535,
+         desc: 'How many terms at most a page should contain'
 
   option :"min-word-count",
-         type: :numeric, aliases: '-c', default: 1, desc: 'How many times a term should appear in a page'
+         type: :numeric,
+         aliases: '-c',
+         default: 1,
+         desc: 'How many times a term should appear in a page'
 
   option :workers,
-         type: :numeric, aliases: '-w', default: 1, desc: '# of worker but thread is not implemented, this is only for the common test parameter.'
+         type: :numeric,
+         aliases: '-w',
+         default: 1,
+         desc: '# of worker but thread is not implemented,\
+               this is only for the common test parameter.'
 
   method_option :japanese, aliases: '-j', desc: 'If it is in Japanese'
 
@@ -179,7 +214,8 @@ class CLI < Thor
     parser.run_parse
   end
 
-  desc 'convert bag-of-words according to TF-IDF usage', 'convert bag-of-words according to TF-IDF desc'
+  desc 'convert bag-of-words according to TF-IDF usage',
+       'convert bag-of-words according to TF-IDF desc'
   def tfidf
   end
 end

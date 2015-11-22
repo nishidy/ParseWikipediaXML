@@ -1,0 +1,11 @@
+FileName:
+  Exclude:
+    - '**/**.rb'
+AllCops:
+  Exclude:
+    - 'tmp/**'
+
+Metrics/MethodLength:
+  Max: 15
+
+inherit_from: .rubocop_todo.yml
