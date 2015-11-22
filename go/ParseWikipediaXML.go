@@ -29,8 +29,8 @@ var (
 )
 
 type Entry struct {
-	Word string `json:"Word"`
-	Freq int    `json:"Freq"`
+	word string
+	freq int
 }
 
 type List []Entry
@@ -40,10 +40,10 @@ func (l List) Len() int {
 }
 
 func (l List) Less(i, j int) bool {
-	if l[i].Freq != l[j].Freq {
-		return l[i].Freq > l[j].Freq
+	if l[i].freq != l[j].freq {
+		return l[i].freq > l[j].freq
 	} else {
-		return l[i].Word < l[j].Word
+		return l[i].word < l[j].word
 	}
 }
 
@@ -54,7 +54,7 @@ func (l List) Swap(i, j int) {
 func (l List) FilterByCnt(args Args) List {
 	nlist := List{}
 	for _, e := range l {
-		if e.Freq < args.minWord {
+		if e.freq < args.minWord {
 			continue
 		}
 		nlist = append(nlist, e)
@@ -68,7 +68,7 @@ func (l List) ToString() string {
 		if i > 0 {
 			strs = append(strs, fmt.Sprintf(" "))
 		}
-		strs = append(strs, fmt.Sprintf("%s %d", entry.Word, entry.Freq))
+		strs = append(strs, fmt.Sprintf("%s %d", entry.word, entry.freq))
 	}
 	return strings.Join(strs, "")
 }
