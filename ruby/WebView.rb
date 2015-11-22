@@ -1,6 +1,8 @@
 require 'sinatra/base'
 require 'redis'
 
+# WebView on Sinatra
+# Params:
 class App < Sinatra::Base
   set :redis, Redis.new
   set :environment, :production
