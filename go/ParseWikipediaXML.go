@@ -3,12 +3,10 @@ package main
 
 import (
 	"bufio"
-	"fmt"
-	"io"
-	//"io/ioutil"
-	//"compress/bzip2"
 	"encoding/json"
 	"flag"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"regexp"
@@ -31,8 +29,8 @@ var (
 )
 
 type Entry struct {
-	word string
-	freq int
+	Word string `json:"Word"`
+	Freq int    `json:"Freq"`
 }
 
 type List []Entry
@@ -42,10 +40,10 @@ func (l List) Len() int {
 }
 
 func (l List) Less(i, j int) bool {
-	if l[i].freq != l[j].freq {
-		return l[i].freq > l[j].freq
+	if l[i].Freq != l[j].Freq {
+		return l[i].Freq > l[j].Freq
 	} else {
-		return l[i].word < l[j].word
+		return l[i].Word < l[j].Word
 	}
 }
 
@@ -56,7 +54,7 @@ func (l List) Swap(i, j int) {
 func (l List) FilterByCnt(args Args) List {
 	nlist := List{}
 	for _, e := range l {
-		if e.freq < args.minWord {
+		if e.Freq < args.minWord {
 			continue
 		}
 		nlist = append(nlist, e)
@@ -70,7 +68,7 @@ func (l List) ToString() string {
 		if i > 0 {
 			strs = append(strs, fmt.Sprintf(" "))
 		}
-		strs = append(strs, fmt.Sprintf("%s %d", entry.word, entry.freq))
+		strs = append(strs, fmt.Sprintf("%s %d", entry.Word, entry.Freq))
 	}
 	return strings.Join(strs, "")
 }
@@ -335,21 +333,21 @@ func (rtype *routineType) ParseAndWriteRoutine(args Args, data []string) {
 		}
 	}
 
-	structWordFreq := List{}
-
-	// Put map into List{} to sort them by value
-	for k, v := range ctype.MapWordFreq {
-		e := Entry{k, v}
-		structWordFreq = append(structWordFreq, e)
-	}
-
-	sort.Sort(structWordFreq)
-
 	var strText string
 	if args.outFormatJson {
-		byteText, _ := json.Marshal(structWordFreq)
-		strText = string(byteText)
+		bs, err := json.Marshal(ctype.MapWordFreq)
+		if err != nil {
+			panic(err)
+		}
+		strText = string(bs)
 	} else {
+		// Put map into List{} to sort them by value
+		structWordFreq := List{}
+		for k, v := range ctype.MapWordFreq {
+			e := Entry{k, v}
+			structWordFreq = append(structWordFreq, e)
+		}
+		sort.Sort(structWordFreq)
 		strText = structWordFreq.FilterByCnt(args).ToString()
 	}
 	strText += "\n"
@@ -368,7 +366,7 @@ func (rtype *routineType) ParseAndWriteRoutine(args Args, data []string) {
 	}
 
 	if rtype.client != nil {
-		err := rtype.client.ZIncrBy("num", 1, strconv.Itoa(len(structWordFreq)/100*100)).Err()
+		err := rtype.client.ZIncrBy("num", 1, strconv.Itoa(len(ctype.MapWordFreq)/100*100)).Err()
 		if err != nil {
 			panic(err)
 		}
