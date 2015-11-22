@@ -1,4 +1,4 @@
-package main
+package ParseWikipediaXML
 
 import (
 	"bufio"
@@ -64,7 +64,16 @@ type countWordType struct {
 	text        string
 	mapDict     map[string]string
 	stopWords   []string
-	mapWordFreq map[string]int
+	MapWordFreq map[string]int
+}
+
+func CreateCountWordType(text string) countWordType {
+	return countWordType{
+		text,
+		nil,
+		nil,
+		make(map[string]int),
+	}
 }
 
 func (ctype *countWordType) CountWordJp() int {
@@ -99,10 +108,10 @@ func (ctype *countWordType) CountWordJp() int {
 			continue
 		}
 
-		if _, err := ctype.mapWordFreq[word]; err {
-			ctype.mapWordFreq[word]++
+		if _, err := ctype.MapWordFreq[word]; err {
+			ctype.MapWordFreq[word]++
 		} else {
-			ctype.mapWordFreq[word] = 1
+			ctype.MapWordFreq[word] = 1
 		}
 
 		wc++
@@ -114,9 +123,6 @@ func (ctype *countWordType) CountWordJp() int {
 func (ctype *countWordType) CountWordEn() int {
 
 	var re *regexp.Regexp
-
-	//re = regexp.MustCompile("[" + regexp.QuoteMeta("[[]]();|") + "(, )(. )( -)]")
-	//text := re.ReplaceAllString(ctype.text, " ")
 
 	re, _ = regexp.Compile("^[a-z][a-z0-9'-]*[a-z0-9]$")
 
@@ -133,10 +139,10 @@ func (ctype *countWordType) CountWordEn() int {
 				word = ctype.mapDict[word]
 			}
 
-			if _, err := ctype.mapWordFreq[word]; err {
-				ctype.mapWordFreq[word]++
+			if _, err := ctype.MapWordFreq[word]; err {
+				ctype.MapWordFreq[word]++
 			} else {
-				ctype.mapWordFreq[word] = 1
+				ctype.MapWordFreq[word] = 1
 			}
 
 			wc++
@@ -306,7 +312,7 @@ func (rtype *routineType) ParseAndWriteRoutine(args Args, data []string) {
 	}
 
 	structWordFreq := List{}
-	for k, v := range ctype.mapWordFreq {
+	for k, v := range ctype.MapWordFreq {
 		e := Entry{k, v}
 		structWordFreq = append(structWordFreq, e)
 	}
