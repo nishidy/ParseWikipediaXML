@@ -87,8 +87,8 @@ class EngParser < AbstParser
 
   def post_parse(hash_bofw, total_num_of_words)
     return if hash_bofw.empty? ||
-         total_num_of_words > @options[:"max-page-words"] ||
-         total_num_of_words < @options[:"min-page-words"]
+              total_num_of_words > @options[:"max-page-words"] ||
+              total_num_of_words < @options[:"min-page-words"]
 
     save_to_file(
       hash_bofw.sort do |(k1, v1), (k2, v2)|

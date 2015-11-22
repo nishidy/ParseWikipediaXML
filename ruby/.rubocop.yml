@@ -8,4 +8,8 @@ AllCops:
 Metrics/MethodLength:
   Max: 15
 
+Style/MultilineBlockChain:
+  Exclude:
+    - '**/**.rb'
+
 inherit_from: .rubocop_todo.yml
