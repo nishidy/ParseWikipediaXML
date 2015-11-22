@@ -2,7 +2,10 @@ require 'thor'
 require 'redis'
 
 class AbstParser
+
   attr_reader :options, :write_lock, :hdlr_bofw, :redis
+  attr_reader :tospexp, :splexp, :termexp
+
   def initialize(options)
     @options = options
     @write_lock = Mutex.new
@@ -27,6 +30,13 @@ class AbstParser
       write_lock.unlock
     end
   end
+
+  def set_exps()
+    @tospexp = "[,.;]"
+    @splexp = "[ \n]"
+    @termexp = "^[a-z][0-9a-z'-]*[0-9a-z]$"
+  end
+
 end
 
 class EngParser < AbstParser
@@ -54,13 +64,18 @@ class EngParser < AbstParser
           text = Regexp.last_match(1)
           hash_bofw = {}
           total_num_of_words = 0
-          text.split.map(&:downcase).each do |word|
-            next unless word =~ /^[a-z][0-9a-z'-]*[0-9a-z]$/
-            next if @stopwords.include? word
+
+          text.gsub(/#{@tospexp}/," ")
+		  .split(/#{@splexp}/)
+		  .map(&:downcase)
+		  .select{|w|!@stopwords.include?(w)}
+		  .select{|w|w=~/#{@termexp}/}
+		  .each do |word|
             word = @hash_dict[word] if @hash_dict.key? word
             hash_bofw.key?(word) ? hash_bofw[word] += 1 : hash_bofw[word] = 1
             total_num_of_words += 1
           end
+
           unless hash_bofw.empty? ||
                  total_num_of_words > @options[:"max-page-words"] ||
                  total_num_of_words < @options[:"min-page-words"]
@@ -77,12 +92,15 @@ class EngParser < AbstParser
               @redis.zincrby 'num', 1, get_set_val(num_of_words)
             end
           end
+
         end
+
         begin
           fiber.resume page
         rescue => e
           p e.message
         end
+
         page = ''
         startflag = stopflag = false
       end
@@ -156,6 +174,7 @@ class CLI < Thor
     else
       parser = EngParser.new(options)
       parser.read_dictionary
+      parser.set_exps
     end
     parser.run_parse
   end
