@@ -1,4 +1,5 @@
 import std.stdio, std.string, std.conv, std.regex, std.algorithm, std.c.stdlib;
+import std.uni: toLower;
 
 struct Bofw {
 	string term;
@@ -20,21 +21,24 @@ void main(string argv[]) {
 	bool beginpage = false, endpage = false;
 	char[] page;
 
-	foreach(char[] line; infile.byLine() ) {
+	foreach(char[] line; infile.byLine()) {
 		if(line.indexOf("<page>")>-1) beginpage = true;
 		if(line.indexOf("</page>")>-1) endpage = true;
-
 		if(beginpage) page ~= line;
+
 		if(endpage){
-			auto arrBofw= parsePage(page);
-			outfile.writef("%s\n",arrayToString(arrBofw));
+			auto arrBofw = parsePage(page);
+			if(arrBofw.length>0){
+				outfile.writef("%s\n",arrayToString(arrBofw));
+			}
+			page.length = 0;
 			beginpage=endpage=false;
 		}
 	}
 
 }
 
-string arrayToString(Bofw[] arrBofw){
+string arrayToString(Bofw[] arrBofw) {
 	char[] sliceBofw;
 	foreach(bofw;arrBofw) {
 		sliceBofw ~= bofw.term ~ " " ~ to!string(bofw.freq) ~ " ";
@@ -44,7 +48,7 @@ string arrayToString(Bofw[] arrBofw){
 	return to!string(sliceBofw);
 }
 
-Bofw[] parsePage(char[] page){
+Bofw[] parsePage(char[] page) {
 
 	Bofw[] bofw;
 	ulong[string] bofwIndex;
@@ -52,6 +56,7 @@ Bofw[] parsePage(char[] page){
 	foreach(string word;
 			page.split()
 			.map!(to!string)
+			.map!(toLower)
 			.filter!matchWord()
 			.filter!(a=>!stopwords.canFind(a))
 	){
@@ -69,8 +74,6 @@ Bofw[] parsePage(char[] page){
 
 }
 
-bool matchWord(string word){
+bool matchWord(string word) {
 	return match(word, r"^[a-z][a-z0-9'-]*[a-z0-9]$").to!bool;
 }
-
-
