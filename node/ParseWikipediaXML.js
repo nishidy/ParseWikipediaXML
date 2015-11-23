@@ -4,8 +4,9 @@ var async = require('async')
 var minimist = require('minimist')
 var merge = require('merge')
 var kuromoji = require('kuromoji')
+var client = require('redis').createClient();
 
-var BUFSIZE = 65536*32
+var BUFSIZE = 65536*256
 
 var argv = minimist(process.argv.slice(2), {
 	string: [
@@ -64,8 +65,10 @@ var Parser = function(argv){
 		this.stopwords = stopwordsEn.split(",")
 		this.dictFile = argv.d
 
-		var dictStats = fs.statSync(this.dictFile)
-		this.dictFileSize = dictStats["size"]
+		if(this.dictFile!=""){
+			var dictStats = fs.statSync(this.dictFile)
+			this.dictFileSize = dictStats["size"]
+		}
 	}
 
 }
@@ -175,7 +178,7 @@ function parseEn(page){
 	var numWordsInDoc = 0
 	var text= page.match(/<text[^<>]*>([\s\S]*?)<\/text>/)[1]
 
-	// To deliver these propaties to forEach function
+	// To bring these properties into forEach function
 	var _this = this
 
 	text.replace(/\n/g," ").split(" ").forEach(function(word){
@@ -207,7 +210,10 @@ function parseEn(page){
 
 	if(numWordsInDoc>=argv.m && strBofw.length>0){
 		fs.appendFileSync(_this.outputFile,strBofw+"\n")
+		client.zincrby("total_num", 1, parseInt(numWordsInDoc/100)*100, function(){} );
+		client.zincrby("num", 1, parseInt(strBofw.length/100)*100, function(){} );
 	}
+
 }
 
 co(function *(){
@@ -218,27 +224,30 @@ co(function *(){
 	if(parser.isJapanese){
 		parser.tokenizer = yield genTokenizer();
 	}else{
-		// Read dictionary
-		var hDictFile = yield openAsync(parser.dictFile)
-		var mapDict = {}
-		console.log("Begin reading dictionary.")
-		while(offset<parser.dictFileSize){
-			process.stdout.write(~~(offset*100/parser.dictFileSize)+"%..")
+		if(parser.dictFile!=""){
+			// Read dictionary
+			var hDictFile = yield openAsync(parser.dictFile)
+			var mapDict = {}
+			console.log("Begin reading dictionary.")
+			while(offset<parser.dictFileSize){
+				process.stdout.write(~~(offset*100/parser.dictFileSize)+"%..")
 
-			var length = (parser.dictFileSize-offset)>BUFSIZE ? BUFSIZE : parser.dictFileSize-offset
-			text += yield readAsync(hDictFile,length)
-			merge(mapDict, yield readDictionary(text.slice(0,text.indexOf(/\n/))))
-			text = text.slice(text.lastIndexOf(/\n/)+1,text.length)
-			offset += BUFSIZE
+				var length = (parser.dictFileSize-offset)>BUFSIZE ? BUFSIZE : parser.dictFileSize-offset
+				text += yield readAsync(hDictFile,length)
+				merge(mapDict, yield readDictionary(text.slice(0,text.indexOf(/\n/))))
+				text = text.slice(text.lastIndexOf(/\n/)+1,text.length)
+				offset += length
+			}
+			parser.mapDict = mapDict
+			console.log(" Finished reading dictionary.")
 		}
-		parser.mapDict = mapDict
-		console.log(" Finished reading dictionary.")
 	}
 
 	// Parse WikipediaXML
 	offset = 0
 	var hInputFile = yield openAsync(parser.inputFile)
 	console.log("Begins reading WikipediaXML.")
+	client.set("start_time",new Date().getTime());
 	while(offset<parser.inputFileSize){
 		process.stdout.write(~~(offset*100/parser.inputFileSize)+"%..")
 
@@ -249,9 +258,12 @@ co(function *(){
 			parser.parse(page)
 			text=text.substr(text.indexOf("</page>")+"</page>".length,text.length)
 		}
-		offset += BUFSIZE
+		offset += length
 	}
 	console.log(" Finished reading WikipediaXML.")
+	client.set("stop_time",new Date().getTime());
+
+	process.exit();
 
 }).catch(function(err){
 	console.log(err.message)

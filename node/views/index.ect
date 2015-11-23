@@ -1,0 +1,57 @@
+<style type="text/css">
+<!--
+table {
+	table-layout: fixed;
+	width: 75%;
+}
+
+th.title { width: 50%; }
+td.value { width: 50%; }
+
+-->
+</style>
+
+<table border=1>
+	<tr>
+		<td>Total parsed pages : <%= @pages %> pages</td>
+		<td>Duration : <%= @duration %> sec</td>
+		<% arrth = @throughput.split('.') %>
+		<% th = arrth[0]+"."+arrth[1].slice(0,2) %>
+		<td>Throughput (Speed to parse) : <%= th %> pages/sec</td>
+	</tr>
+</table>
+
+<br>
+
+<table border=1>
+	<tr class=title>
+		<th>Range of total number of words in a page</th>
+		<th>Count of pages</th>
+	</tr>
+	<% for elem in @total_num : %>
+	<% elemn=elem[0]+99 %>
+	<tr class=value>
+		<td><%= elem[0] %> - <%= elemn %></td>
+		<td><%= elem[1] %></td>
+	</tr>
+	<% end %>
+</table>
+
+<br>
+
+<table border=1>
+	<tr class=title>
+		<th>Range of number of words in a page</th>
+		<th>Count of pages</th>
+	</tr>
+	<% for elem in @num : %>
+	<% elemn=elem[0]+99 %>
+	<tr class=value>
+		<td><%= elem[0] %> - <%= elemn %></td>
+		<td><%= elem[1] %></td>
+	</tr>
+	<% end %>
+</table>
+
+<br>
+
