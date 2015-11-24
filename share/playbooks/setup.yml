@@ -19,7 +19,7 @@
         - git
 
     - name: install gems
-      shell: gem install {{item}}
+      gem: name={{item}} state=latest
       with_items:
         - io-console
         - bundler
