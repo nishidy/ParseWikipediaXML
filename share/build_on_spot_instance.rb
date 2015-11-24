@@ -67,7 +67,7 @@ while true do
     if ins.state.name == "running" && ins.instance_lifecycle == "spot"
         st = ec2.describe_instance_status({instance_ids:[ins_id]}).instance_statuses[0]
         if st.system_status.status == "ok" && st.instance_status.status == "ok"
-            puts "=== The status of the spot instance #{ins.public_dns_name} is ok ==="
+            decop "The status of the spot instance #{ins.public_dns_name} is ok"
             `echo "#{ins.public_dns_name}" >> playbooks/hosts`
             bflag = true
         end
