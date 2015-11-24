@@ -16,9 +16,10 @@
         - ruby20-devel
         - gcc-c++
         - gem
+        - git
 
     - name: install gems
-      shell: gem install {{ item }}
+      shell: gem install {{item}}
       with_items:
         - io-console
         - bundler
@@ -26,6 +27,8 @@
     - name: local repository existence check
       shell: test -d {{dest}}
       register: result
+      ignore_errors: True
+
     - name: copy the code from repository
       git: repo=http://github.com/nishidy/ParseWikipediaXML.git dest={{dest}} version={{branch}}
       when: result|failed
@@ -34,6 +37,14 @@
       shell: /usr/local/bin/bundle install
       args:
         chdir: /home/{{user}}/{{dest}}/ruby
+
+    - name: compile
+      shell: /usr/bin/g++ {{item}} -std=c++11
+      with_items:
+          - makeTestBagofwords.cpp
+          - makeTestDocuments.cpp
+      args:
+        chdir: /home/{{user}}/{{dest}}/share
 
     - file: path={{dest}}/share/testParseWikipediaXML.sh mode=0744
     - name: run test
