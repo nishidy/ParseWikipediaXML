@@ -26,15 +26,32 @@ end
 
 ec2 = Aws::EC2::Client.new( region: 'us-west-2' )
 
+req_ins_type = "c3.2xlarge"
+resp = ec2.describe_spot_price_history({
+	start_time: Time.now,
+	end_time: Time.now,
+	max_results:3,
+	instance_types: [req_ins_type]
+})
+
+min_spot = resp.spot_price_history.inject{ |max_spot, spot|
+	spot.spot_price.to_f < max_spot.spot_price.to_f ? spot : max_spot
+}
+
+req_spot_price = min_spot.spot_price.to_f+0.02
+req_avail_zone = min_spot.availability_zone
+
+decop "Request spot price #{req_spot_price} with #{req_ins_type} at #{req_avail_zone}"
+
 resp = ec2.request_spot_instances({
-    spot_price: "0.2",
+    spot_price: "#{req_spot_price}",
     valid_until: 1.hour.since,
     launch_specification: {
         image_id: "ami-44da5574",
         key_name: "was",
-        instance_type: "c4.4xlarge",
+        instance_type: req_ins_type,
         placement: {
-            availability_zone: "us-west-2a"
+            availability_zone: req_avail_zone
         },
         security_groups: [ "launch-wizard-1" ]
     }
@@ -58,6 +75,7 @@ while true do
 end
 
 $stdout.flush
+puts ""
 decop "Found active spot instance"
 
 bflag = false
@@ -78,6 +96,7 @@ while true do
 end
 
 $stdout.flush
+puts ""
 decop "Build environmet by ansible"
 `ansible-playbook -i playbooks/hosts -u ec2-user --private-key ~/.ssh/aws_rsa playbooks/setup.yml`
 
