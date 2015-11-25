@@ -24,18 +24,32 @@ def waitp(text,sleept)
     end
 end
 
+r, w = IO.pipe
+
+# SIGINT terminates the created instance
+Signal.trap("INT") {
+    w.close # ensure r.gets goes
+    ins_id = r.gets
+    if !ins_id.nil?
+        ec2.terminate_instances({
+            instance_ids:[ins_id]
+        })
+    end
+}
+
+
 ec2 = Aws::EC2::Client.new( region: 'us-west-2' )
 
 req_ins_type = "c3.2xlarge"
 resp = ec2.describe_spot_price_history({
-	start_time: Time.now,
-	end_time: Time.now,
-	max_results:3,
-	instance_types: [req_ins_type]
+    start_time: Time.now,
+    end_time: Time.now,
+    max_results:3,
+    instance_types: [req_ins_type]
 })
 
 min_spot = resp.spot_price_history.inject{ |max_spot, spot|
-	spot.spot_price.to_f < max_spot.spot_price.to_f ? spot : max_spot
+    spot.spot_price.to_f < max_spot.spot_price.to_f ? spot : max_spot
 }
 
 req_spot_price = min_spot.spot_price.to_f+0.02
@@ -56,30 +70,32 @@ resp = ec2.request_spot_instances({
         security_groups: [ "launch-wizard-1" ]
     }
 })
-p resp
-decop "Requested the spot instance"
 
-ins_id = ""
-bflag = false
+spot_ins_id = resp.spot_instance_requests[0].spot_instance_request_id
+decop "Requested the spot instance #{spot_ins_id}"
+#ins_id = resp.spot_instance_requests[0].instance_id
+
 while true do
-    ec2.describe_spot_instance_requests.spot_instance_requests.each { |req|
-        if req.state == "active"
-            ins_id = req.instance_id
-            bflag = true
-            break
-        end
-    }
+    req = ec2.describe_spot_instance_requests(
+        {spot_instance_request_ids:[spot_ins_id]}
+    ).spot_instance_requests[0]
+
+    if req.state == "active"
+        ins_id = req.instance_id
+        break
+    end
 
     waitp("Waiting for the instance to be active",5)
-    break if bflag
 end
 
 $stdout.flush
 puts ""
-decop "Found active spot instance"
+decop "Found active spot instance #{ins_id}"
+
+w.puts ins_id
 
 bflag = false
-`echo [ec2-spot-instance] > playbooks/hosts`
+`echo "[ec2-spot-instance]" > playbooks/hosts`
 while true do
     ins = ec2.describe_instances({instance_ids:[ins_id]}).reservations[0].instances[0]
     if ins.state.name == "running" && ins.instance_lifecycle == "spot"
@@ -99,4 +115,6 @@ $stdout.flush
 puts ""
 decop "Build environmet by ansible"
 `ansible-playbook -i playbooks/hosts -u ec2-user --private-key ~/.ssh/aws_rsa playbooks/setup.yml`
+
+sleep 10
 
