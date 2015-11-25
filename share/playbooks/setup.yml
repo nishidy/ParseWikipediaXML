@@ -1,6 +1,5 @@
 - hosts : ec2-spot-instance
   user: ec2-user
-  sudo: yes
 
   vars:
     branch: master
@@ -10,6 +9,7 @@
   tasks:
     - name: install packages
       yum: name={{ item }} state=present
+      sudo: yes
       with_items:
         - ruby
         - ruby-devel
@@ -34,7 +34,7 @@
       when: result|failed
 
     - name: bundle install
-      shell: /usr/local/bin/bundle install
+      shell: ~/bin/bundle install
       args:
         chdir: /home/{{user}}/{{dest}}/ruby
 
