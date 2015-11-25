@@ -6,6 +6,13 @@ var merge = require('merge')
 var kuromoji = require('kuromoji')
 var client = require('redis').createClient();
 
+var redis;
+client.on("ready", function() {
+	redis = true
+}).on("error", function(err) {
+	redis = false
+})
+
 var BUFSIZE = 65536*256
 
 var argv = minimist(process.argv.slice(2), {
@@ -210,8 +217,10 @@ function parseEn(page){
 
 	if(numWordsInDoc>=argv.m && strBofw.length>0){
 		fs.appendFileSync(_this.outputFile,strBofw+"\n")
-		client.zincrby("total_num", 1, parseInt(numWordsInDoc/100)*100, function(){} );
-		client.zincrby("num", 1, parseInt(strBofw.length/100)*100, function(){} );
+		if(redis){
+			client.zincrby("total_num", 1, parseInt(numWordsInDoc/100)*100, function(){} );
+			client.zincrby("num", 1, parseInt(strBofw.length/100)*100, function(){} );
+		}
 	}
 
 }
@@ -247,7 +256,7 @@ co(function *(){
 	offset = 0
 	var hInputFile = yield openAsync(parser.inputFile)
 	console.log("Begins reading WikipediaXML.")
-	client.set("start_time",new Date().getTime());
+	if(redis){ client.set("start_time",new Date().getTime()); }
 	while(offset<parser.inputFileSize){
 		process.stdout.write(~~(offset*100/parser.inputFileSize)+"%..")
 
@@ -261,7 +270,7 @@ co(function *(){
 		offset += length
 	}
 	console.log(" Finished reading WikipediaXML.")
-	client.set("stop_time",new Date().getTime());
+	if(redis){ client.set("stop_time",new Date().getTime()); }
 
 	process.exit();
 
