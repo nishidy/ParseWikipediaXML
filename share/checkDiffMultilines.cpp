@@ -12,6 +12,7 @@ class Checker {
 
 	void push_hashes();
 	void sort_hashes();
+	void show_hashes(string);
 	void show_diff_line(string);
 };
 
@@ -34,6 +35,20 @@ void Checker::push_hashes(){
 
 void Checker::sort_hashes(){
 	sort(line_hash.begin(), line_hash.end());
+}
+
+void Checker::show_hashes(string f){
+	cout << f << ":" << endl;
+	cout << "line_hash" << endl;
+
+	// auto needs -std=c++11
+	for(auto it=line_hash.begin(); it!=line_hash.end(); it++){
+		cout << *it << endl;
+	}
+	cout << "diff_hash" << endl;
+	for(auto it=diff_hash.begin(); it!=diff_hash.end(); it++){
+		cout << *it << endl;
+	}
 }
 
 void Checker::show_diff_line(string f){
@@ -105,11 +120,21 @@ void diff_check(Checker* c1, Checker* c2){
 			if(*ai<*bi){
 				c1->diff_hash.push_back(*ai);
 				ai++;
-			}else{
+			}else if(*ai>*bi){
 				c2->diff_hash.push_back(*bi);
 				bi++;
 			}
 		}
+	}
+
+	while(ai!=c1->line_hash.end()){
+		c1->diff_hash.push_back(*ai);
+		ai++;
+	}
+
+	while(bi!=c2->line_hash.end()){
+		c2->diff_hash.push_back(*bi);
+		bi++;
 	}
 
 }
@@ -121,6 +146,7 @@ int main(int argc, char* argv[])
 	Checker c2;
 
 	bool verbose=false;
+	bool v_verbose=false;
 
 	switch(argc){
 		case 3:
@@ -130,10 +156,14 @@ int main(int argc, char* argv[])
 		case 4:
 			c1.filename = argv[1];
 			c2.filename = argv[2];
-			if(string(argv[3])=="-v")
+			if(string(argv[3])=="-v"){
 				verbose=true;
-			else
+			}else if(string(argv[3])=="-vv"){
+				verbose=true;
+				v_verbose=true;
+			}else{
 				return -1;
+			}
 			break;
 		default:
 			return -1;
@@ -148,6 +178,11 @@ int main(int argc, char* argv[])
 	if(verbose){
 		size_check(&c1,&c2);
 		diff_check(&c1,&c2);
+	}
+
+	if(v_verbose){
+		c1.show_hashes("A");
+		c2.show_hashes("B");
 	}
 
 	if( !equal(&c1,&c2) ){
