@@ -26,8 +26,7 @@ void Checker::push_hashes(){
 
 	string line;
 	while(getline(ifs, line)){
-		if(line.size()>0)
-			line_hash.push_back(hash<string>()(line));
+		line_hash.push_back(hash<string>()(line));
 	}
 	ifs.close();
 
@@ -65,17 +64,15 @@ void Checker::show_diff_line(string f){
 	int n=1, h;
 	vector<int>::iterator it;
 	while(getline(ifs, line) && diff_hash.size()>0){
-		if(line.size()>0){
-			h = hash<string>()(line);
-			it = diff_hash.begin();
-			while(it!=diff_hash.end() && *it<=h){
-				if(h==*it){
-					cout << n << ": " << line << endl;
-					diff_hash.erase(it);
-					break;
-				}
-				it++;
+		h = hash<string>()(line);
+		it = diff_hash.begin();
+		while(it!=diff_hash.end() && *it<=h){
+			if(h==*it){
+				cout << n << ": " << line << endl;
+				diff_hash.erase(it);
+				break;
 			}
+			it++;
 		}
 		n++;
 	}
