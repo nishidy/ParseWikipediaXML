@@ -1,4 +1,4 @@
-import std.stdio, std.string, std.conv, std.regex, std.algorithm, std.c.stdlib;
+import std.stdio, std.string, std.conv, std.regex, std.algorithm, std.c.stdlib, std.getopt;
 import std.uni: toLower;
 
 struct Bofw {
@@ -10,13 +10,32 @@ auto stopwords = "a,able,about,across,after,all,almost,also,am,among,an,and,any,
 
 void main(string argv[]) {
 
-	if(argv.length!=3){
-		writef("%s\n inFile outFile",argv[0]);
-		exit(-1);
-	}
+	string inWikiFile;
+	string inDictFile;
+	string outBofwFile;
+	string outTitleFile;
+	int minCntWords;
+	int minNumWordsInDoc;
+	int maxNumWordsInDoc;
 
-	auto infile = File(argv[1]);
-	auto outfile = File(argv[2],"w");
+	getopt(
+		argv,
+		std.getopt.config.required,
+		"inWikiFile|i", &inWikiFile,
+		"inDictFile|d", &inDictFile,
+		"outBofwFile|s", &outBofwFile,
+		"outTitleFile|t", &outTitleFile,
+	);
+
+	getopt(
+		argv,
+		"minCntWords|c", &minCntWords,
+		"minNumWordsInDoc|m", &minNumWordsInDoc,
+		"maxNumWordsInDoc|x", &maxNumWordsInDoc,
+	);
+
+	auto infile = File(inWikiFile);
+	auto outfile = File(outBofwFile,"w");
 
 	bool beginpage = false, endpage = false;
 	char[] page;
@@ -77,3 +96,4 @@ Bofw[] parsePage(char[] page) {
 bool matchWord(string word) {
 	return match(word, r"^[a-z][a-z0-9'-]*[a-z0-9]$").to!bool;
 }
+
