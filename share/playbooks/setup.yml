@@ -43,12 +43,18 @@
       with_items:
           - makeTestBagofwords
           - makeTestDocuments
+          - checkDiffMultilines
       args:
         chdir: /home/{{user}}/{{dest}}/share
 
-    - file: path={{dest}}/share/testParseWikipediaXML.sh mode=0744
+    - name: post run
+      shell: rm -rf test
+      args:
+        chdir: /home/{{user}}/{{dest}}/share
+
+    - file: path=/home/{{user}}/{{dest}}/share/testParseWikipediaXML.sh mode=0744
     - name: run test
-      shell: ./testParseWikipediaXML.sh  "ruby ../ruby/ParseWikipediaXML.rb" 5 1 100
+      shell: /bin/bash testParseWikipediaXML.sh  "ruby ../ruby/ParseWikipediaXML.rb" 5 1 100
       args:
         chdir: /home/{{user}}/{{dest}}/share
 
