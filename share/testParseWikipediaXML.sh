@@ -49,7 +49,7 @@ for n in $(seq 1 $numTests);do
 	$prog -i "$nthdocfile" -s "$nthoutfile" -c 1 -w $numWorkers
 
 	echo "Check diff betwen $nthbofwfile and $nthoutfile."
-	if ./diffOfLines $nthbofwfile $nthoutfile; then
+	if ./checkDiffMultilines $nthbofwfile $nthoutfile; then
 		echo "OK. '$prog' is stable."
 	else
 		echo "NG. '$prog' is not stable. Please check the program. Aborted."
