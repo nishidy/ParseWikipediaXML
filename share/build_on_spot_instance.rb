@@ -24,6 +24,11 @@ def waitp(text,sleept)
     end
 end
 
+req_ins_type = "c3.2xlarge"
+price_margin = 0.02
+
+ec2 = Aws::EC2::Client.new( region: 'us-west-2' )
+
 r, w = IO.pipe
 
 # SIGINT terminates the created instance
@@ -37,10 +42,6 @@ Signal.trap("INT") {
     end
 }
 
-
-ec2 = Aws::EC2::Client.new( region: 'us-west-2' )
-
-req_ins_type = "c3.2xlarge"
 resp = ec2.describe_spot_price_history({
     start_time: Time.now,
     end_time: Time.now,
@@ -52,7 +53,7 @@ min_spot = resp.spot_price_history.inject{ |max_spot, spot|
     spot.spot_price.to_f < max_spot.spot_price.to_f ? spot : max_spot
 }
 
-req_spot_price = min_spot.spot_price.to_f+0.02
+req_spot_price = min_spot.spot_price.to_f+price_margin
 req_avail_zone = min_spot.availability_zone
 
 decop "Request spot price #{req_spot_price} with #{req_ins_type} at #{req_avail_zone}"
@@ -114,7 +115,7 @@ end
 $stdout.flush
 puts ""
 decop "Build environmet by ansible"
-`ansible-playbook -i playbooks/hosts -u ec2-user --private-key ~/.ssh/aws_rsa playbooks/setup.yml`
+puts `ansible-playbook -i playbooks/hosts -u ec2-user --private-key ~/.ssh/aws_rsa playbooks/setup.yml`
 
 sleep 10
 

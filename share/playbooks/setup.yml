@@ -39,10 +39,10 @@
         chdir: /home/{{user}}/{{dest}}/ruby
 
     - name: compile
-      shell: /usr/bin/g++ {{item}} -std=c++11
+      shell: /usr/bin/g++ {{item}}.cpp -o {{item}} -std=c++11
       with_items:
-          - makeTestBagofwords.cpp
-          - makeTestDocuments.cpp
+          - makeTestBagofwords
+          - makeTestDocuments
       args:
         chdir: /home/{{user}}/{{dest}}/share
 
