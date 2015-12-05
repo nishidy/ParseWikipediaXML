@@ -50,7 +50,6 @@ parseLongArgs (('-':op):val:other) rec =
 		"numMinFreqOfTerm" -> localrec { numMinFreqOfTerm = read val::Int }
 		_ -> localrec
 
-
 main :: IO ()
 main = do
 	args <- getArgs
@@ -87,11 +86,9 @@ splitByComma [] _ arr = arr
 splitByComma (x:xs) s arr | x==',' = splitByComma xs "" (s:arr)
 splitByComma (x:xs) s arr = splitByComma xs (s++[x]) arr
 
--- getDictionaryFromFile :: M.Map S S -> IO (M.Map S S)
 getDictionaryFromFile :: ArgsRec -> IO (M.Map S S)
 getDictionaryFromFile args = do
 
-	--let inDictFile = tk mapArgs "d"
 	let (ArgsRec { inDictFile = d }) = args
 	hdlr <- openFile d ReadMode
 	getLineFromInDictFile hdlr M.empty
@@ -156,9 +153,9 @@ parsePage args mapDict stopwords page =
 				-- Note that concat infers that y is String but Int actually
 				-- Make tuple's list to list's list with conditions
 				-- Apply condition for the number of a term in a doc
-				map (\ (x,y) ->
-						if y >= c
-						then [x,show y]
+				map (\ (term,freq) ->
+						if freq >= c
+						then [term,show freq]
 						else []
 					) $
 				-- Apply condition for the number of (any) terms in a doc
@@ -173,15 +170,15 @@ parsePage args mapDict stopwords page =
 				-- Make bag-of-words by counting each term's frequency
 				makeBagofwords $
 				-- Get baseform from dictionary for each string(term)
-				map (\x -> getBaseformFromDict mapDict x) $
+				map (\term -> getBaseformFromDict mapDict term) $
 				-- Exclude stopwords
-				filter (\x -> not $ elem x stopwords) $
+				filter (\term -> not $ elem term stopwords) $
 				-- Filter terms out by this regular expression
-				filter (\x -> x =~ "^[a-z][0-9a-z'-]*[0-9a-z]$") $
+				filter (\term -> term =~ "^[a-z][0-9a-z'-]*[0-9a-z]$") $
 				-- Lower all characters in each string
-				map (\x ->
+				map (\term ->
 					--trace("trace1:" ++ show x) $
-					map toLower x) $
+					map toLower term) $
 				-- Split text by space
 				words text
 
@@ -189,9 +186,6 @@ parsePage args mapDict stopwords page =
 				--trace(err ++ ": Nothing for "++ show page) $
 				trace(show err ++ ": Nothing for "++ show page) $
 				exitFailure
-
---ignore :: SomeException -> IO Bool
---ignore _ = trace("SomeException.") return False
 
 -- Regular expresion match can replace this
 search :: S -> S -> Bool
@@ -212,57 +206,17 @@ doSearchIn (x:xs) (y:ys)
 		| x==y = doSearchIn xs ys
 		| otherwise = False
 
---{-
 myTextParser :: P.Parsec S () S
 myTextParser = do
 	_ <- P.manyTill P.anyChar (P.try $ P.string "<text")
 	_ <- P.manyTill P.anyChar (P.char '>')
 	P.manyTill P.anyChar (P.try $ P.string "</text>")
----}
-
-{-
-matchText :: S -> (S,Char,S) -> Either S S
-matchText text (begin,mid,end) = doMatch text begin mid end []
-
-doMatch :: S -> S -> Char -> S -> S -> Either S S
-doMatch _ _ _ [] cont = Right (reverse cont)
-doMatch [] _ _ _ _ = Left "Did not match."
-doMatch (t:text) [] ' ' (e:end) cont
-	| t==e = case doMatchIn text end of
-		True -> Right (reverse cont)
-		False -> doMatch text [] ' ' (e:end) (t:cont) -- Reversed order
-	| otherwise = doMatch text [] ' ' (e:end) (t:cont) -- Reversed order
-doMatch (t:text) [] m end []
-	| t==m = doMatch text [] ' ' end []
-	| otherwise = doMatch text [] m end []
-doMatch (t:text) (b:begin) m end []
-	| t==b = case doMatchIn text begin of
-		True -> doMatch (drop (length (b:begin)) text) [] m end []
-		False -> doMatch text (b:begin) m end []
-	| otherwise = doMatch text (b:begin) m end []
-doMatch _ _ _ _ _ = Left "Something wrong."
-
-doMatchIn :: S -> S -> Bool
-doMatchIn _ [] = True
-doMatchIn [] _ = False
-doMatchIn (t:text) (b:begin)
-	| t==b = doMatchIn text begin
-	| otherwise = False
--}
 
 getBaseformFromDict :: M.Map S S -> S -> S
 getBaseformFromDict mapDict term =
 	case M.lookup term mapDict of
 		Just t -> t
 		Nothing -> term
-
--- The shorter function name is better for frequent use
--- Take Key from map
-tk :: M.Map S S -> S -> S
-tk m s =
-	case M.lookup s m of
-		Just v -> v
-		Nothing -> ""
 
 notEmptyWriteToFile :: FilePath -> S -> IO ()
 notEmptyWriteToFile _ "" = return ()
