@@ -9,6 +9,7 @@ import Text.Regex.Posix
 import Debug.Trace
 --import Codec.Binary.UTF8.String
 --import Control.Exception as E
+import System.Locale.SetLocale
 
 type S = String
 
@@ -52,6 +53,8 @@ parseLongArgs (('-':op):val:other) rec =
 
 main :: IO ()
 main = do
+
+	setLocale LC_ALL (Just "C")
 	args <- getArgs
 
 	let init = ArgsRec {
@@ -144,48 +147,87 @@ parsePage args mapDict stopwords page =
 	in
 		case P.parse myTextParser "Error:" page of
 			Right text ->
-				-- Write to file or stdout
-				notEmptyWriteToFile s $
-				-- Make list to string joined with space
-				unwords $
-				-- Make list's list to list flattened
-				concat $
-				-- Note that concat infers that y is String but Int actually
-				-- Make tuple's list to list's list with conditions
-				-- Apply condition for the number of a term in a doc
-				map (\ (term,freq) ->
-						if freq >= c
-						then [term,show freq]
-						else []
-					) $
-				-- Apply condition for the number of (any) terms in a doc
-				(\ term ->
-					--trace("trace2:" ++ show x) $
-					if length term >= m && length term <= x
-					then term
-					else []
-				) $
-				-- Make map to tuple's list
-				M.toList $
-				-- Make bag-of-words by counting each term's frequency
-				makeBagofwords $
-				-- Get baseform from dictionary for each string(term)
-				map (\term -> getBaseformFromDict mapDict term) $
-				-- Exclude stopwords
-				filter (\term -> not $ elem term stopwords) $
-				-- Filter terms out by this regular expression
-				filter (\term -> term =~ "^[a-z][0-9a-z'-]*[0-9a-z]$") $
-				-- Lower all characters in each string
-				map (\term ->
-					--trace("trace1:" ++ show x) $
-					map toLower term) $
-				-- Split text by space
-				words text
+				unlessEmptyWriteToFile s $
+				compMakeOutputText m x c mapDict stopwords text
 
 			Left err ->
-				--trace(err ++ ": Nothing for "++ show page) $
 				trace(show err ++ ": Nothing for "++ show page) $
 				exitFailure
+
+unlessEmptyWriteToFile :: FilePath -> S -> IO ()
+unlessEmptyWriteToFile _ "" = return ()
+unlessEmptyWriteToFile "" bofw = putStrLn bofw
+unlessEmptyWriteToFile outBofwFile bofw = appendFile outBofwFile $ bofw++"\n"
+
+compMakeOutputText :: Int -> Int -> Int -> M.Map S S -> [S] -> ( S -> S )
+compMakeOutputText m x c d s =
+	joinWithSpaceAfterFlatten
+	. filterByFreqTerms c
+	. filterByNumTermsInDoc m x
+	. makeTupleList
+	. makeBagofwords
+	. convertToBaseform d
+	. excludeStopwords s
+	. filterByRegex
+	. makeCharLower
+	. splitBySpace
+
+joinWithSpaceAfterFlatten :: [[S]] -> S
+joinWithSpaceAfterFlatten llt = unwords $ concat llt
+
+filterByFreqTerms :: Int -> [(S,Int)] -> [[S]]
+filterByFreqTerms lower ltp =
+	map (\ (term,freq) ->
+		if freq >= lower
+		then [term,show freq]
+		else []
+	) ltp
+
+filterByNumTermsInDoc :: Int -> Int -> [(S,Int)] -> [(S,Int)]
+filterByNumTermsInDoc lower upper ltp =
+	if length ltp >= lower && length ltp <= upper
+	then ltp
+	else []
+
+makeTupleList :: M.Map S Int -> [(S,Int)]
+makeTupleList m = M.toList m
+
+-- insertWithKey takes 4 arguments (in this case)
+-- (key->initvalue->oldvalue->newvalue)->key->initvalue->ExistentingMap
+-- (makeBagofwords xs) recursively returns back to M.empty for xs
+-- M.insertWithKey then starts to run its job like foldr
+makeBagofwords :: [S] -> M.Map S Int
+makeBagofwords [] = M.empty
+makeBagofwords (x:xs)=
+	let m = makeBagofwords xs in
+		M.insertWithKey (\_ _ o->o+1) x 1 m
+
+convertToBaseform :: M.Map S S -> [S] -> [S]
+convertToBaseform mapDict lst =
+	map (\t -> getBaseform mapDict t) lst
+
+excludeStopwords :: [S] -> [S] -> [S]
+excludeStopwords stopwords lst =
+	filter (\t -> not $ elem t stopwords) lst
+
+filterByRegex :: [S] -> [S]
+filterByRegex lst =
+	filter (\t -> t =~ "^[a-z][0-9a-z'-]*[0-9a-z]$") lst
+
+makeCharLower :: [S] -> [S]
+makeCharLower lst =
+	map (\t -> map toLower t) lst
+
+splitBySpace :: S -> [S]
+splitBySpace text = words text
+
+
+getBaseform :: M.Map S S -> S -> S
+getBaseform mapDict t =
+	case M.lookup t mapDict of
+		Just v -> v
+		Nothing -> t
+
 
 -- Regular expresion match can replace this
 search :: S -> S -> Bool
@@ -212,24 +254,4 @@ myTextParser = do
 	_ <- P.manyTill P.anyChar (P.char '>')
 	P.manyTill P.anyChar (P.try $ P.string "</text>")
 
-getBaseformFromDict :: M.Map S S -> S -> S
-getBaseformFromDict mapDict term =
-	case M.lookup term mapDict of
-		Just t -> t
-		Nothing -> term
-
-notEmptyWriteToFile :: FilePath -> S -> IO ()
-notEmptyWriteToFile _ "" = return ()
-notEmptyWriteToFile "" bofw = putStrLn bofw
-notEmptyWriteToFile outBofwFile bofw = appendFile outBofwFile $ bofw++"\n"
-
--- insertWithKey takes 4 arguments (in this case)
--- (key->initvalue->oldvalue->newvalue)->key->initvalue->ExistentingMap
--- (makeBagofwords xs) recursively returns back to M.empty for xs
--- M.insertWithKey then starts to run its job like foldr
-makeBagofwords :: [S] -> M.Map S Int
-makeBagofwords [] = M.empty
-makeBagofwords (x:xs)=
-	let m = makeBagofwords xs in
-		M.insertWithKey (\_ _ o->o+1) x 1 m
 
