@@ -18,6 +18,7 @@ data ArgsRec = ArgsRec {
 	inDictFile :: String,
 	outBofwFile :: String,
 	outTitleFile :: String,
+	outTfIdfFile :: String,
 	numMinTermsInDoc :: Int,
 	numMaxTermsInDoc :: Int,
 	numMinFreqOfTerm :: Int
@@ -32,6 +33,7 @@ parseShortArgs (('-':op:[]):val:other) rec =
 		'd' -> localrec { inDictFile = val }
 		's' -> localrec { outBofwFile = val }
 		't' -> localrec { outTitleFile = val }
+		'f' -> localrec { outTfIdfFile = val }
 		'm' -> localrec { numMinTermsInDoc = read val::Int }
 		'x' -> localrec { numMaxTermsInDoc = read val::Int }
 		'c' -> localrec { numMinFreqOfTerm = read val::Int }
@@ -46,6 +48,7 @@ parseLongArgs (('-':op):val:other) rec =
 		"inDictFile" -> localrec { inDictFile = val }
 		"outBofwFile" -> localrec { outBofwFile = val }
 		"outTitleFile" -> localrec { outTitleFile = val }
+		"outTfIdfFile" -> localrec { outTfIdfFile = val }
 		"numMinTermsInDoc" -> localrec { numMinTermsInDoc = read val::Int }
 		"numMaxTermsInDoc" -> localrec { numMaxTermsInDoc = read val::Int }
 		"numMinFreqOfTerm" -> localrec { numMinFreqOfTerm = read val::Int }
@@ -62,6 +65,7 @@ main = do
 		inDictFile = "",
 		outBofwFile = "",
 		outTitleFile = "",
+		outTfIdfFile = "",
 		numMinTermsInDoc = 1,
 		numMaxTermsInDoc = 65535,
 		numMinFreqOfTerm = 1
@@ -138,21 +142,36 @@ getLineFromFile hInWikiFile page args mapDict stopwords = do
 		getLineFromFile hInWikiFile "" args mapDict stopwords
 
 parsePage :: ArgsRec -> M.Map S S -> [S] -> S -> IO ()
+parsePage _ _ _ "" = return ()
 parsePage args mapDict stopwords page =
 	let
 		(ArgsRec { outBofwFile = s }) = args
+	in
+		case P.parse (myTextParser "text") "Error:" page of
+			Right text -> do
+				output <- return $ parseText args mapDict stopwords text
+				unlessEmptyWriteToFile s output
+				parsePageTitle args page output
+			Left err -> trace(show err ++ ": Nothing for "++ show page) $ exitFailure
+
+parseText :: ArgsRec -> M.Map S S -> [S] -> S -> S
+parseText args mapDict stopwords text =
+	let
 		(ArgsRec { numMinTermsInDoc = m }) = args
 		(ArgsRec { numMaxTermsInDoc = x }) = args
 		(ArgsRec { numMinFreqOfTerm = c }) = args
-	in
-		case P.parse myTextParser "Error:" page of
-			Right text ->
-				unlessEmptyWriteToFile s $
-				compMakeOutputText m x c mapDict stopwords text
+	in do
+		compMakeOutputText m x c mapDict stopwords text
 
-			Left err ->
-				trace(show err ++ ": Nothing for "++ show page) $
-				exitFailure
+parsePageTitle :: ArgsRec -> S -> S -> IO ()
+parsePageTitle _ _ "" = return ()
+parsePageTitle args page output =
+	let
+		(ArgsRec { outTitleFile = t }) = args
+	in
+		case P.parse (myTextParser "title") "Error:" page of
+			Right title -> unlessEmptyWriteToFile t title
+			Left err -> trace(show err ++ ": Nothing for "++ show page) $ exitFailure
 
 unlessEmptyWriteToFile :: FilePath -> S -> IO ()
 unlessEmptyWriteToFile _ "" = return ()
@@ -248,10 +267,10 @@ doSearchIn (x:xs) (y:ys)
 		| x==y = doSearchIn xs ys
 		| otherwise = False
 
-myTextParser :: P.Parsec S () S
-myTextParser = do
-	_ <- P.manyTill P.anyChar (P.try $ P.string "<text")
+myTextParser :: S -> P.Parsec S () S
+myTextParser tag = do
+	_ <- P.manyTill P.anyChar (P.try $ P.string ("<"++tag) )
 	_ <- P.manyTill P.anyChar (P.char '>')
-	P.manyTill P.anyChar (P.try $ P.string "</text>")
+	P.manyTill P.anyChar (P.try $ P.string ("</"++tag++">") )
 
 
