@@ -12,19 +12,70 @@ import Debug.Trace
 
 type S = String
 
+data ArgsRec = ArgsRec {
+	inWikiFile :: String,
+	inDictFile :: String,
+	outBofwFile :: String,
+	outTitleFile :: String,
+	numMinTermsInDoc :: Int,
+	numMaxTermsInDoc :: Int,
+	numMinFreqOfTerm :: Int
+} deriving Show
+
+parseShortArgs (_:[]) rec = rec
+parseShortArgs ([]) rec = rec
+parseShortArgs (('-':op:[]):val:other) rec =
+	let localrec = parseShortArgs other rec in
+	case op of
+		'i' -> localrec { inWikiFile = val }
+		'd' -> localrec { inDictFile = val }
+		's' -> localrec { outBofwFile = val }
+		't' -> localrec { outTitleFile = val }
+		'm' -> localrec { numMinTermsInDoc = read val::Int }
+		'x' -> localrec { numMaxTermsInDoc = read val::Int }
+		'c' -> localrec { numMinFreqOfTerm = read val::Int }
+		_   -> localrec
+
+parseLongArgs (_:[]) rec = rec
+parseLongArgs ([]) rec = rec
+parseLongArgs (('-':op):val:other) rec =
+	let localrec = parseLongArgs other rec in
+	case op of
+		"inWikiFile" -> localrec { inWikiFile = val }
+		"inDictFile" -> localrec { inDictFile = val }
+		"outBofwFile" -> localrec { outBofwFile = val }
+		"outTitleFile" -> localrec { outTitleFile = val }
+		"numMinTermsInDoc" -> localrec { numMinTermsInDoc = read val::Int }
+		"numMaxTermsInDoc" -> localrec { numMaxTermsInDoc = read val::Int }
+		"numMinFreqOfTerm" -> localrec { numMinFreqOfTerm = read val::Int }
+		_ -> localrec
+
+
 main :: IO ()
 main = do
 	args <- getArgs
-	mapArgs <- return $ parseArgs args $ defaultArgs "idstmxc"
+
+	let init = ArgsRec {
+		inWikiFile = "",
+		inDictFile = "",
+		outBofwFile = "",
+		outTitleFile = "",
+		numMinTermsInDoc = 1,
+		numMaxTermsInDoc = 65535,
+		numMinFreqOfTerm = 1
+	}
+
+	shortargs <- return $ parseShortArgs args init
+	args <- return $ parseLongArgs args shortargs
 
 	putStrLn "Begin reading dictionary."
-	mapDict <- getDictionaryFromFile mapArgs
+	mapDict <- getDictionaryFromFile args
 	-- Force strict evaluation for mapDict
 	_mapDict <- return $! mapDict
 	putStrLn "Finish reading dictionary."
 
 	stopwords <- return getStopwords
-	getContentFromFile mapArgs _mapDict stopwords
+	getContentFromFile args _mapDict stopwords
 
 getStopwords :: [S]
 getStopwords =
@@ -36,51 +87,14 @@ splitByComma [] _ arr = arr
 splitByComma (x:xs) s arr | x==',' = splitByComma xs "" (s:arr)
 splitByComma (x:xs) s arr = splitByComma xs (s++[x]) arr
 
-defaultArgs :: S -> M.Map S S
-defaultArgs [] = M.empty
-defaultArgs (x:xs) =
-	let m = defaultArgs xs in
-		case x of
-			'i' -> M.insertWithKey (\_ _ o->o) "i" "" m
-			'd' -> M.insertWithKey (\_ _ o->o) "d" "" m
-			's' -> M.insertWithKey (\_ _ o->o) "s" "" m
-			't' -> M.insertWithKey (\_ _ o->o) "t" "" m
-			-- Integer literal cannot be identified as integer without declaration
-			-- This may be better instead of getting it back to string from integer
-			--'m' -> M.insertWithKey (\_ _ o->o) "m" "1") m
-			'm' -> M.insertWithKey (\_ _ o->o) "m" (show (1::Int)) m
-			'x' -> M.insertWithKey (\_ _ o->o) "x" (show (65535::Int)) m
-			'c' -> M.insertWithKey (\_ _ o->o) "c" (show (1::Int)) m
-			_ -> m
+-- getDictionaryFromFile :: M.Map S S -> IO (M.Map S S)
+getDictionaryFromFile :: ArgsRec -> IO (M.Map S S)
+getDictionaryFromFile args = do
 
-parseArgs :: [S] -> M.Map S S -> M.Map S S
-parseArgs [] mapArgs = mapArgs
-parseArgs (('-':option):value:args) mapArgs =
-	let m = parseArgs args mapArgs in
-		case option of
-			"i" -> M.insertWithKey (\_ _ _ -> value) "i" value $
-					( M.insertWithKey (\_ _ _ -> value) "inWikiFile" value m )
-			"d" -> M.insertWithKey (\_ _ _ -> value) "d" value $
-					( M.insertWithKey (\_ _ _ -> value) "inDictFile" value m )
-			"s" -> M.insertWithKey (\_ _ _ -> value) "s" value $
-					( M.insertWithKey (\_ _ _ -> value) "outBofwFile" value m )
-			"t" -> M.insertWithKey (\_ _ _ -> value) "t" value $
-					( M.insertWithKey (\_ _ _ -> value) "outTitleFile" value m )
-			"m" -> M.insertWithKey (\_ _ _ -> value) "m" value $
-					( M.insertWithKey (\_ _ _ -> value) "numMinTermsInDoc" value m )
-			"x" -> M.insertWithKey (\_ _ _ -> value) "x" value $
-					( M.insertWithKey (\_ _ _ -> value) "numMaxTermsInDoc" value m )
-			"c" -> M.insertWithKey (\_ _ _ -> value) "c" value $
-					( M.insertWithKey (\_ _ _ -> value) "numMinFreqOfTerm" value m )
-			_ -> m
-parseArgs _ mapArgs = mapArgs
-
-getDictionaryFromFile :: M.Map S S -> IO (M.Map S S)
-getDictionaryFromFile mapArgs = do
-
-	let inDictFile = tk mapArgs "d"
-	hInDictFile <- openFile inDictFile ReadMode
-	getLineFromInDictFile hInDictFile M.empty
+	--let inDictFile = tk mapArgs "d"
+	let (ArgsRec { inDictFile = d }) = args
+	hdlr <- openFile d ReadMode
+	getLineFromInDictFile hdlr M.empty
 
 getLineFromInDictFile :: Handle -> M.Map S S -> IO (M.Map S S)
 getLineFromInDictFile hInDictFile mapDict = do
@@ -94,18 +108,18 @@ getLineFromInDictFile hInDictFile mapDict = do
 		getLineFromInDictFile hInDictFile newMapDict
 
 
-getContentFromFile :: M.Map S S -> M.Map S S -> [S] -> IO ()
-getContentFromFile mapArgs mapDict stopwords = do
+getContentFromFile :: ArgsRec -> M.Map S S -> [S] -> IO ()
+getContentFromFile args mapDict stopwords = do
 
-	let inWikiFile = tk mapArgs "i"
-	hInWikiFile <- openFile inWikiFile ReadMode
+	let (ArgsRec { inWikiFile = i }) = args
+	hInWikiFile <- openFile i ReadMode
 	encoding <- mkTextEncoding "UTF-8"
 	hSetEncoding hInWikiFile encoding
-	_ <- getLineFromFile hInWikiFile "" mapArgs mapDict stopwords
+	_ <- getLineFromFile hInWikiFile "" args mapDict stopwords
 	hClose hInWikiFile
 
-getLineFromFile :: Handle -> S -> M.Map S S -> M.Map S S -> [S] -> IO ()
-getLineFromFile hInWikiFile page mapArgs mapDict stopwords = do
+getLineFromFile :: Handle -> S -> ArgsRec -> M.Map S S -> [S] -> IO ()
+getLineFromFile hInWikiFile page args mapDict stopwords = do
 
 	hInWikiFileEOF <- hIsEOF hInWikiFile
 	if hInWikiFileEOF then return ()
@@ -119,58 +133,62 @@ getLineFromFile hInWikiFile page mapArgs mapDict stopwords = do
 		--        ASCII compatible characters in UTF8 is probably OK.
 		--case pageline =~ "</page>" :: Bool of
 		case search line "</page>" of
-			True -> parsePage mapArgs mapDict stopwords pageline
-			False -> getLineFromFile hInWikiFile pageline mapArgs mapDict stopwords
-		getLineFromFile hInWikiFile "" mapArgs mapDict stopwords
+			True -> parsePage args mapDict stopwords pageline
+			False -> getLineFromFile hInWikiFile pageline args mapDict stopwords
+		getLineFromFile hInWikiFile "" args mapDict stopwords
 
-parsePage :: M.Map S S -> M.Map S S -> [S] -> S -> IO ()
-parsePage mapArgs mapDict stopwords page = 
-	--case matchText page ("<text",'>',"</text>")of
-	case P.parse myTextParser "Error:" page of
-		Right text ->
-			-- Write to file or stdout
-			notEmptyWriteToFile (tk mapArgs "s") $
-			-- Make list to string joined with space
-			unwords $
-			-- Make list's list to list flattened
-			concat $
-			-- Note that concat infers that y is String but Int actually
-			-- Make tuple's list to list's list with conditions
-			-- Apply condition for the number of a term in a doc
-			map (\ (x,y) ->
-					if y >= (read $ tk mapArgs "c")
-					then [x,show y]
+parsePage :: ArgsRec -> M.Map S S -> [S] -> S -> IO ()
+parsePage args mapDict stopwords page =
+	let
+		(ArgsRec { outBofwFile = s }) = args
+		(ArgsRec { numMinTermsInDoc = m }) = args
+		(ArgsRec { numMaxTermsInDoc = x }) = args
+		(ArgsRec { numMinFreqOfTerm = c }) = args
+	in
+		case P.parse myTextParser "Error:" page of
+			Right text ->
+				-- Write to file or stdout
+				notEmptyWriteToFile s $
+				-- Make list to string joined with space
+				unwords $
+				-- Make list's list to list flattened
+				concat $
+				-- Note that concat infers that y is String but Int actually
+				-- Make tuple's list to list's list with conditions
+				-- Apply condition for the number of a term in a doc
+				map (\ (x,y) ->
+						if y >= c
+						then [x,show y]
+						else []
+					) $
+				-- Apply condition for the number of (any) terms in a doc
+				(\ term ->
+					--trace("trace2:" ++ show x) $
+					if length term >= m && length term <= x
+					then term
 					else []
 				) $
-			-- Apply condition for the number of (any) terms in a doc
-			(\ x ->
-				--trace("trace2:" ++ show x) $
-				if length x >= (read $ tk mapArgs "m") &&
-					length x <= (read $ tk mapArgs "x")
-				then x
-				else []
-			) $
-			-- Make map to tuple's list
-			M.toList $
-			-- Make bag-of-words by counting each term's frequency
-			makeBagofwords $
-			-- Get baseform from dictionary for each string(term)
-			map (\x -> getBaseformFromDict mapDict x) $
-			-- Exclude stopwords
-			filter (\x -> not $ elem x stopwords) $
-			-- Filter terms out by this regular expression
-			filter (\x -> x =~ "^[a-z][0-9a-z'-]*[0-9a-z]$") $
-			-- Lower all characters in each string
-			map (\x ->
-				--trace("trace1:" ++ show x) $
-				map toLower x) $
-			-- Split text by space
-			words text
+				-- Make map to tuple's list
+				M.toList $
+				-- Make bag-of-words by counting each term's frequency
+				makeBagofwords $
+				-- Get baseform from dictionary for each string(term)
+				map (\x -> getBaseformFromDict mapDict x) $
+				-- Exclude stopwords
+				filter (\x -> not $ elem x stopwords) $
+				-- Filter terms out by this regular expression
+				filter (\x -> x =~ "^[a-z][0-9a-z'-]*[0-9a-z]$") $
+				-- Lower all characters in each string
+				map (\x ->
+					--trace("trace1:" ++ show x) $
+					map toLower x) $
+				-- Split text by space
+				words text
 
-		Left err ->
-			--trace(err ++ ": Nothing for "++ show page) $
-			trace(show err ++ ": Nothing for "++ show page) $
-			exitFailure
+			Left err ->
+				--trace(err ++ ": Nothing for "++ show page) $
+				trace(show err ++ ": Nothing for "++ show page) $
+				exitFailure
 
 --ignore :: SomeException -> IO Bool
 --ignore _ = trace("SomeException.") return False
