@@ -83,6 +83,33 @@ main = do
 	stopwords <- return getStopwords
 	getContentFromFile args _mapDict stopwords
 
+	getTfIdf args
+
+getTfIdf :: ArgsRec -> IO ()
+getTfIdf args = 
+	let
+		(ArgsRec { outBofwFile = s }) = args
+		(ArgsRec { outTfIdfFile = f }) = args
+	in do
+		hdlr <- openFile s ReadMode
+		corpus <- getTfIdfLine hdlr M.empty
+		appendFile f $ (show corpus) ++ "\n"
+
+getTfIdfLine :: Handle -> M.Map S Int -> IO (M.Map S Int)
+getTfIdfLine hdlr m = do
+	isEOF <- hIsEOF hdlr
+	if isEOF then return m
+	else do
+		line <- hGetLine hdlr
+		getTfIdfLine hdlr $ getTermFreq m $ words line
+
+getTermFreq :: M.Map S Int -> [S] -> M.Map S Int
+getTermFreq m [] = m
+getTermFreq m (x:y:xs) =
+	let mx = getTermFreq m xs in
+		M.insertWithKey (\_ _ o->o+yi) x yi mx
+	where yi = read y::Int
+
 getStopwords :: [S]
 getStopwords =
 	let stopwords = "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your"
@@ -160,7 +187,7 @@ parseText args mapDict stopwords text =
 		(ArgsRec { numMinTermsInDoc = m }) = args
 		(ArgsRec { numMaxTermsInDoc = x }) = args
 		(ArgsRec { numMinFreqOfTerm = c }) = args
-	in do
+	in
 		compMakeOutputText m x c mapDict stopwords text
 
 parsePageTitle :: ArgsRec -> S -> S -> IO ()
