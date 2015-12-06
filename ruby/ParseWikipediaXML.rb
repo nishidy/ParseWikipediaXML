@@ -5,14 +5,15 @@ require 'redis'
 # Params:
 # +options+:: command line arguments
 class AbstParser
-  attr_reader :options, :write_lock, :hdlr_bofw, :redis
+  attr_reader :options, :write_lock, :hdlr_bofw, :hdlr_title, :redis
   attr_reader :tospexp, :splexp, :termexp
 
   def initialize(options)
     @options = options
     @write_lock = Mutex.new
     begin
-      @hdlr_bofw = File.open(options[:outBofwFile], 'a')
+      @hdlr_bofw = File.open(options[:outBofwFile], 'a') unless options[:outBofwFile].nil?
+      @hdlr_title = File.open(options[:outTitleFile], 'a') unless options[:outTitleFile].nil?
     rescue => e
       e.message
     end
@@ -28,10 +29,19 @@ class AbstParser
     end
   end
 
-  def save_to_file(bofw)
+  def save_bofw_to_file(bofw)
     write_lock.lock
     begin
       @hdlr_bofw.write bofw
+    ensure
+      write_lock.unlock
+    end
+  end
+
+  def save_title_to_file(title)
+    write_lock.lock
+    begin
+      @hdlr_title.write title
     ensure
       write_lock.unlock
     end
@@ -61,8 +71,11 @@ class EngParser < AbstParser
       %r{<text[^>]*>([^<>]*)<\/text>} =~ page_
       text = Regexp.last_match(1)
 
+      %r{<title[^>]*>([^<>]*)<\/title>} =~ page_
+      title = Regexp.last_match(1)
+
       h, n = parse_bofw(text)
-      post_parse(h, n)
+      post_parse(h, n, title)
     end
 
     begin
@@ -85,18 +98,20 @@ class EngParser < AbstParser
     [hash_bofw, total_num_of_words]
   end
 
-  def post_parse(hash_bofw, total_num_of_words)
+  def post_parse(hash_bofw, total_num_of_words, title)
     return if hash_bofw.empty? ||
               total_num_of_words > @options[:"max-page-words"] ||
               total_num_of_words < @options[:"min-page-words"]
 
-    save_to_file(
+    save_bofw_to_file(
       hash_bofw.sort do |(k1, v1), (k2, v2)|
         v1 == v2 ? k1 <=> k2 : v2 <=> v1
       end.inject('') do |bofw, arr|
         bofw + arr[0] + ' ' + arr[1].to_s + ' '
       end.rstrip + "\n"
     )
+
+    save_title_to_file( title + "\n" )
 
     redis_save(total_num_of_words, hash_bofw.keys.size) unless @redis.nil?
   end
