@@ -5,7 +5,7 @@ require 'redis'
 # Params:
 # +options+:: command line arguments
 class AbstParser
-  attr_reader :options, :write_lock, :hdlr_bofw, :hdlr_title, :redis
+  attr_reader :options, :write_lock, :hdlr_bofw, :hdlr_title, :hdlr_tfidf, :redis
   attr_reader :tospexp, :splexp, :termexp
 
   def initialize(options)
@@ -14,6 +14,7 @@ class AbstParser
     begin
       @hdlr_bofw = File.open(options[:outBofwFile], 'a') unless options[:outBofwFile].nil?
       @hdlr_title = File.open(options[:outTitleFile], 'a') unless options[:outTitleFile].nil?
+      @hdlr_tfidf = File.open(options[:outTfIdfFile], 'a') unless options[:outTfIdfFile].nil?
     rescue => e
       e.message
     end
@@ -51,6 +52,47 @@ class AbstParser
     @tospexp = '[,.;]'
     @splexp = "[ \n]"
     @termexp = "^[a-z][0-9a-z'-]*[0-9a-z]$"
+  end
+
+  def get_corpus_df
+    return if options[:outTfIdfFile].nil?
+
+    total_docs = 0
+    corpus_df = {}
+    File.readlines(@options[:outBofwFile]).each do |line|
+      terms = line.split(" ").select.each_with_index{ |_, i| i.even? }
+      terms.each{ |term|
+        corpus_df.key?(term) ? corpus_df[term] += 1 : corpus_df[term] = 1
+      }
+      total_docs += 1
+    end
+
+    apply_tfidf corpus_df, total_docs
+  end
+
+  def apply_tfidf(corpus_df, total_docs)
+    File.readlines(@options[:outBofwFile]).each do |line|
+      terms = line.split(" ").select.each_with_index{ |_, i| i.even? }
+      freqs = line.split(" ").select.each_with_index{ |_, i| i.odd? }
+      total_terms = freqs.inject(:+)
+      output = ""
+      terms.zip(freqs) { |term, freq|
+        output << " " if terms[0] != term
+        tf  = freq.to_f/total_terms.to_f
+        idf = Math.log2(total_docs/corpus_df[term].to_f)+1
+        output << term + " " + sprintf("%.3f", tf*idf)
+      }
+      save_tfidf_to_file(output + "\n")
+    end
+  end
+
+  def save_tfidf_to_file(output)
+    write_lock.lock
+    begin
+      @hdlr_tfidf.write output
+    ensure
+      write_lock.unlock
+    end
   end
 end
 
@@ -190,6 +232,11 @@ class CLI < Thor
          aliases: '-t',
          desc: 'Ouput file for title'
 
+  option :outTfIdfFile,
+         type: :string,
+         aliases: '-f',
+         desc: 'Ouput file for bag-of-words normarized by tf-idf'
+
   option :"min-page-words",
          type: :numeric,
          aliases: '-m',
@@ -227,6 +274,7 @@ class CLI < Thor
       parser.set_exps
     end
     parser.run_parse
+    parser.get_corpus_df
   end
 
   desc 'convert bag-of-words according to TF-IDF usage',
