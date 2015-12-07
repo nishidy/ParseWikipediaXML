@@ -129,6 +129,11 @@ class AbstParser
       write_lock.unlock
     end
   end
+
+  def post_run_parse
+    @hdlr_bofw.close
+    @hdlr_title.close
+  end
 end
 
 # English Parser class inherited from Abstract Parser class
@@ -152,7 +157,7 @@ class EngParser < AbstParser
       title = Regexp.last_match(1)
 
       h, n = parse_bofw(text)
-      post_parse(h, n, title)
+      post_each_parse(h, n, title)
     end
 
     begin
@@ -175,7 +180,7 @@ class EngParser < AbstParser
     [hash_bofw, total_num_of_words]
   end
 
-  def post_parse(hash_bofw, total_num_of_words, title)
+  def post_each_parse(hash_bofw, total_num_of_words, title)
     return if hash_bofw.empty? ||
               total_num_of_words > @options[:"max-page-words"] ||
               total_num_of_words < @options[:"min-page-words"]
@@ -221,6 +226,7 @@ class EngParser < AbstParser
     end
     puts "#{m} [# page #{cp} / # line #{cl}]"
 
+    post_run_parse
     @redis.set 'finish_time', Time.now.to_f unless @redis.nil?
   end
 
