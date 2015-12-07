@@ -76,7 +76,8 @@ class AbstParser
       freqs = line.split(" ").select.each_with_index{ |_, i| i.odd? }
       total_terms = freqs.map(&:to_i).inject(:+)
 
-	  hash_norm = apply_normalize(terms, freqs, total_terms, corpus_df, total_docs)
+      hash_tfidf = calc_tfidf(terms, freqs, total_terms, corpus_df, total_docs)
+      hash_norm  = normalize_to_integer(hash_tfidf)
 
       save_tfidf_to_file(
         hash_norm.sort do |(k1, v1), (k2, v2)|
@@ -88,7 +89,7 @@ class AbstParser
     end
   end
 
-  def apply_normalize(terms, freqs, total_terms, corpus_df, total_docs)
+  def calc_tfidf(terms, freqs, total_terms, corpus_df, total_docs)
     hash_tfidf = {}
     terms.zip(freqs) { |term, freq|
       tf  = freq.to_f/total_terms.to_f
@@ -97,7 +98,7 @@ class AbstParser
       hash_tfidf[term] = tf*idf
     }
 
-    normalize_to_integer(hash_tfidf)
+    hash_tfidf
   end
 
   def normalize_to_integer(hash_tfidf)
@@ -109,7 +110,7 @@ class AbstParser
       hash_norm[term] = (freq * norm_ratio).round
     }
 
-	hash_norm
+    hash_norm
   end
 
   def save_tfidf_to_file(output)
