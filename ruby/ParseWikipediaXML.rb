@@ -74,7 +74,7 @@ class AbstParser
     File.readlines(@options[:outBofwFile]).each do |line|
       terms = line.split(" ").select.each_with_index{ |_, i| i.even? }
       freqs = line.split(" ").select.each_with_index{ |_, i| i.odd? }
-      total_terms = freqs.inject(:+)
+      total_terms = freqs.map(&:to_i).inject(:+)
       output = ""
       terms.zip(freqs) { |term, freq|
         output << " " if terms[0] != term
