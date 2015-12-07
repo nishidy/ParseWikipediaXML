@@ -75,15 +75,41 @@ class AbstParser
       terms = line.split(" ").select.each_with_index{ |_, i| i.even? }
       freqs = line.split(" ").select.each_with_index{ |_, i| i.odd? }
       total_terms = freqs.map(&:to_i).inject(:+)
-      output = ""
-      terms.zip(freqs) { |term, freq|
-        output << " " if terms[0] != term
-        tf  = freq.to_f/total_terms.to_f
-        idf = Math.log2(total_docs/corpus_df[term].to_f)+1
-        output << term + " " + sprintf("%.3f", tf*idf)
-      }
-      save_tfidf_to_file(output + "\n")
+
+	  hash_norm = apply_normalize(terms, freqs, total_terms, corpus_df, total_docs)
+
+      save_tfidf_to_file(
+        hash_norm.sort do |(k1, v1), (k2, v2)|
+            v1 == v2 ? k1 <=> k2 : v2 <=> v1
+        end.inject('') do |tfidf, arr|
+          tfidf+ arr[0] + ' ' + arr[1].to_s + ' '
+        end.rstrip + "\n"
+      )
     end
+  end
+
+  def apply_normalize(terms, freqs, total_terms, corpus_df, total_docs)
+    hash_tfidf = {}
+    terms.zip(freqs) { |term, freq|
+      tf  = freq.to_f/total_terms.to_f
+      idf = Math.log2(total_docs/corpus_df[term].to_f)+1
+
+      hash_tfidf[term] = tf*idf
+    }
+
+    normalize_to_integer(hash_tfidf)
+  end
+
+  def normalize_to_integer(hash_tfidf)
+    min_freq = hash_tfidf.values.min
+    norm_ratio = 1.0 / min_freq
+
+    hash_norm = {}
+    hash_tfidf.map{ |term, freq|
+      hash_norm[term] = (freq * norm_ratio).round
+    }
+
+	hash_norm
   end
 
   def save_tfidf_to_file(output)
