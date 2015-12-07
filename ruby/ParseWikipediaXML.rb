@@ -57,6 +57,8 @@ class AbstParser
   def get_corpus_df
     return if options[:outTfIdfFile].nil?
 
+    c=0
+    m=' > Reading bag-of-words'
     total_docs = 0
     corpus_df = {}
     File.readlines(@options[:outBofwFile]).each do |line|
@@ -65,18 +67,22 @@ class AbstParser
         corpus_df.key?(term) ? corpus_df[term] += 1 : corpus_df[term] = 1
       }
       total_docs += 1
+      print "#{m} [# page #{c+=1}]\r"
     end
+    puts "#{m} [# page #{c}]"
 
     apply_tfidf corpus_df, total_docs
   end
 
   def apply_tfidf(corpus_df, total_docs)
+    c=0
+    m=' > Applying TF-IDF'
     File.readlines(@options[:outBofwFile]).each do |line|
       terms = line.split(" ").select.each_with_index{ |_, i| i.even? }
       freqs = line.split(" ").select.each_with_index{ |_, i| i.odd? }
       total_terms = freqs.map(&:to_i).inject(:+)
 
-      hash_tfidf = calc_tfidf(terms, freqs, total_terms, corpus_df, total_docs)
+      hash_tfidf = calc_tfidf(terms, freqs, total_terms, total_docs, corpus_df)
       hash_norm  = normalize_to_integer(hash_tfidf)
 
       save_tfidf_to_file(
@@ -86,14 +92,16 @@ class AbstParser
           tfidf+ arr[0] + ' ' + arr[1].to_s + ' '
         end.rstrip + "\n"
       )
+      print "#{m} [# page #{c+=1}]\r"
     end
+    puts "#{m} [# page #{c}]"
   end
 
-  def calc_tfidf(terms, freqs, total_terms, corpus_df, total_docs)
+  def calc_tfidf(terms, freqs, total_terms, total_docs, corpus_df)
     hash_tfidf = {}
     terms.zip(freqs) { |term, freq|
       tf  = freq.to_f/total_terms.to_f
-      idf = Math.log2(total_docs/corpus_df[term].to_f)+1
+      idf = Math.log2(total_docs.to_f/corpus_df[term].to_f)+1
 
       hash_tfidf[term] = tf*idf
     }
@@ -193,8 +201,13 @@ class EngParser < AbstParser
   def run_parse
     @redis.set 'start_time', Time.now.to_f unless @redis.nil?
 
+    cl=0
+    cp=0
+    m=' > Reading database'
     startflag = stopflag = false, page = ''
     File.readlines(@options[:inWikiFile]).each do |line|
+      print "#{m} [# page #{cp} / # line #{cl+=1}]\r"
+
       startflag = true if line.include? '<page>'
       stopflag = true if line.include? '</page>'
       page << line if startflag
@@ -202,9 +215,11 @@ class EngParser < AbstParser
 
       start_parse page
 
+      cp += 1
       page = ''
       startflag = stopflag = false
     end
+    puts "#{m} [# page #{cp} / # line #{cl}]"
 
     @redis.set 'finish_time', Time.now.to_f unless @redis.nil?
   end
@@ -213,14 +228,17 @@ class EngParser < AbstParser
     @hash_dict = {}
     return if @options[:inDictFile].nil?
 
-    print 'Begin reading from dictionary... '
+    c=0
+    m=' > Reading dictionary'
     File.readlines(@options[:inDictFile]).each do |line|
       items = line.split(/[ \t]/)
       trans = items[0]
       base = items[3]
       @hash_dict[trans] = base unless trans == base
+      print "#{m} [# word #{c+=1}]\r"
     end
-    print "Finshded reading from dictionary.\n"
+    puts "#{m} [# word #{c}]"
+
   end
 
   def get_set_val(num)
