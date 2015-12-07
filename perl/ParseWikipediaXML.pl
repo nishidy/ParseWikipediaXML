@@ -214,8 +214,9 @@ sub startParse {
         $redis->set( start_time => gettimeofday()."");
     }
 
-    print("\n");
-    printf("$m [# page $ThreadWorker::cp] in %.2f sec\n", gettimeofday()-$start);
+    printf("\n");
+    printf("$m in %.2f sec\n", gettimeofday()-$start);
+
 }
 
 sub writeToFile {
