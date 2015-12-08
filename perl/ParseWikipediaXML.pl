@@ -20,6 +20,11 @@ sub bowCreate {
         my $recateg = "<title[^<>]*>(".$parser->{Args}->recateg.")<\/title>";
         next unless $page =~ /$recateg/;
 
+        my $title;
+        if( $page =~ /<title[^<>]*>([^<>]+)<\/title>/ ){
+            $title = $1;
+        }
+
         my $text;
         if( $page =~ /<text[^<>]*>([^<>]+)<\/text>/ ){
             $text = $1;
@@ -29,7 +34,7 @@ sub bowCreate {
 
         my ($bofw,$totalNum,$num) = $parser->parseText($text);
         if($totalNum>0){
-            $parser->writeToFile($bofw);
+            $parser->writeToFile($bofw, $title);
             if (defined($redis)){
                 $redis->zincrby('total_num', 1, int($totalNum/100)*100);
                 $redis->zincrby('num', 1, int($num/100)*100);
@@ -145,12 +150,16 @@ sub new {
     my $queue = new Thread::Queue;
     my $mutex :shared;
 
-    my $fout;
-    open $fout, '>', $args->outBofwFile or $fout = undef;
+    my $fbofw;
+    open $fbofw, '>', $args->outBofwFile or $fbofw = undef;
+
+    my $ftitle;
+    open $ftitle, '>', $args->outTitleFile or $ftitle = undef;
 
     my $self = {
         Args => $args,
-        hdlrOutBofwFile => $fout,
+        hdlrOutBofwFile => $fbofw,
+        hdlrOutTitleFile => $ftitle,
         PageQueue => $queue,
         WriteMutex => \$mutex,
         Finished => "::FINISHED::"
@@ -220,12 +229,13 @@ sub startParse {
 }
 
 sub writeToFile {
-    my ($self,$bofw) = @_;
+    my ($self,$bofw, $title) = @_;
 
     if(defined($bofw)){
         lock($self->{WriteMutex});
         # Encode to UTF8
         print {$self->{hdlrOutBofwFile}?$self->{hdlrOutBofwFile}:*STDOUT} encode('utf-8',$bofw."\n");
+        print {$self->{hdlrOutTitleFile}?$self->{hdlrOutTitleFile}:*STDOUT} encode('utf-8',$title."\n");
     }
 }
 
