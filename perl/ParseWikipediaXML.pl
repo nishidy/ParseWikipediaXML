@@ -336,6 +336,7 @@ use utf8;
 use List::Util qw/reduce/;
 use Devel::Peek;
 use Time::HiRes qw/ gettimeofday /;
+use Data::Dumper;
 
 sub new {
     my ($class,$args) = @_;
@@ -368,6 +369,7 @@ sub readDictionary {
         while(<$fh>){
             if( index($_,";;;") == -1 ){
                 my @words = map { $_ =~ s/\s*$//; $_ } split(/\t/, $_);
+                next if $words[2] =~ /\s/;
                 $self->{hashDict}->{$words[0]} = $words[2];
                 print("$m [# word $c]\r");
                 $c++;
@@ -384,10 +386,11 @@ sub parseText {
     my %hashDoc;
     my $totalWordNum=0;
     my @ngrams;
-    my @words = split(/ /,$text);
+    $text =~ s/[.,;\n]/ /g;
+    my @words = split(/ /, $text);
 
     foreach my $word ( map { chomp; lc } @words ) {
-        next unless $word =~ "^[a-z][a-z0-9'-]*[a-z0-9]\$";
+        next unless $word =~ /^[a-z][a-z0-9'-]*[a-z0-9]$/s;
         next if grep { $_ eq $word } @{$self->{stopwords}};
 
         my $dword;
