@@ -34,7 +34,7 @@ sub bowCreate {
 
         my ($bofw,$totalNum,$num) = $parser->parseText($text);
         if($totalNum>0){
-            $parser->writeToFile($bofw, $title);
+            $parser->writeBofwToFile($bofw, $title);
             if (defined($redis)){
                 $redis->zincrby('total_num', 1, int($totalNum/100)*100);
                 $redis->zincrby('num', 1, int($num/100)*100);
@@ -94,6 +94,8 @@ sub parseArgs {
         default => undef, help => "Output file with bag-of-words of each page");
     $ap->add_arg('--outTitleFile', '-t',
         help => "Output file with title of each page");
+    $ap->add_arg('--outTfIdfFile', '-f',
+        default => undef, help => "Output file with tfidf of each page");
     $ap->add_arg('--minTermsInPage', '-m',
         default => 1, help => "How many terms page should have at least");
     $ap->add_arg('--maxTermsInPage', '-x',
@@ -133,6 +135,7 @@ sub start {
     }
 
     $parser->startParse($redis);
+    $parser->applyTfIdf();
 
 }
 
@@ -143,6 +146,10 @@ package AbstParser;
 use Encode;
 use Devel::Peek;
 use Time::HiRes qw/ gettimeofday /;
+use List::Util qw/ sum /;
+use List::MoreUtils qw/ zip /;
+use Data::Dumper;
+use List::Util qw/reduce/;
 
 sub new {
     my ($class, $args) = @_;
@@ -228,8 +235,8 @@ sub startParse {
 
 }
 
-sub writeToFile {
-    my ($self,$bofw, $title) = @_;
+sub writeBofwToFile {
+    my ($self, $bofw, $title) = @_;
 
     if(defined($bofw)){
         lock($self->{WriteMutex});
@@ -237,6 +244,86 @@ sub writeToFile {
         print {$self->{hdlrOutBofwFile}?$self->{hdlrOutBofwFile}:*STDOUT} encode('utf-8',$bofw."\n");
         print {$self->{hdlrOutTitleFile}?$self->{hdlrOutTitleFile}:*STDOUT} encode('utf-8',$title."\n");
     }
+}
+
+sub writeTfIdfToFile {
+    my ($self, $tfidf) = @_;
+
+    if(defined($tfidf)){
+        lock($self->{WriteMutex});
+        # Encode to UTF8
+        print {$self->{hdlrOutTfIdfFile}?$self->{hdlrOutTfIdfFile}:*STDOUT} encode('utf-8',$tfidf."\n");
+    }
+}
+
+sub applyTfIdf {
+    my $self = shift;
+
+    if( not defined($self->{Args}->outTfIdfFile) ){ return; }
+
+    my $ftfidf;
+    open $ftfidf, '>', $self->{Args}->outTfIdfFile or $ftfidf = undef;
+    $self->{hdlrOutTfIdfFile} = $ftfidf;
+
+    my %hashCorpus;
+
+    my $docsInCorpus = 0;
+    my $c = 0;
+    my $m = " > Read bag-of-words @ ".(caller 0)[3];
+    my $start = gettimeofday();
+
+    my $fh;
+    open $fh, '<:utf8', $self->{Args}->outBofwFile or die "Cannot open $self->{Args}->outBofwFile:$!";
+    while(<$fh>){
+
+        my $idx = 0;
+        my @terms = grep { $idx = not $idx } split(/ /, $_ );
+
+        foreach my $term ( @terms ) {
+            if(exists $hashCorpus{ $term }){
+                $hashCorpus{ $term }++;
+            }else{
+                $hashCorpus{ $term }=1;
+            }
+        }
+
+        $docsInCorpus++;
+
+        print("$m [# page $c]\r");
+        $c++;
+    }
+    printf("$m [# page $c] in %.2f sec\n", gettimeofday()-$start);
+    close $fh;
+
+    $c = 0;
+    $start = gettimeofday();
+    open $fh, '<:utf8', $self->{Args}->outBofwFile or die "Cannot open $self->{Args}->outBofwFile:$!";
+    while(<$fh>){
+        my %hashTfIdf;
+
+        my $idx = 0;
+        my @terms = grep { $idx = not $idx } split(/ /, $_ );
+        $idx = 1;
+        my @freqs = grep { $idx = not $idx } split(/ /, $_ );
+        my $termsInDoc = sum(@freqs);
+
+        for ( 0 .. $#terms ) {
+            my $tf = $freqs[ $_ ] / $termsInDoc;
+            my $idf = log( $docsInCorpus / $hashCorpus{ $terms[ $_ ] } ) + 1;
+            $hashTfIdf{ $terms[ $_ ] } = sprintf( "%.3f", $tf * $idf );
+        }
+
+        my $output =
+            reduce { defined($a) ? $a." ".$b." ".$hashTfIdf{$b} : $b." ".$hashTfIdf{$b} }
+            undef, sort{ $hashTfIdf{$b} <=> $hashTfIdf{$a} || $a cmp $b } keys %hashTfIdf;
+
+        $self->writeTfIdfToFile($output);
+
+        print("$m [# page $c]\r");
+        $c++;
+    }
+    printf("$m [# page $c] in %.2f sec\n", gettimeofday()-$start);
+    close $fh;
 }
 
 1;
