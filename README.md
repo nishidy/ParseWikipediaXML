@@ -4,6 +4,7 @@ This repository contains programs which create bag-of-words from Wikipedia datab
  
 * Various conditions to bag-of-words such as the minimum number of each word in a document, etc.
 * Documents in English and in Japanese
+* Apply TF-IDF and normalization 
 * Parsing in concurrent way employing threads
 * Web interface to check the intermediate report e.g. throughput
 * Test program to check if the program produces correct results with or without threads (under share directory)
