@@ -386,10 +386,11 @@ sub parseText {
     my %hashDoc;
     my $totalWordNum=0;
     my @ngrams;
+
     $text =~ s/[.,;\n]/ /g;
     my @words = split(/ /, $text);
 
-    foreach my $word ( map { chomp; lc } @words ) {
+    foreach my $word ( map { lc } @words ) {
         next unless $word =~ /^[a-z][a-z0-9'-]*[a-z0-9]$/s;
         next if grep { $_ eq $word } @{$self->{stopwords}};
 
