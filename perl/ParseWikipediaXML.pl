@@ -2,12 +2,14 @@
 
 package ThreadWorker;
 use Time::HiRes qw/ gettimeofday /;
+use threads;
+use threads::shared;
 
-our $cp = 0;
-my $mutex :shared;
+my $cp : shared = 0;
 
 sub bowCreate {
     my $parser = shift;
+    my $id = shift;
     my $redis = shift;
 
     my $m = " > Read database @ ".(caller 0)[3];
@@ -42,9 +44,9 @@ sub bowCreate {
         }
 
         {
-            lock($mutex);
+            lock($cp);
             $cp++;
-            print("$m [# page $cp]\r");
+            print("$m [# page $cp @ thread $id]\r");
         }
     }
 }
@@ -75,6 +77,7 @@ __PACKAGE__->meta->make_immutable();
 
 no Mouse;
 
+$| = 1;
 main->new()->start();
 
 sub parseArgs {
@@ -116,7 +119,6 @@ sub parseArgs {
 
 sub start {
     my $self = shift;
-    $| = 1;
 
     my $redis;
     eval {
@@ -150,25 +152,28 @@ use List::Util qw/ sum /;
 use List::MoreUtils qw/ zip /;
 use Data::Dumper;
 use List::Util qw/reduce/;
+use threads;
+use threads::shared;
+use IO::Handle;
 
 sub new {
     my ($class, $args) = @_;
 
     my $queue = new Thread::Queue;
-    my $mutex :shared;
 
     my $fbofw;
     open $fbofw, '>', $args->outBofwFile or $fbofw = undef;
+    $fbofw->autoflush;
 
     my $ftitle;
     open $ftitle, '>', $args->outTitleFile or $ftitle = undef;
+    $ftitle->autoflush;
 
     my $self = {
         Args => $args,
         hdlrOutBofwFile => $fbofw,
         hdlrOutTitleFile => $ftitle,
         PageQueue => $queue,
-        WriteMutex => \$mutex,
         Finished => "::FINISHED::"
     };
     return bless $self, $class;
@@ -184,7 +189,7 @@ sub startParse {
 
     my @threads;
     for(my $w=0;$w<$self->{Args}->workers;$w++){
-        my $th = threads->create(\&ThreadWorker::bowCreate,$self,$redis);
+        my $th = threads->create(\&ThreadWorker::bowCreate, $self, $w, $redis);
         push(@threads, $th);
     }
     #my $nthread = @threads;
@@ -217,16 +222,19 @@ sub startParse {
 
     foreach (@threads) {
         $self->{PageQueue}->enqueue($self->{Finished});
+    }
+
+    foreach (@threads) {
         $_->join();
     }
 
 
-    if( $self->{hdlOutBofwFile} ){
+    if( defined($self->{hdlrOutBofwFile}) ){
         close $self->{hdlrOutBofwFile};
     }
     close $fh;
 
-    if (defined($redis)){
+    if ( defined($redis) ){
         $redis->set( start_time => gettimeofday()."");
     }
 
@@ -237,22 +245,44 @@ sub startParse {
 
 sub writeBofwToFile {
     my ($self, $bofw, $title) = @_;
+    my $mutex : shared;
 
     if(defined($bofw)){
-        lock($self->{WriteMutex});
+        lock($mutex);
+
         # Encode to UTF8
-        print {$self->{hdlrOutBofwFile}?$self->{hdlrOutBofwFile}:*STDOUT} encode('utf-8',$bofw."\n");
-        print {$self->{hdlrOutTitleFile}?$self->{hdlrOutTitleFile}:*STDOUT} encode('utf-8',$title."\n");
+
+        if( defined($self->{hdlrOutBofwFile}) ){
+            print { $self->{hdlrOutBofwFile} } encode('utf-8',$bofw."\n");
+        }else{
+            print { *STDOUT } encode('utf-8',$bofw."\n");
+        }
+
+        if( defined($self->{hdlrOutTitleFile}) ){
+            print { $self->{hdlrOutTitleFile} } encode('utf-8',$title."\n");
+        }else{
+            print { *STDOUT } encode('utf-8',$title."\n");
+        }
+
     }
+
 }
 
 sub writeTfIdfToFile {
     my ($self, $tfidf) = @_;
+    my $mutex : shared;
 
     if(defined($tfidf)){
-        lock($self->{WriteMutex});
+        lock($mutex);
+
         # Encode to UTF8
-        print {$self->{hdlrOutTfIdfFile}?$self->{hdlrOutTfIdfFile}:*STDOUT} encode('utf-8',$tfidf."\n");
+
+        if( defined($self->{hdlrOutTfIdfFile}) ){
+            print { $self->{hdlrOutTfIdfFile} } encode('utf-8',$tfidf."\n");
+        }else{
+            print { *STDOUT } encode('utf-8',$tfidf."\n");
+        }
+
     }
 }
 
@@ -261,11 +291,13 @@ sub applyTfIdf {
 
     if( not defined($self->{Args}->outTfIdfFile) ){ return; }
 
-    my $ftfidf;
-    open $ftfidf, '>', $self->{Args}->outTfIdfFile or $ftfidf = undef;
-    $self->{hdlrOutTfIdfFile} = $ftfidf;
+    $self->getDfCorpus();
+}
 
-    my %hashCorpus;
+sub getDfCorpus {
+    my $self = shift;
+
+    my %hashDf;
 
     my $docsInCorpus = 0;
     my $c = 0;
@@ -280,10 +312,10 @@ sub applyTfIdf {
         my @terms = grep { $idx = not $idx } split(/ /, $_ );
 
         foreach my $term ( @terms ) {
-            if(exists $hashCorpus{ $term }){
-                $hashCorpus{ $term }++;
+            if(exists $hashDf{ $term }){
+                $hashDf{ $term }++;
             }else{
-                $hashCorpus{ $term }=1;
+                $hashDf{ $term }=1;
             }
         }
 
@@ -295,11 +327,28 @@ sub applyTfIdf {
     printf("$m [# page $c] in %.2f sec\n", gettimeofday()-$start);
     close $fh;
 
-    $c = 0;
-    $start = gettimeofday();
+    $self->calcTfIdf(\%hashDf, $docsInCorpus);
+}
+
+sub calcTfIdf {
+    my $self = shift;
+    my $hashDf= shift;
+    my $docsInCorpus = shift;
+
+    my $ftfidf;
+    open $ftfidf, '>', $self->{Args}->outTfIdfFile or $ftfidf = undef;
+    $self->{hdlrOutTfIdfFile} = $ftfidf;
+    $ftfidf->autoflush;
+
+    my $c = 0;
+    my $m = " > Read bag-of-words @ ".(caller 0)[3];
+    my $start = gettimeofday();
+    my $fh;
     open $fh, '<:utf8', $self->{Args}->outBofwFile or die "Cannot open $self->{Args}->outBofwFile:$!";
     while(<$fh>){
         my %hashTfIdf;
+        my $debugsize = split(/ /, $_);
+        if( $debugsize % 2 == 1 ) { print $_; exit 10; }
 
         my $idx = 0;
         my @terms = grep { $idx = not $idx } split(/ /, $_ );
@@ -309,7 +358,7 @@ sub applyTfIdf {
 
         for ( 0 .. $#terms ) {
             my $tf = $freqs[ $_ ] / $termsInDoc;
-            my $idf = log( $docsInCorpus / $hashCorpus{ $terms[ $_ ] } ) + 1;
+            my $idf = log( $docsInCorpus / $$hashDf{ $terms[ $_ ] } ) + 1;
             $hashTfIdf{ $terms[ $_ ] } = sprintf( "%.3f", $tf * $idf );
         }
 
@@ -325,6 +374,7 @@ sub applyTfIdf {
     printf("$m [# page $c] in %.2f sec\n", gettimeofday()-$start);
     close $fh;
 }
+
 
 1;
 
