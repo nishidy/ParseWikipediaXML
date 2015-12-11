@@ -154,9 +154,6 @@ int main(int argc, char* argv[])
     Checker c1;
     Checker c2;
 
-    bool verbose=false;
-    bool v_verbose=false;
-
     switch(argc){
         case 4:
             if(string(argv[3])=="-v"){
