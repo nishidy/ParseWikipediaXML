@@ -64,7 +64,7 @@ def store_redis(func):
         try:
             args[0].redis.ping()
         except redis.exceptions.ConnectionError:
-            pass
+            result = func(*args,**kwargs)
         except Exception as e:
             print(e)
         else:
