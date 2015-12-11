@@ -80,9 +80,9 @@ def check_time(func):
     def wrapper(*args,**kwargs):
         import time
         start = time.time()
-        print("Begin %s."%(func.__name__))
+        #print("Begin %s."%(func.__name__))
         result = func(*args,**kwargs)
-        print("Finished %s in %.2f sec."%(func.__name__,time.time()-start))
+        print(" > Finished %s in %.2f sec."%(func.__name__,time.time()-start))
         return result
     return wrapper
 
@@ -110,8 +110,12 @@ class AbstParser():
 
         page=""
         startFlag=endFlag=False
+        m = " > Execute %(func)s" % { "func": sys._getframe().f_code.co_name }
+        c = 0
+        l = 0
         try:
             for line in open(self.args.ifwiki,'r'):
+
                 if line.find("<page>")>=0: startFlag=True
                 if line.find("</page>")>=0: endFlag=True
 
@@ -121,11 +125,19 @@ class AbstParser():
                     self.queue.put(page)
                     startFlag=endFlag=False
                     page=""
+                    c+=1
+
+                l+=1
+                print( "%(message)s [ # page %(count)s / # line %(line)s ]" %
+                        { "message" : m, "count": c , "line": l }, "\r", end="" )
 
         except IOError as e:
             print(e,file=sys.stderr)
             self.stopWorkers()
             return
+
+        else:
+            print( "" )
 
         # Leave out of this join() when the count becomes zero
         self.queue.join()
@@ -221,15 +233,22 @@ class EngParser(AbstParser):
                     self.dictMap = msg
                     return
 
+        m = " > Execute %(func)s" % { "func": sys._getframe().f_code.co_name }
+        c = 0
         try:
             for line in open(self.args.ifdict,'r'):
                 if line.find(";;;")>=0: continue
                 words = line.split("\t")
                 if words[0] == words[2]: continue
                 self.dictMap[words[0].rstrip()] = words[2].rstrip()
+                c+=1
+                print( "%(message)s [ # word %(count)s ]" %
+                        { "message" : m, "count": c }, "\r", end="" )
         except IOError as e:
             print(e,file=sys.stderr)
             sys.exit(1)
+        else:
+            print( "" )
 
     def parseText(self,text):
 
