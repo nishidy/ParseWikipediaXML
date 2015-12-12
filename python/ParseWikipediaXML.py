@@ -62,7 +62,7 @@ def store_redis(func):
     @functools.wraps(func)
     def wrapper(*args,**kwargs):
         try:
-            args[0].redis.ping()
+            args[0].client.ping()
         except redis.exceptions.ConnectionError:
             result = func(*args,**kwargs)
         except Exception as e:
@@ -92,7 +92,7 @@ class AbstParser():
         self.lock = threading.Lock()
         self.args = args
         self.queue = Queue.Queue()
-        self.redis = redis.StrictRedis()
+        self.client = redis.StrictRedis()
 
     def stopWorkers(self):
         for i in range(self.args.workers):
@@ -169,9 +169,9 @@ class AbstParser():
 
     def saveWordCountsToRedis(self,total,num):
         try:
-            self.redis.ping()
-            self.redis.zincrby("sorted_total",self.getSetVal(total))
-            self.redis.zincrby("sorted_num",self.getSetVal(num))
+            self.client.ping()
+            self.client.zincrby("sorted_total",self.getSetVal(total))
+            self.client.zincrby("sorted_num",self.getSetVal(num))
         except redis.exceptions.ConnectionError:
             pass
         except Exception as e:
