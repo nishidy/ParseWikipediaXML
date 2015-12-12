@@ -44,20 +44,10 @@ class bofwThread(threading.Thread):
         args = self.parser.args
         queue = self.parser.queue
 
-        m = " > Execute %(func)s" % { "func": sys._getframe().f_code.co_name }
-
         while True:
 
             page = queue.get()
-
-            if page == "Finished":
-                #print("Finished thread %(idx)s" % { "idx" : self.idx })
-                queue.task_done()
-                break
-
-            # Do not use re.match for this purpose. Instead, we can use re.search as well.
-            if re.search("<category[^<>]*?>.*</category>",page) is not None:
-                if re.search("<category[^<>]*>%s</category>"%args.recateg,page) is None: continue
+            if page == "Finished": break
 
             match = re.search("<text[^<>]*>([^<>]+)</text>",page)
             text = match.group(1)
@@ -68,26 +58,37 @@ class bofwThread(threading.Thread):
             # put() counts up and task_done() counts down
             queue.task_done()
 
-            bofwThread.lock.acquire()
-            bofwThread.page += 1
-            print( "%(message)s [ # page %(count)s ]" %
-                    { "message" : m, "count": bofwThread.page }, "\r", end="" )
-            bofwThread.lock.release()
+            self.report(page)
+
+        # Be sure that this can let queue.join() go
+        queue.task_done()
+
+    def report(self, page):
+        m = " > Execute %(class)s" % { "class": __class__.__name__ }
+
+        bofwThread.lock.acquire()
+        bofwThread.page += 1
+        print( "%(message)s [ # page %(count)s ]" %
+            { "message" : m, "count": bofwThread.page }, "\r", end="" )
+        bofwThread.lock.release()
 
 def store_redis(func):
     import functools
     @functools.wraps(func)
     def wrapper(*args,**kwargs):
         try:
-            args[0].client.ping()
+            if args[0].client == None:
+                raise redis.exceptions.ConnectionError
+            else:
+                args[0].client.ping()
         except redis.exceptions.ConnectionError:
             result = func(*args,**kwargs)
         except Exception as e:
             print(e)
         else:
-            args[0].redis.set("start_time",time.time())
+            args[0].client.set("start_time",time.time())
             result = func(*args,**kwargs)
-            args[0].redis.set("finish_time",time.time())
+            args[0].client.set("finish_time",time.time())
         return result
     return wrapper
 
@@ -110,6 +111,15 @@ class AbstParser():
         self.args = args
         self.queue = Queue.Queue()
         self.client = redis.StrictRedis()
+        self.redis_check()
+
+    def redis_check(self):
+        try:
+            self.client.ping()
+        except redis.exceptions.ConnectionError:
+            self.client = None
+        except:
+            sys.exit(2)
 
     def stopWorkers(self):
         for i in range(self.args.workers):
@@ -146,14 +156,13 @@ class AbstParser():
             self.stopWorkers()
             return
 
-        else:
-            print( "" )
-
         # Leave out of this join() when the count becomes zero
         self.stopWorkers()
         self.queue.join()
 
-        m = " > Execute %(func)s" % { "func": sys._getframe().f_code.co_name }
+        print( "" )
+
+        m = " > Executed %(func)s" % { "func": sys._getframe().f_code.co_name }
         print( "%(message)s [ # page %(count)s ]" %
                 { "message" : m, "count": bofwThread.page }, "\n", end="" )
 
@@ -182,8 +191,11 @@ class AbstParser():
                 self.lock.release()
 
     def saveWordCountsToRedis(self,total,num):
+        if self.client == None: return
+
         try:
-            self.client.ping()
+            # This may take long time like seconds
+            #self.client.ping()
             self.client.zincrby("sorted_total",self.getSetVal(total))
             self.client.zincrby("sorted_num",self.getSetVal(num))
         except redis.exceptions.ConnectionError:
@@ -264,6 +276,8 @@ class EngParser(AbstParser):
         else:
             print( "" )
 
+    # This decorator is for line_profiler to get line-based profile
+    #@profile
     def parseText(self,text):
 
         totalNumOfWords = 0
@@ -278,7 +292,7 @@ class EngParser(AbstParser):
             totalNumOfWords +=1
 
         if totalNumOfWords > 0:
-            self.saveWordCountsToRedis(totalNumOfWords,len(dictBofw.keys()))
+            self.saveWordCountsToRedis(totalNumOfWords, len(dictBofw.keys()))
 
         return dictBofw
 
