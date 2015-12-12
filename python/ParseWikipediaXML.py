@@ -32,7 +32,7 @@ class bofwThread(threading.Thread):
 
     # static variables
     lock = threading.Lock()
-    page = 0
+    pages = 0
 
     def __init__(self, parser, idx):
         super(bofwThread,self).__init__()
@@ -58,18 +58,19 @@ class bofwThread(threading.Thread):
             # put() counts up and task_done() counts down
             queue.task_done()
 
-            self.report(page)
+            self.report()
 
         # Be sure that this can let queue.join() go
         queue.task_done()
 
-    def report(self, page):
+    def report(self):
         m = " > Execute %(class)s" % { "class": __class__.__name__ }
 
         bofwThread.lock.acquire()
-        bofwThread.page += 1
-        print( "%(message)s [ # page %(count)s ]" %
-            { "message" : m, "count": bofwThread.page }, "\r", end="" )
+        bofwThread.pages += 1
+        print( "%(message)s [ # page %(count)s @ thread %(index)s ]" %
+                { "message" : m, "count": bofwThread.pages, "index" : self.idx },
+                "\r", end="" )
         bofwThread.lock.release()
 
 def store_redis(func):
@@ -161,10 +162,6 @@ class AbstParser():
         self.queue.join()
 
         print( "" )
-
-        m = " > Executed %(func)s" % { "func": sys._getframe().f_code.co_name }
-        print( "%(message)s [ # page %(count)s ]" %
-                { "message" : m, "count": bofwThread.page }, "\n", end="" )
 
     # This forces inheritances to implement this method
     def parseText(self,text):
