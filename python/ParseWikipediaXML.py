@@ -30,19 +30,30 @@ def cmp_dict(a,b):
 
 class bofwThread(threading.Thread):
 
-    def __init__(self, parser):
+    # static variables
+    lock = threading.Lock()
+    page = 0
+
+    def __init__(self, parser, idx):
         super(bofwThread,self).__init__()
         self.parser = parser
+        self.idx = idx
 
     def run(self):
 
         args = self.parser.args
         queue = self.parser.queue
 
+        m = " > Execute %(func)s" % { "func": sys._getframe().f_code.co_name }
+
         while True:
 
             page = queue.get()
-            if page == "Finished": break
+
+            if page == "Finished":
+                #print("Finished thread %(idx)s" % { "idx" : self.idx })
+                queue.task_done()
+                break
 
             # Do not use re.match for this purpose. Instead, we can use re.search as well.
             if re.search("<category[^<>]*?>.*</category>",page) is not None:
@@ -56,6 +67,12 @@ class bofwThread(threading.Thread):
 
             # put() counts up and task_done() counts down
             queue.task_done()
+
+            bofwThread.lock.acquire()
+            bofwThread.page += 1
+            print( "%(message)s [ # page %(count)s ]" %
+                    { "message" : m, "count": bofwThread.page }, "\r", end="" )
+            bofwThread.lock.release()
 
 def store_redis(func):
     import functools
@@ -97,6 +114,7 @@ class AbstParser():
     def stopWorkers(self):
         for i in range(self.args.workers):
             self.queue.put("Finished")
+            #print("Final flag is put at thread %(idx)s" % { "idx":i })
 
     @store_redis
     @check_time
@@ -105,14 +123,11 @@ class AbstParser():
         bofwthreads = []
 
         for i in range(self.args.workers):
-            bofwthreads.append(bofwThread(self))
+            bofwthreads.append(bofwThread(self,i))
             bofwthreads[i].start()
 
         page=""
         startFlag=endFlag=False
-        m = " > Execute %(func)s" % { "func": sys._getframe().f_code.co_name }
-        c = 0
-        l = 0
         try:
             for line in open(self.args.ifwiki,'r'):
 
@@ -125,11 +140,6 @@ class AbstParser():
                     self.queue.put(page)
                     startFlag=endFlag=False
                     page=""
-                    c+=1
-
-                l+=1
-                print( "%(message)s [ # page %(count)s / # line %(line)s ]" %
-                        { "message" : m, "count": c , "line": l }, "\r", end="" )
 
         except IOError as e:
             print(e,file=sys.stderr)
@@ -140,8 +150,12 @@ class AbstParser():
             print( "" )
 
         # Leave out of this join() when the count becomes zero
-        self.queue.join()
         self.stopWorkers()
+        self.queue.join()
+
+        m = " > Execute %(func)s" % { "func": sys._getframe().f_code.co_name }
+        print( "%(message)s [ # page %(count)s ]" %
+                { "message" : m, "count": bofwThread.page }, "\n", end="" )
 
     # This forces inheritances to implement this method
     def parseText(self,text):
