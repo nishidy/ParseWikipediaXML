@@ -9,6 +9,7 @@ from collections import defaultdict
 import MeCab
 import redis
 import time
+import math
 
 
 def python_sorted(lst):
@@ -53,7 +54,7 @@ class bofwThread(threading.Thread):
             text = match.group(1)
 
             dictBofw = self.parser.parseText(text)
-            self.parser.writeToFile(dictBofw)
+            self.parser.writeBofwToFile(dictBofw)
 
             # put() counts up and task_done() counts down
             queue.task_done()
@@ -167,7 +168,7 @@ class AbstParser():
     def parseText(self,text):
         return NotImplementedError
 
-    def writeToFile(self,dictBofw):
+    def writeBofwToFile(self,dictBofw):
 
         docCount=sum(dictBofw.values())
         listTupleBofw = python_sorted(dictBofw.items())
@@ -202,6 +203,76 @@ class AbstParser():
 
     def getSetVal(self,n):
         return str(n/100*100)
+
+    def applyTfIdf(self):
+        if self.args.oftfidf is None: return
+        self.getDfCorpus()
+
+    def getDfCorpus(self):
+        m = " > Execute %(func)s" % { "func": sys._getframe().f_code.co_name }
+        c = 0
+
+        docs = 0
+        dictDf = defaultdict(int)
+        for line in open(self.args.ofcont,'r'):
+            if len(line.split(" ")) % 2 == 1:
+                print("")
+                print("Wrong bag-of-words : %s" % (line))
+                raise Exception
+
+            terms = line.split(" ")[::2]
+            for term in terms:
+                dictDf[term] += 1
+
+            docs += 1
+
+            c+=1
+            print( "%(message)s [ # page %(count)s ]" %
+                    { "message" : m, "count": c }, "\r", end="" )
+
+        print( "" )
+
+        self.getTfIdf(dictDf, docs)
+
+    def getTfIdf(self, dictDf, docs):
+        m = " > Execute %(func)s" % { "func": sys._getframe().f_code.co_name }
+        c = 0
+
+        for line in open(self.args.ofcont,'r'):
+
+            terms = line.split(" ")[::2]
+            freqs = list(map(int, line.split(" ")[1::2]))
+
+            tfidf = {}
+            for (term, freq) in zip(terms, freqs):
+                tf = float(freq) / sum(freqs)
+                idf = math.log10( float(docs) / dictDf[term] )+1
+                tfidf[term] = tf * idf
+                if tf*idf<0.0:
+                    print("%s:%d, sum(freqs)=%d, docs=%d, tf=%.5f ,idf=%.5f, dictDf=%d" %
+                            (term,freq,sum(freqs),docs,tf,idf,dictDf[term]))
+                    raise Exception
+
+            self.writeTfIdfToFile( tfidf )
+
+            c+=1
+            print( "%(message)s [ # page %(count)s ]" %
+                    { "message" : m, "count": c }, "\r", end="" )
+
+        print( "" )
+
+    def writeTfIdfToFile(self, dictTfIdf):
+        listTupleTfIdf = python_sorted(dictTfIdf.items())
+
+        output = reduce(
+            lambda strs, tpl: strs+tpl[0]+" "+"%.3f"%tpl[1]+" ", listTupleTfIdf, ""
+        ).rstrip()
+
+        if len(output) > 1:
+            self.lock.acquire()
+            with open(self.args.oftfidf,'a') as f:
+                f.write(output+"\n")
+            self.lock.release()
 
 class JapParser(AbstParser):
 
@@ -263,6 +334,7 @@ class EngParser(AbstParser):
                 if line.find(";;;")>=0: continue
                 words = line.split("\t")
                 if words[0] == words[2]: continue
+                if " " in words[2]: continue
                 self.dictMap[words[0].rstrip()] = words[2].rstrip()
                 c+=1
                 print( "%(message)s [ # word %(count)s ]" %
@@ -305,6 +377,7 @@ class Main():
         parser.add_argument('-d','--ifdict',default="")
         parser.add_argument('-s','--ofcont',required=True)
         parser.add_argument('-t','--oftitle')
+        parser.add_argument('-f','--oftfidf')
         parser.add_argument('-m','--minw',default=1,type=int)
         parser.add_argument('-x','--maxw',default=65535,type=int)
         parser.add_argument('-c','--minc',default=1,type=int)
@@ -321,6 +394,7 @@ class Main():
             parser = EngParser(self.args)
             parser.readDictionary()
         parser.startParse()
+        parser.applyTfIdf()
 
 
 if __name__ == "__main__":
