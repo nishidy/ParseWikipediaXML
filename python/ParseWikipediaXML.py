@@ -34,6 +34,7 @@ class bofwThread(threading.Thread):
     # static variables
     lock = threading.Lock()
     pages = 0
+    saved = 0
 
     def __init__(self, parser, idx):
         super(bofwThread,self).__init__()
@@ -48,32 +49,44 @@ class bofwThread(threading.Thread):
         while True:
 
             page = queue.get()
-            if page == "Finished": break
 
-            match = re.search("<title[^<>]*>([^<>]+)</title>",page)
-            title= match.group(1)
+            # This may finish main thread before parseText()
+            #queue.task_done()
 
-            match = re.search("<text[^<>]*>([^<>]+)</text>",page)
-            text = match.group(1)
+            if page == "Finished":
 
-            dictBofw = self.parser.parseText(text)
-            self.parser.writeToFile(dictBofw, title)
+                # Be sure that this can let queue.join() go
+                queue.task_done()
+                break
+
+            elif re.search(args.recateg, page):
+
+                match = re.search("<title[^<>]*>([^<>]+)</title>",page)
+                title= match.group(1)
+
+                match = re.search("<text[^<>]*>([^<>]+)</text>",page)
+                text = match.group(1)
+
+                dictBofw = self.parser.parseText(text)
+                if self.parser.writeToFile(dictBofw, title): bofwThread.saved+=1
+
+            self.report()
 
             # put() counts up and task_done() counts down
             queue.task_done()
 
-            self.report()
-
-        # Be sure that this can let queue.join() go
-        queue.task_done()
 
     def report(self):
         m = " > Execute %(class)s" % { "class": self.__class__.__name__ }
 
         bofwThread.lock.acquire()
         bofwThread.pages += 1
-        print( "%(message)s [ # page %(count)s @ thread %(index)s ]" %
-                { "message" : m, "count": bofwThread.pages, "index" : self.idx },
+        print( "%(message)s [ # page %(count)s / # saved %(saved)s @ thread %(index)s ]" %
+                { "message" : m,
+                  "count"   : bofwThread.pages,
+                  "saved" : bofwThread.saved,
+                  "index"   : self.idx
+                },
                 "\r", end="" )
         bofwThread.lock.release()
 
@@ -200,6 +213,10 @@ class AbstParser():
                     f.write(cont+"\n")
                 self.lockb.release()
                 self.writeTitleToFile(title)
+
+                return True
+
+        return False
 
     def saveWordCountsToRedis(self,total,num):
         if self.client == None: return
