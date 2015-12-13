@@ -64,7 +64,7 @@ class bofwThread(threading.Thread):
         queue.task_done()
 
     def report(self):
-        m = " > Execute %(class)s" % { "class": __class__.__name__ }
+        m = " > Execute %(class)s" % { "class": self.__class__.__name__ }
 
         bofwThread.lock.acquire()
         bofwThread.pages += 1
