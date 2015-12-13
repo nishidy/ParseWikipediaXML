@@ -258,6 +258,7 @@ class AbstParser():
 
             tfidf = {}
             for (term, freq) in zip(terms, freqs):
+                # python 2.x does not give float unless specified
                 tf = float(freq) / sum(freqs)
                 idf = math.log10( float(docs) / dictDf[term] )+1
                 tfidf[term] = tf * idf
@@ -266,7 +267,7 @@ class AbstParser():
                             (term,freq,sum(freqs),docs,tf,idf,dictDf[term]))
                     raise Exception
 
-            self.writeTfIdfToFile( tfidf )
+            self.writeTfIdfToFile( self.normalize(tfidf) )
 
             c+=1
             print( "%(message)s [ # page %(count)s ]" %
@@ -274,11 +275,12 @@ class AbstParser():
 
         print( "" )
 
+
     def writeTfIdfToFile(self, dictTfIdf):
         listTupleTfIdf = python_sorted(dictTfIdf.items())
 
         output = reduce(
-            lambda strs, tpl: strs+tpl[0]+" "+"%.3f"%tpl[1]+" ", listTupleTfIdf, ""
+            lambda strs, tpl: strs+tpl[0]+" "+str(tpl[1])+" ", listTupleTfIdf, ""
         ).rstrip()
 
         if len(output) > 1:
@@ -286,6 +288,13 @@ class AbstParser():
             with open(self.args.oftfidf,'a') as f:
                 f.write(output+"\n")
             self.lockb.release()
+
+    def normalize(self, tfidf):
+        norm= 1.0 / min(tfidf.values())
+        normdict = {}
+        for k,v in tfidf.items():
+            normdict[k] = int(round(v * norm, 0))
+        return normdict
 
 class JapParser(AbstParser):
 
