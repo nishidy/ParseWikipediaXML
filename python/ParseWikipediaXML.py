@@ -50,11 +50,14 @@ class bofwThread(threading.Thread):
             page = queue.get()
             if page == "Finished": break
 
+            match = re.search("<title[^<>]*>([^<>]+)</title>",page)
+            title= match.group(1)
+
             match = re.search("<text[^<>]*>([^<>]+)</text>",page)
             text = match.group(1)
 
             dictBofw = self.parser.parseText(text)
-            self.parser.writeBofwToFile(dictBofw)
+            self.parser.writeToFile(dictBofw, title)
 
             # put() counts up and task_done() counts down
             queue.task_done()
@@ -109,7 +112,8 @@ def check_time(func):
 class AbstParser():
 
     def __init__(self,args):
-        self.lock = threading.Lock()
+        self.lockb = threading.Lock()
+        self.lockt = threading.Lock()
         self.args = args
         self.queue = Queue.Queue()
         self.client = redis.StrictRedis()
@@ -168,7 +172,15 @@ class AbstParser():
     def parseText(self,text):
         return NotImplementedError
 
-    def writeBofwToFile(self,dictBofw):
+    def writeTitleToFile(self,title):
+        if self.args.oftitle is None: return
+
+        self.lockt.acquire()
+        with open(self.args.oftitle,'a') as f:
+            f.write(title+"\n")
+        self.lockt.release()
+
+    def writeToFile(self, dictBofw, title):
 
         docCount=sum(dictBofw.values())
         listTupleBofw = python_sorted(dictBofw.items())
@@ -183,10 +195,11 @@ class AbstParser():
             ).rstrip()
 
             if len(cont) > 1:
-                self.lock.acquire()
+                self.lockb.acquire()
                 with open(self.args.ofcont,'a') as f:
                     f.write(cont+"\n")
-                self.lock.release()
+                self.lockb.release()
+                self.writeTitleToFile(title)
 
     def saveWordCountsToRedis(self,total,num):
         if self.client == None: return
@@ -269,10 +282,10 @@ class AbstParser():
         ).rstrip()
 
         if len(output) > 1:
-            self.lock.acquire()
+            self.lockb.acquire()
             with open(self.args.oftfidf,'a') as f:
                 f.write(output+"\n")
-            self.lock.release()
+            self.lockb.release()
 
 class JapParser(AbstParser):
 
