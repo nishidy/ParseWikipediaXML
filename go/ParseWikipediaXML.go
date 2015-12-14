@@ -223,6 +223,8 @@ func ReadDictionary(inDictFile string, mapDict map[string]string) {
 	}
 	defer file.Close()
 
+	m := " > Read dictionary"
+	c := 0
 	var line, from, trans string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -236,7 +238,11 @@ func ReadDictionary(inDictFile string, mapDict map[string]string) {
 		from = splitline[0]
 		trans = words[0]
 		mapDict[from] = trans
+
+		c++
+		fmt.Printf("%s [ # word %d ]\r", m, c)
 	}
+	fmt.Printf("%s [ # word %d ]\n", m, c)
 
 }
 
@@ -388,6 +394,22 @@ type Args struct {
 	workers       int
 }
 
+func getStopWords(args *Args) []string {
+
+	stopWords := make([]string, 0, 256)
+	if args.isJapanese {
+		for _, word := range strings.Split(stopWordsJp, ",") {
+			stopWords = append(stopWords, word)
+		}
+	} else {
+		for _, word := range strings.Split(stopWordsEn, ",") {
+			stopWords = append(stopWords, word)
+		}
+	}
+
+	return stopWords
+}
+
 func main() {
 
 	if len(os.Args[1:]) == 0 {
@@ -416,22 +438,14 @@ func main() {
 		os.Exit(0)
 	}
 
-	stopWords := make([]string, 0, 256)
-	if args.isJapanese {
-		for _, word := range strings.Split(stopWordsJp, ",") {
-			stopWords = append(stopWords, word)
-		}
-	} else {
-		for _, word := range strings.Split(stopWordsEn, ",") {
-			stopWords = append(stopWords, word)
-		}
-	}
+	stopWords := getStopWords(args)
 
 	mapDict := make(map[string]string)
 	if !args.isJapanese && args.inDictFile != "" {
-		fmt.Println("Begin reading the dictionary file...")
+		start := time.Now().UnixNano() / int64(time.Millisecond)
 		ReadDictionary(args.inDictFile, mapDict)
-		fmt.Println("Finished.")
+		finish := time.Now().UnixNano() / int64(time.Millisecond)
+		fmt.Printf(" > Read dictionary in %.2f sec.\n", float64(finish-start)/1000.0)
 	}
 
 	//cpus := runtime.NumCPU()
