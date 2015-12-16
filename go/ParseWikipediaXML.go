@@ -286,6 +286,7 @@ type parseType struct {
 	wrHdrBofw   *os.File
 	wait        *sync.WaitGroup
 	client      *redis.Client
+	pages       int
 }
 
 func (p *parseType) goParse(args Args, data []string) {
@@ -356,9 +357,12 @@ func (p *parseType) goParse(args Args, data []string) {
 		p.wrHdrTitle.WriteString(fmt.Sprintf("%s\n", title))
 		<-p.wrMtxChan
 
-		setTotalNum(p.client, wordCount)
-		setNum(p.client, len(ctype.MapWordFreq))
+		fmt.Printf(" > Parsed text [ # page %d ]\r", p.pages)
+		p.pages++
 	}
+
+	setTotalNum(p.client, wordCount)
+	setNum(p.client, len(ctype.MapWordFreq))
 
 }
 
@@ -425,10 +429,10 @@ func (args *Args) getBaseforms() map[string]string {
 
 	baseforms := make(map[string]string)
 	if !args.isJapanese && args.inDictFile != "" {
-		start := time.Now().UnixNano() / int64(time.Millisecond)
+		s := time.Now().UnixNano() / int64(time.Millisecond)
 		readDictionary(args.inDictFile, baseforms)
-		finish := time.Now().UnixNano() / int64(time.Millisecond)
-		fmt.Printf(" > Read dictionary in %.2f sec.\n", float64(finish-start)/1000.0)
+		f := time.Now().UnixNano() / int64(time.Millisecond)
+		fmt.Printf(" > Read dictionary in %.2f sec.\n", float64(f-s)/1000.0)
 	}
 
 	return baseforms
@@ -492,6 +496,7 @@ func (p *parseType) runParse(args *Args) {
 	var str string
 
 	setStartTime(p.client)
+	s := time.Now().UnixNano() / int64(time.Millisecond)
 
 	scanner := bufio.NewScanner(p.rdHdrWiki)
 	for scanner.Scan() {
@@ -517,7 +522,54 @@ func (p *parseType) runParse(args *Args) {
 		}
 	}
 
+	p.wait.Wait()
+
+	f := time.Now().UnixNano() / int64(time.Millisecond)
+	fmt.Printf(" > Parsed text [ # page %d ] in %.2f sec.\n", p.pages, float64(f-s)/1000.0)
+
 	setFinishTime(p.client)
+}
+
+func NewParseType(args *Args) *parseType {
+
+	stopWords := args.getStopWords()
+	baseforms := args.getBaseforms()
+
+	rdHdrWiki, err := os.Open(args.inWikiFile)
+	if err != nil {
+		os.Exit(1)
+	}
+
+	wrHdrTitle, _ := os.Create(args.outTitleFile)
+	wrHdrBofw, _ := os.Create(args.outBofwFile)
+
+	wrMtxChan := make(chan int, 1)
+	smphrGoChan := make(chan int, args.workers)
+
+	client := getClientRedis()
+
+	var wait sync.WaitGroup
+
+	return &parseType{
+		wrMtxChan,
+		smphrGoChan,
+		baseforms,
+		stopWords,
+		rdHdrWiki,
+		wrHdrTitle,
+		wrHdrBofw,
+		&wait,
+		client,
+		0,
+	}
+}
+
+func (p *parseType) closeHdlrs() {
+	p.rdHdrWiki.Close()
+	p.wrHdrTitle.Close()
+	p.wrHdrBofw.Close()
+	close(p.wrMtxChan)
+	close(p.smphrGoChan)
 }
 
 func main() {
@@ -528,46 +580,10 @@ func main() {
 	}
 
 	args := getOpts()
-	stopWords := args.getStopWords()
-	baseforms := args.getBaseforms()
-
-	rdHdrWiki, err := os.Open(args.inWikiFile)
-	if err != nil {
-		os.Exit(1)
-	}
-	defer rdHdrWiki.Close()
-
-	wrHdrTitle, _ := os.Create(args.outTitleFile)
-	defer wrHdrTitle.Close()
-
-	wrHdrBofw, _ := os.Create(args.outBofwFile)
-	defer wrHdrBofw.Close()
-
-	wrMtxChan := make(chan int, 1)
-	defer close(wrMtxChan)
-
-	smphrGoChan := make(chan int, args.workers)
-	defer close(smphrGoChan)
-
-	var wait sync.WaitGroup
-
-	client := getClientRedis()
-
-	p := parseType{
-		wrMtxChan,
-		smphrGoChan,
-		baseforms,
-		stopWords,
-		rdHdrWiki,
-		wrHdrTitle,
-		wrHdrBofw,
-		&wait,
-		client,
-	}
+	p := NewParseType(args)
+	defer p.closeHdlrs()
 
 	runtime.GOMAXPROCS(args.workers)
 
 	p.runParse(args)
-
-	wait.Wait()
 }
