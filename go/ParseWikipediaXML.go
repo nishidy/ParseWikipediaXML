@@ -1,5 +1,6 @@
-//package ParseWikipediaXML
-package main
+package ParseWikipediaXML
+
+//package main
 
 import (
 	"bufio"
@@ -107,6 +108,15 @@ type countType struct {
 	baseforms   map[string]string
 	stopWords   []string
 	MapWordFreq map[string]int
+}
+
+func TestCountType(text string) countType {
+	return countType{
+		text,
+		nil,
+		nil,
+		make(map[string]int),
+	}
 }
 
 func (ctype *countType) countWordJp() int {
@@ -306,7 +316,7 @@ func downloadXml() {
 
 type parseType struct {
 	wrMtx      chan int
-	stdioMtx   chan int
+	stdoutMtx  chan int
 	goSemaph   chan int
 	baseforms  map[string]string
 	stopWords  []string
@@ -388,10 +398,10 @@ func (p *parseType) goParse(args Args, data []string) {
 	}
 
 	{
-		p.stdioMtx <- 1
+		p.stdoutMtx <- 1
 		fmt.Printf(" > Parsed text [ # page %d ]\r", p.pages)
 		p.pages++
-		<-p.stdioMtx
+		<-p.stdoutMtx
 	}
 
 	setTotalNum(p.client, wordCount)
@@ -638,9 +648,6 @@ func (t *tfidfType) normalize(tfidf FList) map[string]int {
 	ntfidf := make(map[string]int)
 	norm := 1.0 / tfidf[len(tfidf)-1].tfidf
 
-	//fmt.Println(tfidf[len(tfidf)-1].tfidf)
-	//fmt.Println(norm)
-
 	for _, e := range tfidf {
 		ntfidf[e.word] = int(math.Trunc(e.tfidf*norm + 0.5))
 	}
@@ -713,7 +720,7 @@ func NewParseType(args *Args) *parseType {
 	wrHdrBofw, _ := os.Create(args.outBofwFile)
 
 	wrMtx := make(chan int, 1)
-	stdioMtx := make(chan int, 1)
+	stdoutMtx := make(chan int, 1)
 	goSemaph := make(chan int, args.workers)
 
 	client := getClientRedis()
@@ -722,7 +729,7 @@ func NewParseType(args *Args) *parseType {
 
 	return &parseType{
 		wrMtx,
-		stdioMtx,
+		stdoutMtx,
 		goSemaph,
 		baseforms,
 		stopWords,
