@@ -277,22 +277,23 @@ func downloadXml() {
 }
 
 type parseType struct {
-	wrMtxChan   chan int
-	smphrGoChan chan int
-	baseforms   map[string]string
-	stopWords   []string
-	rdHdrWiki   *os.File
-	wrHdrTitle  *os.File
-	wrHdrBofw   *os.File
-	wait        *sync.WaitGroup
-	client      *redis.Client
-	pages       int
+	wrMtx      chan int
+	stdioMtx   chan int
+	goSemaph   chan int
+	baseforms  map[string]string
+	stopWords  []string
+	rdHdrWiki  *os.File
+	wrHdrTitle *os.File
+	wrHdrBofw  *os.File
+	wait       *sync.WaitGroup
+	client     *redis.Client
+	pages      int
 }
 
 func (p *parseType) goParse(args Args, data []string) {
 
 	defer func() {
-		<-p.smphrGoChan
+		<-p.goSemaph
 		p.wait.Done()
 	}()
 
@@ -352,13 +353,18 @@ func (p *parseType) goParse(args Args, data []string) {
 		strText += "\n"
 
 		/* Only one thread can write the result into file at the same time */
-		p.wrMtxChan <- 1
+		p.wrMtx <- 1
 		p.wrHdrBofw.WriteString(strText)
 		p.wrHdrTitle.WriteString(fmt.Sprintf("%s\n", title))
-		<-p.wrMtxChan
+		<-p.wrMtx
 
+	}
+
+	{
+		p.stdioMtx <- 1
 		fmt.Printf(" > Parsed text [ # page %d ]\r", p.pages)
 		p.pages++
+		<-p.stdioMtx
 	}
 
 	setTotalNum(p.client, wordCount)
@@ -408,7 +414,7 @@ func getOpts() *Args {
 	flag.StringVar(&args.outTitleFile, "t", "", "Output File(Title)")
 	flag.IntVar(&args.minWordsInDoc, "m", 1, "Minimum number of words that a page should have")
 	flag.IntVar(&args.maxWordsInDoc, "x", 65535, "Maximum number of words that a page should have")
-	flag.IntVar(&args.minWord, "c", 2, "Minimum number that a word should have")
+	flag.IntVar(&args.minWord, "c", 1, "Minimum number that a word should have")
 	flag.StringVar(&args.matchCategory, "g", ".*", "Category(regular expression)")
 	flag.BoolVar(&args.outFormatJson, "n", false, "Generate bug-of-words in JSON format")
 	flag.BoolVar(&args.isJapanese, "j", false, "If this is for Japanese text")
@@ -420,6 +426,8 @@ func getOpts() *Args {
 		downloadXml()
 		os.Exit(0)
 	}
+
+	runtime.GOMAXPROCS(args.workers)
 
 	return args
 
@@ -512,10 +520,10 @@ func (p *parseType) runParse(args *Args) {
 			page = append(page, str)
 		}
 		if finishAppend {
-			p.smphrGoChan <- 1
-			//fmt.Printf("+:%d\n", len(smphrGoChan))
-			go p.goParse(*args, page)
+			p.goSemaph <- 1
+			//fmt.Printf("+:%d\n", len(goSemaph))
 			p.wait.Add(1)
+			go p.goParse(*args, page)
 			page = make([]string, 0, 65535)
 			beginAppend = false
 			finishAppend = false
@@ -543,16 +551,18 @@ func NewParseType(args *Args) *parseType {
 	wrHdrTitle, _ := os.Create(args.outTitleFile)
 	wrHdrBofw, _ := os.Create(args.outBofwFile)
 
-	wrMtxChan := make(chan int, 1)
-	smphrGoChan := make(chan int, args.workers)
+	wrMtx := make(chan int, 1)
+	stdioMtx := make(chan int, 1)
+	goSemaph := make(chan int, args.workers)
 
 	client := getClientRedis()
 
 	var wait sync.WaitGroup
 
 	return &parseType{
-		wrMtxChan,
-		smphrGoChan,
+		wrMtx,
+		stdioMtx,
+		goSemaph,
 		baseforms,
 		stopWords,
 		rdHdrWiki,
@@ -568,8 +578,8 @@ func (p *parseType) closeHdlrs() {
 	p.rdHdrWiki.Close()
 	p.wrHdrTitle.Close()
 	p.wrHdrBofw.Close()
-	close(p.wrMtxChan)
-	close(p.smphrGoChan)
+	close(p.wrMtx)
+	close(p.goSemaph)
 }
 
 func main() {
@@ -582,8 +592,6 @@ func main() {
 	args := getOpts()
 	p := NewParseType(args)
 	defer p.closeHdlrs()
-
-	runtime.GOMAXPROCS(args.workers)
 
 	p.runParse(args)
 }
