@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"regexp"
@@ -218,23 +219,31 @@ func readDictionary(inDictFile string, baseforms map[string]string) {
 
 	m := " > Read dictionary"
 	c := 0
-	var line, from, trans string
+
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		line = scanner.Text()
+		line := scanner.Text()
+
 		splitline := strings.Split(line, " \t\t")
 		if len(splitline) != 2 {
 			continue
 		}
-		words := strings.Split(splitline[1], "\t")
 
-		from = splitline[0]
-		trans = words[0]
-		baseforms[from] = trans
+		inflect := splitline[0]
+
+		words := strings.Split(splitline[1], "\t")
+		baseform := strings.Trim(words[0], " ")
+
+		if strings.Index(baseform, " ") > -1 {
+			continue
+		}
+
+		baseforms[inflect] = baseform
 
 		c++
 		fmt.Printf("%s [ # word %d ]\r", m, c)
 	}
+
 	fmt.Printf("%s [ # word %d ]\n", m, c)
 
 }
@@ -395,6 +404,7 @@ type Args struct {
 	inDictFile    string
 	outBofwFile   string
 	outTitleFile  string
+	outTfIdfFile  string
 	minWordsInDoc int
 	maxWordsInDoc int
 	minWord       int
@@ -412,6 +422,7 @@ func getOpts() *Args {
 	flag.StringVar(&args.inDictFile, "d", "", "Input File(dictionary)")
 	flag.StringVar(&args.outBofwFile, "s", "", "Output File(Contents)")
 	flag.StringVar(&args.outTitleFile, "t", "", "Output File(Title)")
+	flag.StringVar(&args.outTfIdfFile, "f", "", "Output File(TF-IDF)")
 	flag.IntVar(&args.minWordsInDoc, "m", 1, "Minimum number of words that a page should have")
 	flag.IntVar(&args.maxWordsInDoc, "x", 65535, "Maximum number of words that a page should have")
 	flag.IntVar(&args.minWord, "c", 1, "Minimum number that a word should have")
@@ -497,7 +508,103 @@ func setFinishTime(client *redis.Client) {
 	}
 }
 
+func (t *tfidfType) runTfIdf(args *Args) {
+
+	df := make(map[string]int)
+
+	m := " > Read Bag-of-words"
+	c := 0
+
+	scanner := bufio.NewScanner(t.rdHdrBofw)
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		splitline := strings.Split(line, " ")
+		if len(splitline)%2 == 1 {
+			fmt.Fprintln(os.Stderr, "Wrong Bag-Of-Word format.")
+			os.Exit(10)
+		}
+
+		terms := func(ss []string) []string {
+			var lss []string
+			for i, s := range ss {
+				if i%2 == 0 {
+					lss = append(lss, s)
+				}
+			}
+			return lss
+		}(splitline)
+
+		for _, t := range terms {
+			if _, err := df[t]; err {
+				df[t]++
+			} else {
+				df[t] = 1
+			}
+		}
+
+		c++
+		fmt.Printf("%s [ # page %d ]\r", m, c)
+	}
+	fmt.Printf("%s [ # page %d ]\n", m, c)
+
+	t.rdHdrBofw.Close()
+
+	docs := c
+	t.rdHdrBofw, _ = os.Open(args.outBofwFile)
+
+	c = 0
+	scanner = bufio.NewScanner(t.rdHdrBofw)
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		splitline := strings.Split(line, " ")
+		if len(splitline)%2 == 1 {
+			fmt.Fprintln(os.Stderr, "Wrong Bag-Of-Word format.")
+			os.Exit(10)
+		}
+
+		terms := func(ss []string) []string {
+			var lss []string
+			for i, s := range ss {
+				if i%2 == 0 {
+					lss = append(lss, s)
+				}
+			}
+			return lss
+		}(splitline)
+
+		freqs, total := func(ss []string) ([]int, int) {
+			var lss []int
+			var sum int = 0
+			for i, s := range ss {
+				if i%2 == 1 {
+					si, _ := strconv.Atoi(s)
+					lss = append(lss, si)
+					sum += si
+				}
+			}
+			return lss, sum
+		}(splitline)
+
+		var strs []string
+		for i, t := range terms {
+			tf := float64(freqs[i]) / float64(total)
+			idf := math.Log10(float64(docs)/float64(df[t])) + 1
+			strs = append(strs, fmt.Sprintf("%s %.3f", t, tf*idf))
+		}
+
+		t.wrHdrTfIdf.WriteString(strings.Join(strs, " ") + "\n")
+
+		c++
+		fmt.Printf("%s [ # page %d ]\r", m, c)
+	}
+	fmt.Printf("%s [ # page %d ]\n", m, c)
+}
+
 func (p *parseType) runParse(args *Args) {
+
+	defer p.closeHdrs()
 
 	var page = make([]string, 0, 65535)
 	var beginAppend, finishAppend = false, false
@@ -574,7 +681,26 @@ func NewParseType(args *Args) *parseType {
 	}
 }
 
-func (p *parseType) closeHdlrs() {
+type tfidfType struct {
+	rdHdrBofw  *os.File
+	wrHdrTfIdf *os.File
+}
+
+func NewTfIdfType(args *Args) *tfidfType {
+	rdHdrBofw, err := os.Open(args.outBofwFile)
+	if err != nil {
+		os.Exit(1)
+	}
+
+	wrHdrTfIdf, _ := os.Create(args.outTfIdfFile)
+
+	return &tfidfType{
+		rdHdrBofw,
+		wrHdrTfIdf,
+	}
+}
+
+func (p *parseType) closeHdrs() {
 	p.rdHdrWiki.Close()
 	p.wrHdrTitle.Close()
 	p.wrHdrBofw.Close()
@@ -590,8 +716,11 @@ func main() {
 	}
 
 	args := getOpts()
-	p := NewParseType(args)
-	defer p.closeHdlrs()
 
+	p := NewParseType(args)
 	p.runParse(args)
+
+	t := NewTfIdfType(args)
+	t.runTfIdf(args)
+
 }
