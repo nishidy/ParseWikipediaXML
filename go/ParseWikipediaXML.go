@@ -74,6 +74,25 @@ func (l List) ToString() string {
 	return strings.Join(strs, "")
 }
 
+type FEntry struct {
+	word  string
+	tfidf float64
+}
+
+type FList []FEntry
+
+func (l FList) Len() int {
+	return len(l)
+}
+
+func (l FList) Less(i, j int) bool {
+	return l[i].tfidf > l[j].tfidf
+}
+
+func (l FList) Swap(i, j int) {
+	l[i], l[j] = l[j], l[i]
+}
+
 func Any(w string, list []string) bool {
 	for _, sp := range list {
 		if sp == w {
@@ -351,8 +370,7 @@ func (p *parseType) goParse(args Args, data []string) {
 		// Put map into List{} to sort them by value
 		structWordFreq := List{}
 		for k, v := range ctype.MapWordFreq {
-			e := Entry{k, v}
-			structWordFreq = append(structWordFreq, e)
+			structWordFreq = append(structWordFreq, Entry{k, v})
 		}
 		sort.Sort(structWordFreq)
 		strText = structWordFreq.FilterByCnt(args).ToString()
@@ -508,7 +526,7 @@ func setFinishTime(client *redis.Client) {
 	}
 }
 
-func (t *tfidfType) runTfIdf(args *Args) {
+func (t *tfidfType) getDfCorpus() (map[string]int, int) {
 
 	df := make(map[string]int)
 
@@ -551,10 +569,15 @@ func (t *tfidfType) runTfIdf(args *Args) {
 	t.rdHdrBofw.Close()
 
 	docs := c
-	t.rdHdrBofw, _ = os.Open(args.outBofwFile)
+	return df, docs
+}
 
-	c = 0
-	scanner = bufio.NewScanner(t.rdHdrBofw)
+func (t *tfidfType) getTfIdf(df map[string]int, docs int) {
+
+	m := " > Read Bag-of-words"
+	c := 0
+
+	scanner := bufio.NewScanner(t.rdHdrBofw)
 	for scanner.Scan() {
 		line := scanner.Text()
 
@@ -587,19 +610,50 @@ func (t *tfidfType) runTfIdf(args *Args) {
 			return lss, sum
 		}(splitline)
 
-		var strs []string
+		tfidf := FList{}
 		for i, t := range terms {
 			tf := float64(freqs[i]) / float64(total)
 			idf := math.Log10(float64(docs)/float64(df[t])) + 1
-			strs = append(strs, fmt.Sprintf("%s %.3f", t, tf*idf))
+			tfidf = append(tfidf, FEntry{t, tf * idf})
 		}
 
+		sort.Sort(tfidf)
+		ntfidf := t.normalize(tfidf)
+
+		var strs []string
+		for k, v := range ntfidf {
+			strs = append(strs, fmt.Sprintf("%s %d", k, v))
+		}
 		t.wrHdrTfIdf.WriteString(strings.Join(strs, " ") + "\n")
 
 		c++
 		fmt.Printf("%s [ # page %d ]\r", m, c)
 	}
 	fmt.Printf("%s [ # page %d ]\n", m, c)
+
+}
+
+func (t *tfidfType) normalize(tfidf FList) map[string]int {
+
+	ntfidf := make(map[string]int)
+	norm := 1.0 / tfidf[len(tfidf)-1].tfidf
+
+	//fmt.Println(tfidf[len(tfidf)-1].tfidf)
+	//fmt.Println(norm)
+
+	for _, e := range tfidf {
+		ntfidf[e.word] = int(math.Trunc(e.tfidf*norm + 0.5))
+	}
+	return ntfidf
+}
+
+func (t *tfidfType) runTfIdf(args *Args) {
+
+	df, docs := t.getDfCorpus()
+
+	t.rdHdrBofw, _ = os.Open(args.outBofwFile)
+	t.getTfIdf(df, docs)
+
 }
 
 func (p *parseType) runParse(args *Args) {
