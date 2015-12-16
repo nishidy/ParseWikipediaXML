@@ -1,6 +1,5 @@
-package ParseWikipediaXML
-
-//package main
+//package ParseWikipediaXML
+package main
 
 import (
 	"bufio"
@@ -249,6 +248,8 @@ func readDictionary(inDictFile string, baseforms map[string]string) {
 	m := " > Read dictionary"
 	c := 0
 
+	s := time.Now().UnixNano() / int64(time.Millisecond)
+
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -273,7 +274,8 @@ func readDictionary(inDictFile string, baseforms map[string]string) {
 		fmt.Printf("%s [ # word %d ]\r", m, c)
 	}
 
-	fmt.Printf("%s [ # word %d ]\n", m, c)
+	f := time.Now().UnixNano() / int64(time.Millisecond)
+	fmt.Printf("%s [ # word %d ] in %.2f sec.\n", m, c, float64(f-s)/1000.0)
 
 }
 
@@ -476,10 +478,7 @@ func (args *Args) getBaseforms() map[string]string {
 
 	baseforms := make(map[string]string)
 	if !args.isJapanese && args.inDictFile != "" {
-		s := time.Now().UnixNano() / int64(time.Millisecond)
 		readDictionary(args.inDictFile, baseforms)
-		f := time.Now().UnixNano() / int64(time.Millisecond)
-		fmt.Printf(" > Read dictionary in %.2f sec.\n", float64(f-s)/1000.0)
 	}
 
 	return baseforms
@@ -543,6 +542,8 @@ func (t *tfidfType) getDfCorpus() (map[string]int, int) {
 	m := " > Read Bag-of-words"
 	c := 0
 
+	s := time.Now().UnixNano() / int64(time.Millisecond)
+
 	scanner := bufio.NewScanner(t.rdHdrBofw)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -574,7 +575,9 @@ func (t *tfidfType) getDfCorpus() (map[string]int, int) {
 		c++
 		fmt.Printf("%s [ # page %d ]\r", m, c)
 	}
-	fmt.Printf("%s [ # page %d ]\n", m, c)
+
+	f := time.Now().UnixNano() / int64(time.Millisecond)
+	fmt.Printf("%s [ # page %d ] in %.2f sec.\n", m, c, float64(f-s)/1000.0)
 
 	t.rdHdrBofw.Close()
 
@@ -586,6 +589,8 @@ func (t *tfidfType) getTfIdf(df map[string]int, docs int) {
 
 	m := " > Read Bag-of-words"
 	c := 0
+
+	s := time.Now().UnixNano() / int64(time.Millisecond)
 
 	scanner := bufio.NewScanner(t.rdHdrBofw)
 	for scanner.Scan() {
@@ -639,7 +644,9 @@ func (t *tfidfType) getTfIdf(df map[string]int, docs int) {
 		c++
 		fmt.Printf("%s [ # page %d ]\r", m, c)
 	}
-	fmt.Printf("%s [ # page %d ]\n", m, c)
+
+	f := time.Now().UnixNano() / int64(time.Millisecond)
+	fmt.Printf("%s [ # page %d ] in %.2f sec.\n", m, c, float64(f-s)/1000.0)
 
 }
 
