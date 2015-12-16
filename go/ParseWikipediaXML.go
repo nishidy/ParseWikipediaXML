@@ -82,23 +82,14 @@ func Any(w string, list []string) bool {
 	return false
 }
 
-type countWordType struct {
+type countType struct {
 	text        string
-	mapDict     map[string]string
+	baseforms   map[string]string
 	stopWords   []string
 	MapWordFreq map[string]int
 }
 
-func CreateCountWordType(text string) countWordType {
-	return countWordType{
-		text,
-		nil,
-		nil,
-		make(map[string]int),
-	}
-}
-
-func (ctype *countWordType) CountWordJp() int {
+func (ctype *countType) countWordJp() int {
 
 	tkn := tokenizer.New()
 	morphs := tkn.Tokenize(ctype.text)
@@ -142,7 +133,7 @@ func (ctype *countWordType) CountWordJp() int {
 	return wc
 }
 
-func (ctype *countWordType) CountWordEn() int {
+func (ctype *countType) countWordEn() int {
 
 	var re *regexp.Regexp
 
@@ -151,24 +142,26 @@ func (ctype *countWordType) CountWordEn() int {
 	var wc = 0
 	for _, word := range strings.Split(ctype.text, " ") {
 		word = strings.ToLower(word)
-		if re.MatchString(word) {
 
-			if Any(word, ctype.stopWords) {
-				continue
-			}
-
-			if _, err := ctype.mapDict[word]; err {
-				word = ctype.mapDict[word]
-			}
-
-			if _, err := ctype.MapWordFreq[word]; err {
-				ctype.MapWordFreq[word]++
-			} else {
-				ctype.MapWordFreq[word] = 1
-			}
-
-			wc++
+		if !re.MatchString(word) {
+			continue
 		}
+
+		if Any(word, ctype.stopWords) {
+			continue
+		}
+
+		if _, err := ctype.baseforms[word]; err {
+			word = ctype.baseforms[word]
+		}
+
+		if _, err := ctype.MapWordFreq[word]; err {
+			ctype.MapWordFreq[word]++
+		} else {
+			ctype.MapWordFreq[word] = 1
+		}
+
+		wc++
 	}
 	return wc
 }
@@ -191,7 +184,7 @@ func GetMatchWord(str, regstr string) string {
 	return res
 }
 
-func CategoryCheck(catreg, text string) bool {
+func categoryCheck(catreg, text string) bool {
 
 	var re *regexp.Regexp
 
@@ -215,7 +208,7 @@ func CategoryCheck(catreg, text string) bool {
 
 }
 
-func ReadDictionary(inDictFile string, mapDict map[string]string) {
+func readDictionary(inDictFile string, baseforms map[string]string) {
 
 	file, err := os.Open(inDictFile)
 	if err != nil {
@@ -237,7 +230,7 @@ func ReadDictionary(inDictFile string, mapDict map[string]string) {
 
 		from = splitline[0]
 		trans = words[0]
-		mapDict[from] = trans
+		baseforms[from] = trans
 
 		c++
 		fmt.Printf("%s [ # word %d ]\r", m, c)
@@ -246,7 +239,7 @@ func ReadDictionary(inDictFile string, mapDict map[string]string) {
 
 }
 
-func DownloadXml() {
+func downloadXml() {
 
 	fmt.Println("Dowloading the latest list of Wikipedia DB of articles...")
 
@@ -283,55 +276,52 @@ func DownloadXml() {
 
 }
 
-type routineType struct {
-	chanMutex     chan int
-	chanSem       chan int
-	mapDict       map[string]string
-	stopWords     []string
-	hOutTitleFile *os.File
-	hOutBofwFile  *os.File
-	wait          *sync.WaitGroup
-	client        *redis.Client
+type parseType struct {
+	wrMtxChan   chan int
+	smphrGoChan chan int
+	baseforms   map[string]string
+	stopWords   []string
+	rdHdrWiki   *os.File
+	wrHdrTitle  *os.File
+	wrHdrBofw   *os.File
+	wait        *sync.WaitGroup
+	client      *redis.Client
 }
 
-func (rtype *routineType) ParseAndWriteRoutine(args Args, data []string) {
+func (p *parseType) goParse(args Args, data []string) {
 
 	defer func() {
-		<-rtype.chanSem
-		rtype.wait.Done()
+		<-p.smphrGoChan
+		p.wait.Done()
 	}()
 
 	// strings.Join is fast enough to concat strings
 	str := strings.Join(data, "")
 
-	var regstr string
-	regstr = "<title>(.*)</title>"
-	title := GetMatchWord(str, regstr)
+	title := GetMatchWord(str, "<title>(.*)</title>")
+	text := GetMatchWord(str, "<text[^>]*>(.*)</text>")
 
-	regstr = "<text[^>]*>(.*)</text>"
-	text := GetMatchWord(str, regstr)
-
-	if !CategoryCheck(args.matchCategory, text) {
+	if !categoryCheck(args.matchCategory, text) {
 		return
 	}
 
-	ctype := countWordType{
+	ctype := countType{
 		text,
-		rtype.mapDict,
-		rtype.stopWords,
+		p.baseforms,
+		p.stopWords,
 		make(map[string]int),
 	}
 
 	var wordCount int
 	if args.isJapanese {
-		wordCount = ctype.CountWordJp()
+		wordCount = ctype.countWordJp()
 		if wordCount == 0 ||
 			wordCount > args.maxWordsInDoc ||
 			wordCount < args.minWordsInDoc {
 			return
 		}
 	} else {
-		wordCount = ctype.CountWordEn()
+		wordCount = ctype.countWordEn()
 		if wordCount == 0 ||
 			wordCount > args.maxWordsInDoc ||
 			wordCount < args.minWordsInDoc {
@@ -356,28 +346,38 @@ func (rtype *routineType) ParseAndWriteRoutine(args Args, data []string) {
 		sort.Sort(structWordFreq)
 		strText = structWordFreq.FilterByCnt(args).ToString()
 	}
-	strText += "\n"
 
-	/* Only one thread can write the result into file at the same time */
-	rtype.chanMutex <- 1
-	rtype.hOutBofwFile.WriteString(strText)
-	rtype.hOutTitleFile.WriteString(fmt.Sprintf("%s\n", title))
-	<-rtype.chanMutex
+	if len(strText) > 0 {
+		strText += "\n"
 
-	if rtype.client != nil {
-		err := rtype.client.ZIncrBy("total_num", 1, strconv.Itoa(wordCount/100*100)).Err()
+		/* Only one thread can write the result into file at the same time */
+		p.wrMtxChan <- 1
+		p.wrHdrBofw.WriteString(strText)
+		p.wrHdrTitle.WriteString(fmt.Sprintf("%s\n", title))
+		<-p.wrMtxChan
+
+		setTotalNum(p.client, wordCount)
+		setNum(p.client, len(ctype.MapWordFreq))
+	}
+
+}
+
+func setTotalNum(client *redis.Client, total_num int) {
+	if client != nil {
+		err := client.ZIncrBy("total_num", 1, strconv.Itoa(total_num/100*100)).Err()
 		if err != nil {
 			panic(err)
 		}
 	}
+}
 
-	if rtype.client != nil {
-		err := rtype.client.ZIncrBy("num", 1, strconv.Itoa(len(ctype.MapWordFreq)/100*100)).Err()
+func setNum(client *redis.Client, num int) {
+	if client != nil {
+		err := client.ZIncrBy("num", 1, strconv.Itoa(num/100*100)).Err()
 		if err != nil {
 			panic(err)
 		}
 	}
-
 }
 
 type Args struct {
@@ -394,28 +394,7 @@ type Args struct {
 	workers       int
 }
 
-func getStopWords(args *Args) []string {
-
-	stopWords := make([]string, 0, 256)
-	if args.isJapanese {
-		for _, word := range strings.Split(stopWordsJp, ",") {
-			stopWords = append(stopWords, word)
-		}
-	} else {
-		for _, word := range strings.Split(stopWordsEn, ",") {
-			stopWords = append(stopWords, word)
-		}
-	}
-
-	return stopWords
-}
-
-func main() {
-
-	if len(os.Args[1:]) == 0 {
-		fmt.Println("Run with -h to show help.")
-		os.Exit(1)
-	}
+func getOpts() *Args {
 
 	args := new(Args)
 
@@ -434,48 +413,45 @@ func main() {
 	flag.Parse()
 
 	if args.inWikiFile == "" {
-		DownloadXml()
+		downloadXml()
 		os.Exit(0)
 	}
 
-	stopWords := getStopWords(args)
+	return args
 
-	mapDict := make(map[string]string)
+}
+
+func (args *Args) getBaseforms() map[string]string {
+
+	baseforms := make(map[string]string)
 	if !args.isJapanese && args.inDictFile != "" {
 		start := time.Now().UnixNano() / int64(time.Millisecond)
-		ReadDictionary(args.inDictFile, mapDict)
+		readDictionary(args.inDictFile, baseforms)
 		finish := time.Now().UnixNano() / int64(time.Millisecond)
 		fmt.Printf(" > Read dictionary in %.2f sec.\n", float64(finish-start)/1000.0)
 	}
 
-	//cpus := runtime.NumCPU()
-	//runtime.GOMAXPROCS(cpus)
-	runtime.GOMAXPROCS(args.workers)
+	return baseforms
 
-	// Mutex for write
-	chanMutex := make(chan int, 1)
-	defer close(chanMutex)
+}
 
-	hOutTitleFile, _ := os.Create(args.outTitleFile)
-	hOutBofwFile, _ := os.Create(args.outBofwFile)
-	defer hOutTitleFile.Close()
-	defer hOutBofwFile.Close()
+func (args *Args) getStopWords() []string {
 
-	var page = make([]string, 0, 65535)
-	var beginAppend, finishAppend = false, false
-	var str string
-
-	hInWikiFile, err := os.Open(args.inWikiFile)
-	if err != nil {
-		os.Exit(1)
+	stopWords := make([]string, 0, 256)
+	if args.isJapanese {
+		for _, word := range strings.Split(stopWordsJp, ",") {
+			stopWords = append(stopWords, word)
+		}
+	} else {
+		for _, word := range strings.Split(stopWordsEn, ",") {
+			stopWords = append(stopWords, word)
+		}
 	}
-	defer hInWikiFile.Close()
 
-	// Semaphore for limiting # of goroutines
-	chanSem := make(chan int, args.workers)
-	defer close(chanSem)
+	return stopWords
+}
 
-	var wait sync.WaitGroup
+func getClientRedis() *redis.Client {
 
 	client := redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379",
@@ -483,30 +459,41 @@ func main() {
 		DB:       0,
 	})
 
-	_, err = client.Ping().Result()
+	_, err := client.Ping().Result()
 	if err != nil {
 		client = nil
 	}
 
-	rtype := routineType{
-		chanMutex,
-		chanSem,
-		mapDict,
-		stopWords,
-		hOutTitleFile,
-		hOutBofwFile,
-		&wait,
-		client,
-	}
+	return client
+}
 
+func setStartTime(client *redis.Client) {
 	if client != nil {
-		err = client.Set("start_time", time.Now().UnixNano()/int64(time.Millisecond), 0).Err()
+		err := client.Set("start_time", time.Now().UnixNano()/int64(time.Millisecond), 0).Err()
 		if err != nil {
 			panic(err)
 		}
 	}
+}
 
-	scanner := bufio.NewScanner(hInWikiFile)
+func setFinishTime(client *redis.Client) {
+	if client != nil {
+		err := client.Set("finish_time", time.Now().UnixNano()/int64(time.Millisecond), 0).Err()
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+func (p *parseType) runParse(args *Args) {
+
+	var page = make([]string, 0, 65535)
+	var beginAppend, finishAppend = false, false
+	var str string
+
+	setStartTime(p.client)
+
+	scanner := bufio.NewScanner(p.rdHdrWiki)
 	for scanner.Scan() {
 		str = scanner.Text()
 
@@ -520,23 +507,67 @@ func main() {
 			page = append(page, str)
 		}
 		if finishAppend {
-			chanSem <- 1
-			//fmt.Printf("+:%d\n", len(chanSem))
-			go rtype.ParseAndWriteRoutine(*args, page)
-			wait.Add(1)
+			p.smphrGoChan <- 1
+			//fmt.Printf("+:%d\n", len(smphrGoChan))
+			go p.goParse(*args, page)
+			p.wait.Add(1)
 			page = make([]string, 0, 65535)
 			beginAppend = false
 			finishAppend = false
 		}
 	}
 
-	wait.Wait()
+	setFinishTime(p.client)
+}
 
-	if client != nil {
-		err = client.Set("finish_time", time.Now().UnixNano()/int64(time.Millisecond), 0).Err()
-		if err != nil {
-			panic(err)
-		}
+func main() {
+
+	if len(os.Args[1:]) == 0 {
+		fmt.Println("Run with -h to show help.")
+		os.Exit(1)
 	}
 
+	args := getOpts()
+	stopWords := args.getStopWords()
+	baseforms := args.getBaseforms()
+
+	rdHdrWiki, err := os.Open(args.inWikiFile)
+	if err != nil {
+		os.Exit(1)
+	}
+	defer rdHdrWiki.Close()
+
+	wrHdrTitle, _ := os.Create(args.outTitleFile)
+	defer wrHdrTitle.Close()
+
+	wrHdrBofw, _ := os.Create(args.outBofwFile)
+	defer wrHdrBofw.Close()
+
+	wrMtxChan := make(chan int, 1)
+	defer close(wrMtxChan)
+
+	smphrGoChan := make(chan int, args.workers)
+	defer close(smphrGoChan)
+
+	var wait sync.WaitGroup
+
+	client := getClientRedis()
+
+	p := parseType{
+		wrMtxChan,
+		smphrGoChan,
+		baseforms,
+		stopWords,
+		rdHdrWiki,
+		wrHdrTitle,
+		wrHdrBofw,
+		&wait,
+		client,
+	}
+
+	runtime.GOMAXPROCS(args.workers)
+
+	p.runParse(args)
+
+	wait.Wait()
 }
