@@ -84,7 +84,7 @@ class AbstParser {
 };
 
 void AbstParser::save_to_file(){
-	if(num_terms_in_doc>0)
+	if(bofw.length()>0)
 	{
 		bt::mutex::scoped_lock lk(*lock_out_bofw_file);
 		*hdlr_out_bofw_file<<bofw<<endl;
