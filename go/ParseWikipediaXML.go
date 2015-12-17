@@ -1,5 +1,4 @@
-//package ParseWikipediaXML
-package main
+package ParseWikipediaXML
 
 import (
 	"bufio"
@@ -195,7 +194,7 @@ func (ctype *countType) countWordEn() int {
 	return wc
 }
 
-func GetMatchWord(str, regstr string) string {
+func getMatchWord(str, regstr string) string {
 	re, err := regexp.Compile(regstr)
 	if err != nil {
 		panic(err)
@@ -340,8 +339,8 @@ func (p *parseType) goParse(args Args, data []string) {
 	// strings.Join is fast enough to concat strings
 	str := strings.Join(data, "")
 
-	title := GetMatchWord(str, "<title>(.*)</title>")
-	text := GetMatchWord(str, "<text[^>]*>(.*)</text>")
+	title := getMatchWord(str, "<title>(.*)</title>")
+	text := getMatchWord(str, "<text[^>]*>(.*)</text>")
 
 	if !categoryCheck(args.matchCategory, text) {
 		return
@@ -444,7 +443,7 @@ type Args struct {
 	workers       int
 }
 
-func getOpts() *Args {
+func GetOpts() *Args {
 
 	args := new(Args)
 
@@ -661,7 +660,7 @@ func (t *tfidfType) normalize(tfidf FList) map[string]int {
 	return ntfidf
 }
 
-func (t *tfidfType) runTfIdf(args *Args) {
+func (t *tfidfType) RunTfIdf(args *Args) {
 
 	df, docs := t.getDfCorpus()
 
@@ -670,7 +669,7 @@ func (t *tfidfType) runTfIdf(args *Args) {
 
 }
 
-func (p *parseType) runParse(args *Args) {
+func (p *parseType) RunParse(args *Args) {
 
 	defer p.closeHdrs()
 
@@ -774,21 +773,4 @@ func (p *parseType) closeHdrs() {
 	p.wrHdrBofw.Close()
 	close(p.wrMtx)
 	close(p.goSemaph)
-}
-
-func main() {
-
-	if len(os.Args[1:]) == 0 {
-		fmt.Println("Run with -h to show help.")
-		os.Exit(1)
-	}
-
-	args := getOpts()
-
-	p := NewParseType(args)
-	p.runParse(args)
-
-	t := NewTfIdfType(args)
-	t.runTfIdf(args)
-
 }
