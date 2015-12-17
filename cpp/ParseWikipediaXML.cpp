@@ -6,6 +6,7 @@
 #include <memory>
 #include <utility>
 #include <algorithm>
+#include <chrono>
 
 #include <mecab.h>
 
@@ -17,6 +18,7 @@
 #include <boost/regex.hpp>
 
 using namespace std;
+using namespace std::chrono;
 
 namespace bt = boost;
 namespace ip = boost::interprocess;
@@ -402,13 +404,23 @@ void read_dictionary(string in_dict_file, unordered_map<string,string> *map_dict
 	string line;
 	stringstream ss;
 	string baseform, transform;
+
+	string m = " > Read dictionary";
+	unsigned int c = 0;
+	steady_clock::time_point s = steady_clock::now();
 	while(hInDictFile && getline(hInDictFile,line)){
 		ss.str("");
 		ss.clear();
 		ss<<line;
 		ss>>transform>>baseform;
 		(*map_dict)[transform]=baseform;
+		c++;
+		cout << m << " [ # word " << c << " ]\r";
 	}
+
+	steady_clock::time_point f = steady_clock::now();
+	duration<double> span = duration_cast<duration<double>>(f-s);
+	cout << m << " [ # word " << c << " ] in " << span.count() << " sec." << endl;
 
 }
 
