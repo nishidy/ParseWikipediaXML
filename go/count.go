@@ -78,9 +78,10 @@ func (ctype *countType) countWordJp() int {
 
 func (ctype *countType) countWordEn() int {
 
-	var re *regexp.Regexp
+	rep := regexp.MustCompile("[,.;]")
+	ctype.text = rep.ReplaceAllString(ctype.text, " ")
 
-	re, _ = regexp.Compile("^[a-z][a-z0-9'-]*[a-z0-9]$")
+	re, _ := regexp.Compile("^[a-z][a-z0-9'-]*[a-z0-9]$")
 
 	var wc = 0
 	for _, word := range strings.Split(ctype.text, " ") {
