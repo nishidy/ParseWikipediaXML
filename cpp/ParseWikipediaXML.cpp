@@ -48,12 +48,14 @@ class AbstParser {
 		po::variables_map args;
 		string page;
 		ofstream *hdlr_out_bofw_file;
+		ofstream *hdlr_out_title_file;
 		unordered_map<string,string> *map_dict;
 
 		bool is_japanese;
 		vector<string> vec_stopwords;
 
 		string bofw;
+		string title;
 		int num_terms_in_doc = 0;
 
 	public:
@@ -65,6 +67,7 @@ class AbstParser {
 			po::variables_map args,
 			string page,
 			ofstream *hdlr_out_bofw_file,
+			ofstream *hdlr_out_title_file,
 			unordered_map<string,string> *map_dict,
 			bool is_japanese
 		) :
@@ -75,6 +78,7 @@ class AbstParser {
 		args(args),
 		page(page),
 		hdlr_out_bofw_file(hdlr_out_bofw_file),
+		hdlr_out_title_file(hdlr_out_title_file),
 		map_dict(map_dict),
 		is_japanese(is_japanese)
 		{};
@@ -94,6 +98,7 @@ void AbstParser::save_to_file(){
 	{
 		bt::mutex::scoped_lock lk(lock_out_bofw_file);
 		*hdlr_out_bofw_file<<bofw<<endl;
+		*hdlr_out_title_file<<title<<endl;
 	}
 }
 
@@ -132,6 +137,7 @@ class JapParser : public AbstParser {
 			po::variables_map args,
 			string page,
 			ofstream *hdlr_out_bofw_file,
+			ofstream *hdlr_out_title_file,
 			unordered_map<string,string> *map_dict,
 			bool is_japanese = true
 		) :
@@ -139,6 +145,7 @@ class JapParser : public AbstParser {
 			args,
 			page,
 			hdlr_out_bofw_file,
+			hdlr_out_title_file,
 			map_dict,
 			is_japanese
 		)
@@ -252,6 +259,7 @@ class EngParser : public AbstParser {
 			po::variables_map args,
 			string page,
 			ofstream *hdlr_out_bofw_file,
+			ofstream *hdlr_out_title_file,
 			unordered_map<string,string> *map_dict,
 			bool is_japanese = false
 		) :
@@ -259,6 +267,7 @@ class EngParser : public AbstParser {
 			args,
 			page,
 			hdlr_out_bofw_file,
+			hdlr_out_title_file,
 			map_dict,
 			is_japanese
 		)
@@ -290,11 +299,17 @@ void EngParser::set_stopwords(){
 void EngParser::parse(){
 
 	bt::regex text_reg("<text[^>]*>([\\s\\S]*)</text>");
-	bt::smatch match_text_reg;
-	string text;
+	bt::regex title_reg("<title[^>]*>([\\s\\S]*)</title>");
+
+	bt::smatch match_text_reg, match_title_reg;
+
+	string text, title;
 
 	if(bt::regex_search(page,match_text_reg,text_reg))
 		text=match_text_reg.str(1);
+
+	if(bt::regex_search(page,match_title_reg,title_reg))
+		title=match_title_reg.str(1);
 
 	unordered_map<string,int> map_term_freq;
 	stringstream ss_text(text);
@@ -366,6 +381,7 @@ class Factory {
 			po::variables_map args,
 			string page,
 			ofstream *hdlr_out_bofw_file,
+			ofstream *hdlr_out_title_file,
 			unordered_map<string,string> *map_dict,
 			bool is_japanese
 		){
@@ -376,6 +392,7 @@ class Factory {
 					args,
 					page,
 					hdlr_out_bofw_file,
+					hdlr_out_title_file,
 					map_dict
 				);
 
@@ -385,6 +402,7 @@ class Factory {
 					args,
 					page,
 					hdlr_out_bofw_file,
+					hdlr_out_title_file,
 					map_dict
 				);
 			}
@@ -429,6 +447,7 @@ void read_dictionary(string in_dict_file, unordered_map<string,string> *map_dict
 int main(int argc, char *argv[]){
 
 	string out_bofw_file;
+	string out_title_file;
 	bool is_japanese;
 
 	po::options_description option("ParseWikipediaXML:");
@@ -437,6 +456,7 @@ int main(int argc, char *argv[]){
 		("in_wiki_file,i",po::value<string>(),"Input WikipediaXML file.")
 		("in_dict_file,d",po::value<string>(),"Input Dictionary file.")
 		("out_bofw_file,s",po::value<string>(&out_bofw_file),"Output bag-of-words file.")
+		("out_title_file,t",po::value<string>(&out_title_file),"Output title file.")
 		("min_freq_of_term,c",po::value<int>()->default_value(2), "How many times a term "
 		 "should appear in a document.")
 		("min_terms_in_doc,m",po::value<int>()->default_value(1), "How many terms a document "
@@ -478,6 +498,7 @@ int main(int argc, char *argv[]){
 	if(!hdlr_in_wiki_file) return 1;
 
 	ofstream hdlr_out_bofw_file(out_bofw_file);
+	ofstream hdlr_out_title_file(out_title_file);
 
 	unordered_map<string,string> map_dict;
 	if(!is_japanese)
@@ -493,7 +514,7 @@ int main(int argc, char *argv[]){
 		if(is_inside_page && is_outside_page){
 			semaphore.wait();
 			shared_ptr<Factory> worker =
-				make_shared<Factory>(args,page,&hdlr_out_bofw_file,&map_dict,is_japanese);
+				make_shared<Factory>(args,page,&hdlr_out_bofw_file,&hdlr_out_title_file,&map_dict,is_japanese);
 			workers.create_thread(bt::bind(&run_worker,worker));
 			page = "";
 			is_inside_page=is_outside_page=false;
