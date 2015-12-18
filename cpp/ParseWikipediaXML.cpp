@@ -26,6 +26,11 @@ namespace po = boost::program_options;
 
 #define semaphore_name "worker_number_control"
 
+namespace {
+	int parsed_pages = 0;
+	bt::mutex lock_stdout;
+}
+
 struct comparator{
 	bool operator()(const pair<string,int>& a, const pair<string,int>& b) const {
 		int af = a.second;
@@ -348,6 +353,12 @@ void EngParser::parse(){
 		}
 	}
 
+	{
+		bt::mutex::scoped_lock lk(lock_stdout);
+		cout << " > Read database [ # page " << parsed_pages << " ]\r";
+		parsed_pages ++;
+	}
+
 }
 
 
@@ -484,6 +495,7 @@ int main(int argc, char *argv[]){
 
 	string line="", page="";
 	bool is_inside_page=false,is_outside_page=false;
+	steady_clock::time_point s = steady_clock::now();
 	while(hdlr_in_wiki_file && getline(hdlr_in_wiki_file,line)){
 		if(string::npos!=line.find("<page>",0)) is_inside_page=true;
 		if(string::npos!=line.find("</page>",0)) is_outside_page=true;
@@ -498,6 +510,10 @@ int main(int argc, char *argv[]){
 		}
 	}
 	workers.join_all();
+
+	steady_clock::time_point f = steady_clock::now();
+	duration<double> span = duration_cast<duration<double>>(f-s);
+	cout << " > Read database [ # page " << parsed_pages << " ] in " << span.count() << " sec. " << endl;
 
 	return 0;
 }
