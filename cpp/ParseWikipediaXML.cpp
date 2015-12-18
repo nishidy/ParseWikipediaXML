@@ -493,7 +493,6 @@ int main(int argc, char *argv[]){
 		if(is_inside_page && is_outside_page){
 			semaphore.wait();
 			shared_ptr<Factory> worker =
-				//make_shared<Factory>(args,page,&hdlr_out_bofw_file,&lock_out_bofw_file,&map_dict,is_japanese);
 				make_shared<Factory>(args,page,&hdlr_out_bofw_file,&map_dict,is_japanese);
 			workers.create_thread(bt::bind(&run_worker,worker));
 			page = "";
