@@ -27,8 +27,10 @@ namespace po = boost::program_options;
 #define semaphore_name "worker_number_control"
 
 namespace {
-	int parsed_pages = 0;
+	bt::mutex lock_out_bofw_file;
 	bt::mutex lock_stdout;
+
+	int parsed_pages = 0;
 }
 
 struct comparator{
@@ -46,7 +48,6 @@ class AbstParser {
 		po::variables_map args;
 		string page;
 		ofstream *hdlr_out_bofw_file;
-		bt::mutex *lock_out_bofw_file;
 		unordered_map<string,string> *map_dict;
 
 		bool is_japanese;
@@ -64,7 +65,6 @@ class AbstParser {
 			po::variables_map args,
 			string page,
 			ofstream *hdlr_out_bofw_file,
-			bt::mutex *lock_out_bofw_file,
 			unordered_map<string,string> *map_dict,
 			bool is_japanese
 		) :
@@ -75,7 +75,6 @@ class AbstParser {
 		args(args),
 		page(page),
 		hdlr_out_bofw_file(hdlr_out_bofw_file),
-		lock_out_bofw_file(lock_out_bofw_file),
 		map_dict(map_dict),
 		is_japanese(is_japanese)
 		{};
@@ -93,7 +92,7 @@ class AbstParser {
 void AbstParser::save_to_file(){
 	if(bofw.length()>0)
 	{
-		bt::mutex::scoped_lock lk(*lock_out_bofw_file);
+		bt::mutex::scoped_lock lk(lock_out_bofw_file);
 		*hdlr_out_bofw_file<<bofw<<endl;
 	}
 }
@@ -133,7 +132,6 @@ class JapParser : public AbstParser {
 			po::variables_map args,
 			string page,
 			ofstream *hdlr_out_bofw_file,
-			bt::mutex *lock_out_bofw_file,
 			unordered_map<string,string> *map_dict,
 			bool is_japanese = true
 		) :
@@ -141,7 +139,6 @@ class JapParser : public AbstParser {
 			args,
 			page,
 			hdlr_out_bofw_file,
-			lock_out_bofw_file,
 			map_dict,
 			is_japanese
 		)
@@ -255,7 +252,6 @@ class EngParser : public AbstParser {
 			po::variables_map args,
 			string page,
 			ofstream *hdlr_out_bofw_file,
-			bt::mutex *lock_out_bofw_file,
 			unordered_map<string,string> *map_dict,
 			bool is_japanese = false
 		) :
@@ -263,7 +259,6 @@ class EngParser : public AbstParser {
 			args,
 			page,
 			hdlr_out_bofw_file,
-			lock_out_bofw_file,
 			map_dict,
 			is_japanese
 		)
@@ -371,7 +366,6 @@ class Factory {
 			po::variables_map args,
 			string page,
 			ofstream *hdlr_out_bofw_file,
-			bt::mutex *lock_out_bofw_file,
 			unordered_map<string,string> *map_dict,
 			bool is_japanese
 		){
@@ -382,7 +376,6 @@ class Factory {
 					args,
 					page,
 					hdlr_out_bofw_file,
-					lock_out_bofw_file,
 					map_dict
 				);
 
@@ -392,7 +385,6 @@ class Factory {
 					args,
 					page,
 					hdlr_out_bofw_file,
-					lock_out_bofw_file,
 					map_dict
 				);
 			}
@@ -425,8 +417,7 @@ void read_dictionary(string in_dict_file, unordered_map<string,string> *map_dict
 		ss<<line;
 		ss>>transform>>baseform;
 		(*map_dict)[transform]=baseform;
-		c++;
-		cout << m << " [ # word " << c << " ]\r";
+		cout << m << " [ # word " << ++c << " ]\r";
 	}
 
 	steady_clock::time_point f = steady_clock::now();
@@ -487,7 +478,6 @@ int main(int argc, char *argv[]){
 	if(!hdlr_in_wiki_file) return 1;
 
 	ofstream hdlr_out_bofw_file(out_bofw_file);
-	bt::mutex lock_out_bofw_file;
 
 	unordered_map<string,string> map_dict;
 	if(!is_japanese)
@@ -503,7 +493,8 @@ int main(int argc, char *argv[]){
 		if(is_inside_page && is_outside_page){
 			semaphore.wait();
 			shared_ptr<Factory> worker =
-				make_shared<Factory>(args,page,&hdlr_out_bofw_file,&lock_out_bofw_file,&map_dict,is_japanese);
+				//make_shared<Factory>(args,page,&hdlr_out_bofw_file,&lock_out_bofw_file,&map_dict,is_japanese);
+				make_shared<Factory>(args,page,&hdlr_out_bofw_file,&map_dict,is_japanese);
 			workers.create_thread(bt::bind(&run_worker,worker));
 			page = "";
 			is_inside_page=is_outside_page=false;
