@@ -2,6 +2,7 @@
 -export([main/0]).
 -import(string,[tokens/2,to_lower/1,to_integer/1,join/2]).
 -import(lists,[sublist/3,concat/1,map/2,filter/2,nth/2,any/2,reverse/1,keyfind/3,keydelete/3,reverse/1]).
+-import(maps,[put/3,find/2]).
 
 %$ erl -noshell -s parseWikipediaXML main -i ../share/enwiki-test-5000 -o o1 -s init stop
 
@@ -48,7 +49,7 @@ get_baseform(Fhd, Maps, Cnt, L) ->
         [P|[B|_]] ->
             case any(fun(X)-> X==$\ end, B) of
                 true -> Maps;
-                false -> maps:put(chomp(P),chomp(B),Maps)
+                false -> put(chomp(P),chomp(B),Maps)
             end;
         _ -> Maps
     end,
@@ -123,16 +124,16 @@ ngram_count([H|T],G,N,Maps) when length(G)<N ->
 ngram_count([H|T],G,N,Maps) ->
     %io:format("~p~n",[G]),
     M=join(reverse(G),":"),
-    Newmaps = case maps:find(M,Maps) of
+    Newmaps = case find(M,Maps) of
         {ok,Freq} -> maps:update(M,Freq+1,Maps);
-        _ -> maps:put(M,1,Maps)
+        _ -> put(M,1,Maps)
     end,
     ngram_count(T,[H|sublist(G,1,length(G)-1)],N,Newmaps).
 
 word_count([H|T], Maps) ->
-    Newmaps = case maps:find(H,Maps) of
+    Newmaps = case find(H,Maps) of
         {ok,Freq} -> maps:update(H,Freq+1,Maps);
-        _ -> maps:put(H,1,Maps)
+        _ -> put(H,1,Maps)
     end,
     word_count(T,Newmaps);
 word_count([], Maps) -> Maps.
@@ -212,7 +213,7 @@ run_parse(Args, Dict, Text, Cnt) ->
     end.
 
 convert_word(Word,Dict) ->
-    case maps:find(to_lower(Word), Dict) of
+    case find(to_lower(Word), Dict) of
         {ok,Baseform} -> Baseform;
         _ -> Word
     end.
