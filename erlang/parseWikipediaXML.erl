@@ -2,6 +2,7 @@
 -export([main/0]).
 -import(string,[tokens/2,to_lower/1,to_integer/1,join/2]).
 -import(lists,[sublist/3,concat/1,map/2,filter/2,nth/2,any/2,reverse/1,keyfind/3,keydelete/3]).
+-import(proplists,[lookup/2]).
 
 %$ erl -noshell -s parseWikipediaXML main -i ../share/enwiki-test-5000 -o o1 -s init stop
 
@@ -10,11 +11,38 @@ main() ->
     %io:format("~p.~n",[init:get_arguments()]),
     %io:format("~p.~n",[Args]),
 
+    Dict = read_dictionary(Args),
+
     case keyfind(fhi,1,Args) of
         false -> error(badarg);
         {fhi,Fhi} ->
-            line_concat( Args, Fhi, "" )
+            line_concat(Args, Dict, Fhi, "")
     end.
+
+read_dictionary(Args) ->
+    Usec = 1000000.0,
+    {_,S,US} = now(),
+    case keyfind(fhd,1,Args) of
+        false -> error(badarg);
+        {fhd,Fhd} ->
+            read_baseforms(Fhd, [], 0)
+    end,
+    {_,F,UF} = now(),
+    io:format("~n > Read dictionary in ~.3f sec.~n",[((F*Usec+UF)-(S*Usec+US))/Usec]).
+
+read_baseforms(Fhd, Props, Cnt) ->
+    io:format(" > Read dictionary [ # word ~.10B ]\r", [Cnt]),
+    L = line_read(Fhd),
+    case L of
+        eof -> unit;
+        _->
+            Newprops = case tokens(L," \t") of
+                [P|[B|_]] -> [{P,B},Props];
+                _ -> Props
+            end,
+            read_baseforms(Fhd, Newprops, Cnt+1)
+    end,
+    Props.
 
 take_args([{K,[_]}|_],_) when
     K=:=h ->
@@ -22,6 +50,7 @@ take_args([{K,[_]}|_],_) when
         io:format("-n ngram : N-gram supported~n"),
         io:format("-o path : Output file path~n"),
         io:format("-i path : Input file path~n"),
+        io:format("-d path : Input dictionary file path~n"),
         io:format("-p : Spawn processes~n"),
         io:format("-h : Show this message~n");
 take_args([{K,[V|_]}|T],Args) when
@@ -46,6 +75,14 @@ take_args([{K,[V|_]}|T],Args) when
     case file:open(V,read) of
         {ok,Fhi} ->
             take_args(T,[{K,V},{fhi,Fhi}|Args]);
+        {error,FiReason} ->
+            io:format("~p.~n",[FiReason])
+    end;
+take_args([{K,[V|_]}|T],Args) when
+    K=:=d ->
+    case file:open(V,read) of
+        {ok,Fhd} ->
+            take_args(T,[{K,V},{fhd,Fhd}|Args]);
         {error,FiReason} ->
             io:format("~p.~n",[FiReason])
     end;
@@ -129,7 +166,7 @@ line_read(File) ->
             exit(badarith)
     end.
 
-line_concat(Args,File,Line) ->
+line_concat(Args,Dict,File,Line) ->
     L = line_read(File),
     case L of
         eof ->
@@ -137,27 +174,27 @@ line_concat(Args,File,Line) ->
         _ ->
             Lines = concat([Line,L,' ']),
             %io:format("Page=~p.~n",[Page]),
-            parse_text(Args, File, Lines)
+            parse_text(Args, Dict, File, Lines)
     end.
 
-parse_text(Args, File, Lines) ->
+parse_text(Args, Dict, File, Lines) ->
     % Regular expression '.' does not match with \n.
     % So, \n will be deleted by chomp.
     {ok,MP}=re:compile("<text[^<>]*>(.*)</text>"),
     case re:run([Lines],MP) of
         nomatch ->
-            line_concat(Args, File, Lines);
+            line_concat(Args, Dict, File, Lines);
         {match, Match} ->
             % Match contains index starting from 0
             % However, sublist takes index starting from 1
             {Idx, Num} = nth(1,Match),
             Text = tokens(sublist(Lines, Idx+1, Num),"\n,. "),
             %io:format("~p~n",[tokens(sublist(Line,Idx+1,Num),"\n,. ")]),
-            run_parse(Args, Text),
-            line_concat(Args, File, "")
+            run_parse(Args, Dict, Text),
+            line_concat(Args, Dict, File, "")
     end.
 
-run_parse(Args, Text) ->
+run_parse(Args, Dict, Text) ->
 
     {fho,Fho} = keyfind(fho,1,Args),
     {c,C} = keyfind(c,1,Args),
@@ -166,7 +203,7 @@ run_parse(Args, Text) ->
     WordList=
         filter(
             fun(X) -> tokenizer(X) andalso not if_stopwords(X) end,
-            map(fun(X)->to_lower(X)end,Text)
+            map(fun(X)->convert_word(X, Dict)end,Text)
         ),
 
     case keyfind(p,1,Args) of
@@ -175,6 +212,12 @@ run_parse(Args, Text) ->
             post_parse(Fho,C);
         _ ->
             par_parse(WordList, Fho, C)
+    end.
+
+convert_word(Word,Dict) ->
+    case lookup( to_lower(Word), Dict) of
+        none -> Word;
+        {_,Baseform} -> Baseform
     end.
 
 seq_parse(WordList,N) ->
