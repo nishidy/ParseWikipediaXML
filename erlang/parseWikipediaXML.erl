@@ -116,32 +116,26 @@ chomp(L) ->
     end,
     reverse(Li).
 
-ngram_count([H|T],G,N) when length(G)<N ->
-    ngram_count(T,[H|G],N);
-ngram_count([H|T],G,N) ->
+ngram_count([],_,_,Maps) -> Maps;
+ngram_count([_|[]],_,_,Maps) -> Maps;
+ngram_count([H|T],G,N,Maps) when length(G)<N ->
+    ngram_count(T,[H|G],N,Maps);
+ngram_count([H|T],G,N,Maps) ->
     %io:format("~p~n",[G]),
     M=join(reverse(G),":"),
-    case get(M) of
-        undefined -> put(M,1);
-        C -> put(M,C+1)
+    Newmaps = case maps:find(M,Maps) of
+        {ok,Freq} -> maps:update(M,Freq+1,Maps);
+        _ -> maps:put(M,1,Maps)
     end,
-    case T of
-        [] -> "";
-        _  -> ngram_count(T,[H|sublist(G,1,length(G)-1)],N)
-    end;
-ngram_count([],_,_) -> "".
+    ngram_count(T,[H|sublist(G,1,length(G)-1)],N,Newmaps).
 
-word_count([H|T]) ->
-    %%io:format("~p~p~n",[H,T]),
-    case get(H) of
-        undefined -> put(H,1);
-        C -> put(H,C+1)
+word_count([H|T], Maps) ->
+    Newmaps = case maps:find(H,Maps) of
+        {ok,Freq} -> maps:update(H,Freq+1,Maps);
+        _ -> maps:put(H,1,Maps)
     end,
-    case T of
-        [] -> "";
-        _  -> word_count(T)
-    end;
-word_count([]) -> "".
+    word_count(T,Newmaps);
+word_count([], Maps) -> Maps.
 
 tokenizer(Word) ->
     {ok,MP}=re:compile("^[a-z0-9][a-z0-9-]*$"),
@@ -150,23 +144,14 @@ tokenizer(Word) ->
         {match,_}-> true
     end.
 
-filter_pmap([],P,_) -> P;
-filter_pmap([{_,V}|T],P,C) when V<C ->
-    filter_pmap(T,P,C);
-filter_pmap([{K,V}|T],P,C) ->
-    filter_pmap(T,[{K,V}|P],C).
-
-save_pmap(_,undefined) -> error(badarg);
-save_pmap([{K,V}|T],Fho) ->
-    if
-        T == [] ->
-            io:format(Fho,"~s ~p~n",[K,V]);
-        true ->
-            io:format(Fho,"~s ~p ",[K,V]),
-            save_pmap(T,Fho)
-    end;
-save_pmap([],Fho) ->
-    io:format(Fho,"~n",[]).
+save_maps(_,undefined) -> error(badarg);
+save_maps([],Fho) ->
+    io:format(Fho,"~n",[]);
+save_maps([{K,V}|[]],Fho) ->
+    io:format(Fho,"~s ~p~n",[K,V]);
+save_maps([{K,V}|T],Fho) ->
+    io:format(Fho,"~s ~p ",[K,V]),
+    save_maps(T,Fho).
 
 line_read(File) ->
     case file:read_line(File) of
@@ -219,15 +204,14 @@ run_parse(Args, Dict, Text, Cnt) ->
 
     case keyfind(p,1,Args) of
         false ->
-            seq_parse(WordList, N),
-            post_parse(Fho,C),
+            Bofw = seq_parse(WordList, N),
+            post_parse(Fho,Bofw,C),
             io:format(" > Read database [ # page ~.10B ]\r", [Cnt]);
         _ ->
             par_parse(WordList, Fho, C, Cnt)
     end.
 
 convert_word(Word,Dict) ->
-    %to_lower(Word).
     case maps:find(to_lower(Word), Dict) of
         {ok,Baseform} -> Baseform;
         _ -> Word
@@ -235,24 +219,24 @@ convert_word(Word,Dict) ->
 
 seq_parse(WordList,N) ->
     case N of
-        1 -> word_count( WordList );
-        N -> ngram_count( WordList, [], N )
+        1 -> word_count(WordList, maps:new());
+        N -> ngram_count(WordList, [], N, maps:new())
     end.
 
 par_parse(WordList, Fho, C, Cnt) ->
     spawn(
         fun() ->
-            word_count(WordList),
-            post_parse(Fho,C),
+            Bofw = word_count(WordList, maps:new()),
+            post_parse(Fho,Bofw,C),
             io:format(" > Read database [ # page ~.10B ]\r", [Cnt])
         end
     ).
 
-post_parse(Fho,C)->
-    Pmap = filter_pmap(get(),[],C),
-    case Pmap of
-        [] -> "";
-        _ -> save_pmap(Pmap,Fho)
+post_parse(Fho,Bofw,C)->
+    B = maps:filter(fun(_,V)-> V>=C end, Bofw),
+    case maps:size(B) of
+        0 -> unit;
+        _ -> save_maps(maps:to_list(B),Fho)
     end,
     erase().
 
