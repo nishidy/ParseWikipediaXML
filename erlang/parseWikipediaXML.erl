@@ -2,7 +2,7 @@
 -export([main/0]).
 -import(string,[tokens/2,to_lower/1,to_integer/1,join/2]).
 -import(lists,[sublist/3,concat/1,map/2,filter/2,nth/2,any/2,reverse/1,keyfind/3,keydelete/3,reverse/1]).
--import(proplists,[lookup/2]).
+%-import(proplists,[lookup/2]).
 
 %$ erl -noshell -s parseWikipediaXML main -i ../share/enwiki-test-5000 -o o1 -s init stop
 
@@ -12,12 +12,16 @@ main() ->
     %io:format("~p.~n",[Args]),
 
     Dict = read_dictionary(Args),
-    io:format("~p~n",[Dict]),
+    %io:format("~p~n",[Dict]),
 
     case keyfind(fhi,1,Args) of
         false -> error(badarg);
         {fhi,Fhi} ->
-            line_concat(Args, Dict, Fhi, "")
+            Usec = 1000000.0,
+            {_,S,US} = now(),
+            line_concat(Args, Dict, Fhi, "", 0),
+            {_,F,UF} = now(),
+            io:format(" > Read database in ~.3f sec.~n",[((F*Usec+UF)-(S*Usec+US))/Usec])
     end.
 
 read_dictionary(Args) ->
@@ -32,7 +36,7 @@ read_dictionary(Args) ->
     Props.
 
 read_baseforms(Fhd, Props, Cnt) ->
-    %io:format(" > Read dictionary [ # word ~.10B ]\r", [Cnt]),
+    io:format(" > Read dictionary [ # word ~.10B ]\r", [Cnt]),
     L = line_read(Fhd),
     case L of
         eof -> Props;
@@ -174,35 +178,35 @@ line_read(File) ->
             exit(badarith)
     end.
 
-line_concat(Args,Dict,File,Line) ->
+line_concat(Args,Dict,File,Line,Cnt) ->
     L = line_read(File),
     case L of
         eof ->
-            io:format("Finish reading file.~n");
+            io:format(" > Read database [ # page ~.10B ]\n", [Cnt]);
         _ ->
             Lines = concat([Line,L,' ']),
             %io:format("Page=~p.~n",[Page]),
-            parse_text(Args, Dict, File, Lines)
+            parse_text(Args, Dict, File, Lines, Cnt)
     end.
 
-parse_text(Args, Dict, File, Lines) ->
+parse_text(Args, Dict, File, Lines, Cnt) ->
     % Regular expression '.' does not match with \n.
     % So, \n will be deleted by chomp.
     {ok,MP}=re:compile("<text[^<>]*>(.*)</text>"),
     case re:run([Lines],MP) of
         nomatch ->
-            line_concat(Args, Dict, File, Lines);
+            line_concat(Args, Dict, File, Lines, Cnt);
         {match, Match} ->
             % Match contains index starting from 0
             % However, sublist takes index starting from 1
             {Idx, Num} = nth(1,Match),
             Text = tokens(sublist(Lines, Idx+1, Num),"\n,. "),
             %io:format("~p~n",[tokens(sublist(Line,Idx+1,Num),"\n,. ")]),
-            run_parse(Args, Dict, Text),
-            line_concat(Args, Dict, File, "")
+            run_parse(Args, Dict, Text, Cnt),
+            line_concat(Args, Dict, File, "", Cnt+1)
     end.
 
-run_parse(Args, Dict, Text) ->
+run_parse(Args, Dict, Text, Cnt) ->
 
     {fho,Fho} = keyfind(fho,1,Args),
     {c,C} = keyfind(c,1,Args),
@@ -217,16 +221,18 @@ run_parse(Args, Dict, Text) ->
     case keyfind(p,1,Args) of
         false ->
             seq_parse(WordList, N),
-            post_parse(Fho,C);
+            post_parse(Fho,C),
+            io:format(" > Read database [ # page ~.10B ]\r", [Cnt]);
         _ ->
-            par_parse(WordList, Fho, C)
+            par_parse(WordList, Fho, C, Cnt)
     end.
 
-convert_word(Word,Dict) ->
-    case lookup( to_lower(Word), Dict) of
-        none -> Word;
-        {_,Baseform} -> Baseform
-    end.
+convert_word(Word,_) ->
+    to_lower(Word).
+    %case lookup( to_lower(Word), Dict) of
+    %    none -> Word;
+    %    {_,Baseform} -> Baseform
+    %end.
 
 seq_parse(WordList,N) ->
     case N of
@@ -236,11 +242,12 @@ seq_parse(WordList,N) ->
             ngram_count( WordList, [], N )
     end.
 
-par_parse(WordList, Fho,C) ->
+par_parse(WordList, Fho, C, Cnt) ->
     spawn(
         fun() ->
             word_count(WordList),
-            post_parse(Fho,C)
+            post_parse(Fho,C),
+            io:format(" > Read database [ # page ~.10B ]\r", [Cnt])
         end
     ).
 
