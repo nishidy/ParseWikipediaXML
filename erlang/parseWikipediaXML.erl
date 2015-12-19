@@ -2,7 +2,6 @@
 -export([main/0]).
 -import(string,[tokens/2,to_lower/1,to_integer/1,join/2]).
 -import(lists,[sublist/3,concat/1,map/2,filter/2,nth/2,any/2,reverse/1,keyfind/3,keydelete/3,reverse/1]).
-%-import(proplists,[lookup/2]).
 
 %$ erl -noshell -s parseWikipediaXML main -i ../share/enwiki-test-5000 -o o1 -s init stop
 
@@ -18,42 +17,42 @@ main() ->
         false -> error(badarg);
         {fhi,Fhi} ->
             Usec = 1000000.0,
-            {_,S,US} = now(),
+            {_,S,US} = os:timestamp(),
             line_concat(Args, Dict, Fhi, "", 0),
-            {_,F,UF} = now(),
+            {_,F,UF} = os:timestamp(),
             io:format(" > Read database in ~.3f sec.~n",[((F*Usec+UF)-(S*Usec+US))/Usec])
     end.
 
 read_dictionary(Args) ->
     Usec = 1000000.0,
-    {_,S,US} = now(),
-    Props = case keyfind(fhd,1,Args) of
+    {_,S,US} = os:timestamp(),
+    Maps = case keyfind(fhd,1,Args) of
         false -> error(badarg);
-        {fhd,Fhd} -> read_baseforms(Fhd, [], 0)
+        {fhd,Fhd} -> read_baseforms(Fhd, maps:new(), 0)
     end,
-    {_,F,UF} = now(),
+    {_,F,UF} = os:timestamp(),
     io:format("~n > Read dictionary in ~.3f sec.~n",[((F*Usec+UF)-(S*Usec+US))/Usec]),
-    Props.
+    Maps.
 
-read_baseforms(Fhd, Props, Cnt) ->
+read_baseforms(Fhd, Maps, Cnt) ->
     io:format(" > Read dictionary [ # word ~.10B ]\r", [Cnt]),
     L = line_read(Fhd),
     case L of
-        eof -> Props;
-        _-> get_baseform(Fhd, Props, Cnt, L)
+        eof -> Maps;
+        _-> get_baseform(Fhd, Maps, Cnt, L)
     end.
 
-get_baseform(Fhd, Props, Cnt, L) ->
-    Newprops = case tokens(L,"\t") of
-        [";;;"|_] -> Props;
+get_baseform(Fhd, Maps, Cnt, L) ->
+    Newmaps = case tokens(L,"\t") of
+        [";;;"|_] -> Maps;
         [P|[B|_]] ->
             case any(fun(X)-> X==$\ end, B) of
-                true -> Props;
-                false -> [{chomp(P),chomp(B)}|Props]
+                true -> Maps;
+                false -> maps:put(chomp(P),chomp(B),Maps)
             end;
-        _ -> Props
+        _ -> Maps
     end,
-    read_baseforms(Fhd, Newprops, Cnt+1).
+    read_baseforms(Fhd, Newmaps, Cnt+1).
 
 take_args([{K,[_]}|_],_) when
     K=:=h ->
@@ -227,19 +226,17 @@ run_parse(Args, Dict, Text, Cnt) ->
             par_parse(WordList, Fho, C, Cnt)
     end.
 
-convert_word(Word,_) ->
-    to_lower(Word).
-    %case lookup( to_lower(Word), Dict) of
-    %    none -> Word;
-    %    {_,Baseform} -> Baseform
-    %end.
+convert_word(Word,Dict) ->
+    %to_lower(Word).
+    case maps:find(to_lower(Word), Dict) of
+        {ok,Baseform} -> Baseform;
+        _ -> Word
+    end.
 
 seq_parse(WordList,N) ->
     case N of
-        1 ->
-            word_count( WordList );
-        N ->
-            ngram_count( WordList, [], N )
+        1 -> word_count( WordList );
+        N -> ngram_count( WordList, [], N )
     end.
 
 par_parse(WordList, Fho, C, Cnt) ->
