@@ -8,23 +8,22 @@
 
 main() ->
     Args=take_args(init:get_arguments(),[{c,1},{n,1}]),
-    %io:format("~p.~n",[init:get_arguments()]),
-    %io:format("~p.~n",[Args]),
 
     case keyfind(h,1,Args) of
-        false ->
-            Dict = read_dictionary(Args),
-
-            case keyfind(fhi,1,Args) of
-                false -> error(badarg);
-                {fhi,Fhi} ->
-                    Usec = 1000000.0,
-                    {_,S,US} = os:timestamp(),
-                    line_concat(Args, Dict, Fhi, "", 0),
-                    {_,F,UF} = os:timestamp(),
-                    io:format(" > Read database in ~.3f sec.~n",[((F*Usec+UF)-(S*Usec+US))/Usec])
-            end;
+        false -> start_parse(Args);
         _ -> unit
+    end.
+
+start_parse(Args) ->
+    Dict = read_dictionary(Args),
+    case keyfind(fhi,1,Args) of
+        false -> error(badarg);
+        {fhi,Fhi} ->
+            Usec = 1000000.0,
+            {_,S,US} = os:timestamp(),
+            line_concat(Args, Dict, Fhi, "", 0),
+            {_,F,UF} = os:timestamp(),
+            io:format(" > Read database in ~.3f sec.~n",[((F*Usec+UF)-(S*Usec+US))/Usec])
     end.
 
 read_dictionary(Args) ->
@@ -143,7 +142,7 @@ word_count([H|T], Maps) ->
 word_count([], Maps) -> Maps.
 
 tokenizer(Word) ->
-    {ok,MP}=re:compile("^[a-z0-9][a-z0-9-]*$"),
+    {ok,MP}=re:compile("^[a-z][a-z0-9-']*[a-z0-9]$"),
     case re:run([Word],MP) of
         nomatch -> false;
         {match,_}-> true
