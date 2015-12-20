@@ -11,17 +11,20 @@ main() ->
     %io:format("~p.~n",[init:get_arguments()]),
     %io:format("~p.~n",[Args]),
 
-    Dict = read_dictionary(Args),
-    %io:format("~p~n",[Dict]),
+    case keyfind(h,1,Args) of
+        false ->
+            Dict = read_dictionary(Args),
 
-    case keyfind(fhi,1,Args) of
-        false -> error(badarg);
-        {fhi,Fhi} ->
-            Usec = 1000000.0,
-            {_,S,US} = os:timestamp(),
-            line_concat(Args, Dict, Fhi, "", 0),
-            {_,F,UF} = os:timestamp(),
-            io:format(" > Read database in ~.3f sec.~n",[((F*Usec+UF)-(S*Usec+US))/Usec])
+            case keyfind(fhi,1,Args) of
+                false -> error(badarg);
+                {fhi,Fhi} ->
+                    Usec = 1000000.0,
+                    {_,S,US} = os:timestamp(),
+                    line_concat(Args, Dict, Fhi, "", 0),
+                    {_,F,UF} = os:timestamp(),
+                    io:format(" > Read database in ~.3f sec.~n",[((F*Usec+UF)-(S*Usec+US))/Usec])
+            end;
+        _ -> unit
     end.
 
 read_dictionary(Args) ->
@@ -55,7 +58,7 @@ get_baseform(Fhd, Maps, Cnt, L) ->
     end,
     read_baseforms(Fhd, Newmaps, Cnt+1).
 
-take_args([{K,[_]}|_],_) when
+take_args([{K,[]}|_],Args) when
     K=:=h ->
         io:format("-c count : Mininum number of a term~n"),
         io:format("-n ngram : N-gram supported~n"),
@@ -63,7 +66,8 @@ take_args([{K,[_]}|_],_) when
         io:format("-i path : Input file path~n"),
         io:format("-d path : Input dictionary file path~n"),
         io:format("-p : Spawn processes~n"),
-        io:format("-h : Show this message~n");
+        io:format("-h : Show this message~n"),
+        [{h,[]}|Args];
 take_args([{K,[V|_]}|T],Args) when
     K=:=c; K=:=n ->
     NewArgs =
