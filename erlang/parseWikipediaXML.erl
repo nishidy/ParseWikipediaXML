@@ -1,7 +1,7 @@
 -module(parseWikipediaXML).
 -export([main/0]).
 -import(string,[tokens/2,to_lower/1,to_integer/1,join/2]).
--import(lists,[sublist/3,concat/1,map/2,filter/2,nth/2,any/2,reverse/1,keyfind/3,keydelete/3,reverse/1]).
+-import(lists,[sublist/3,concat/1,map/2,filter/2,nth/2,any/2,reverse/1,keyfind/3,keydelete/3,reverse/1,sort/2]).
 -import(maps,[put/3,find/2]).
 
 %$ erl -noshell -s parseWikipediaXML main -i ../share/enwiki-test-5000 -o o1 -s init stop
@@ -237,7 +237,5 @@ post_parse(Fho,Bofw,C)->
     B = maps:filter(fun(_,V)-> V>=C end, Bofw),
     case maps:size(B) of
         0 -> unit;
-        _ -> save_maps(maps:to_list(B),Fho)
-    end,
-    erase().
-
+        _ -> save_maps(sort(fun({_,V1},{_,V2})-> V1>V2 end, maps:to_list(B)),Fho)
+    end.
