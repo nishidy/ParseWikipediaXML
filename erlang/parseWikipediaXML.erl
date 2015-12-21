@@ -1,5 +1,5 @@
 -module(parseWikipediaXML).
--export([main/0]).
+-export([main/0,counter_daemon/2]).
 -import(string,[tokens/2,to_lower/1,to_integer/1,join/2]).
 -import(lists,[sublist/3,concat/1,map/2,filter/2,nth/2,any/2,reverse/1,keyfind/3,keydelete/3,reverse/1,sort/2]).
 -import(maps,[put/3,find/2]).
@@ -8,20 +8,38 @@
 
 main() ->
     Args=take_args(init:get_arguments(),[{c,1},{n,1}]),
-
     case keyfind(h,1,Args) of
         false -> start_parse(Args);
         _ -> unit
     end.
 
+counter_daemon(Pages,Lines) ->
+    receive
+        {get, Pid} ->
+            Pid ! { ok, {Pages, Lines}, self() },
+            counter_daemon(Pages, Lines);
+        {incr1, Pid} ->
+            Newlines = Lines+1,
+            Pid ! { ok, {Pages, Newlines}, self() },
+            counter_daemon(Pages, Newlines);
+        {incr2, Pid} ->
+            Newlines = Lines+1,
+            Newpages = Pages+1,
+            Pid ! { ok, {Newpages, Newlines}, self() },
+            counter_daemon(Newpages, Newlines);
+        _ -> unit
+    end.
+
 start_parse(Args) ->
+    register(cd, spawn(parseWikipediaXML, counter_daemon, [0,0] )),
+
     Dict = read_dictionary(Args),
     case keyfind(fhi,1,Args) of
         false -> error(badarg);
         {fhi,Fhi} ->
             Usec = 1000000.0,
             {_,S,US} = os:timestamp(),
-            line_concat(Args, Dict, Fhi, "", 0),
+            line_concat(Args, Dict, Fhi, ""),
             {_,F,UF} = os:timestamp(),
             io:format(" > Read database in ~.3f sec.~n",[((F*Usec+UF)-(S*Usec+US))/Usec])
     end.
@@ -166,35 +184,40 @@ line_read(File) ->
             exit(badarith)
     end.
 
-line_concat(Args,Dict,File,Line,Cnt) ->
+line_concat(Args,Dict,File,Line) ->
     L = line_read(File),
     case L of
         eof ->
-            io:format(" > Read database [ # page ~.10B ]\n", [Cnt]);
+            cd ! {get, self()},
+            receive
+                {ok, {Pages,Lines}, _} ->
+                    show_counts( Pages, Lines ),
+                    io:format("\n")
+            end;
         _ ->
             Lines = concat([Line,L,' ']),
             %io:format("Page=~p.~n",[Page]),
-            parse_text(Args, Dict, File, Lines, Cnt)
+            parse_text(Args, Dict, File, Lines)
     end.
 
-parse_text(Args, Dict, File, Lines, Cnt) ->
+parse_text(Args, Dict, File, Lines) ->
     % Regular expression '.' does not match with \n.
     % So, \n will be deleted by chomp.
     {ok,MP}=re:compile("<text[^<>]*>(.*)</text>"),
     case re:run([Lines],MP) of
         nomatch ->
-            line_concat(Args, Dict, File, Lines, Cnt);
+            line_concat(Args, Dict, File, Lines);
         {match, Match} ->
             % Match contains index starting from 0
             % However, sublist takes index starting from 1
             {Idx, Num} = nth(1,Match),
             Text = tokens(sublist(Lines, Idx+1, Num),"\n,. "),
             %io:format("~p~n",[tokens(sublist(Line,Idx+1,Num),"\n,. ")]),
-            run_parse(Args, Dict, Text, Cnt),
-            line_concat(Args, Dict, File, "", Cnt+1)
+            run_parse(Args, Dict, Text),
+            line_concat(Args, Dict, File, "")
     end.
 
-run_parse(Args, Dict, Text, Cnt) ->
+run_parse(Args, Dict, Text) ->
 
     {fho,Fho} = keyfind(fho,1,Args),
     {c,C} = keyfind(c,1,Args),
@@ -209,10 +232,9 @@ run_parse(Args, Dict, Text, Cnt) ->
     case keyfind(p,1,Args) of
         false ->
             Bofw = seq_parse(WordList, N),
-            post_parse(Fho,Bofw,C),
-            io:format(" > Read database [ # page ~.10B ]\r", [Cnt]);
+            post_parse(Fho,Bofw,C);
         _ ->
-            par_parse(WordList, Fho, C, Cnt)
+            par_parse(WordList, Fho, C)
     end.
 
 convert_word(Word,Dict) ->
@@ -227,18 +249,32 @@ seq_parse(WordList,N) ->
         N -> ngram_count(WordList, [], N, maps:new())
     end.
 
-par_parse(WordList, Fho, C, Cnt) ->
+par_parse(WordList, Fho, C) ->
     spawn(
         fun() ->
             Bofw = word_count(WordList, maps:new()),
-            post_parse(Fho,Bofw,C),
-            io:format(" > Read database [ # page ~.10B ]\r", [Cnt])
+            post_parse(Fho,Bofw,C)
         end
     ).
 
 post_parse(Fho,Bofw,C)->
     B = maps:filter(fun(_,V)-> V>=C end, Bofw),
     case maps:size(B) of
-        0 -> unit;
-        _ -> save_maps(sort(fun({_,V1},{_,V2})-> V1>V2 end, maps:to_list(B)),Fho)
+        0 ->
+            cd ! {incr1, self()},
+            receive
+                {ok, {Pages,Lines}, _} ->
+                    show_counts( Pages, Lines )
+            end;
+        _ ->
+            cd ! {incr2, self()},
+            receive
+                {ok, {Pages,Lines}, _} ->
+                    show_counts( Pages, Lines )
+            end,
+            save_maps(sort(fun({_,V1},{_,V2})-> V1>V2 end, maps:to_list(B)),Fho)
     end.
+
+show_counts(Pages, Lines) ->
+    io:format(" > Read database [ # page ~.10B / # line ~.10B ]\r", [Pages, Lines]).
+
