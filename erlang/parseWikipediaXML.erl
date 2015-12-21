@@ -13,17 +13,17 @@ main() ->
         _ -> unit
     end.
 
-process_wait(Num,Last) ->
+process_wait(Num,LastPid) ->
     receive
-        {add, _} -> process_wait(Num+1,Last);
+        {add, _} -> process_wait(Num+1,LastPid);
         {done,_} when Num == 1 ->
-            case Last of
-                true  -> unit;
-                false -> process_wait(Num-1,Last)
+            case LastPid of
+                {true,Pid} -> Pid ! {complete,self()};
+                {false,_} -> process_wait(Num-1,LastPid)
             end;
-        {done,_} -> process_wait(Num-1,Last);
-        {join,_} when Num == 0 -> unit;
-        {join,_} -> process_wait(Num,true)
+        {done,_} -> process_wait(Num-1,LastPid);
+        {join,Pid} when Num == 0 -> Pid ! {complete,self()};
+        {join,Pid} -> process_wait(Num,{true,Pid})
     end.
 
 counter_daemon(Saved,Parsed,Lines) ->
@@ -46,7 +46,7 @@ counter_daemon(Saved,Parsed,Lines) ->
 start_parse(Args) ->
 
     register(cd, spawn(parseWikipediaXML, counter_daemon, [0,0,0] )),
-    register(pw, spawn(parseWikipediaXML, process_wait, [0,false] )),
+    register(pw, spawn(parseWikipediaXML, process_wait, [0,{false,unit}] )),
 
     Dict = read_dictionary(Args),
     case keyfind(fhi,1,Args) of
@@ -106,6 +106,9 @@ take_args([{K,[]}|_],Args) when
         io:format("-p : Spawn processes~n"),
         io:format("-h : Show this message~n"),
         [{h,[]}|Args];
+take_args([{K,[]}|T],Args) when
+    K=:=p ->
+    take_args(T,[{K,[]}|Args]);
 take_args([{K,[V|_]}|T],Args) when
     K=:=c; K=:=n ->
     NewArgs = delete_arg(K,Args),
@@ -211,10 +214,13 @@ line_concat(Args,Dict,File,Line) ->
     show_counts(),
     case L of
         eof ->
-            cd ! {get, self()},
-            show_counts(),
-            io:format("\n"),
-            pw ! { join, self() };
+            pw ! { join, self() },
+            receive
+                {complete,_} ->
+                    cd ! {get, self()},
+                    show_counts(),
+                    io:format("\n")
+            end;
         _ ->
             Lines = concat([Line,L,' ']),
             %io:format("Page=~p.~n",[Page]),
