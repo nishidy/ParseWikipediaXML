@@ -1,5 +1,5 @@
 -module(parseWikipediaXML).
--export([main/0,counter_daemon/2,process_wait/2]).
+-export([main/0,counter_daemon/3,process_wait/2]).
 -import(string,[tokens/2,to_lower/1,to_integer/1,join/2]).
 -import(lists,[sublist/3,concat/1,map/2,filter/2,nth/2,any/2,reverse/1,keyfind/3,keydelete/3,reverse/1,sort/2]).
 -import(maps,[put/3,find/2]).
@@ -26,26 +26,26 @@ process_wait(Num,Last) ->
         {join,_} -> process_wait(Num,true)
     end.
 
-counter_daemon(Pages,Lines) ->
+counter_daemon(Saved,Parsed,Lines) ->
     receive
         {get, Pid} ->
-            Pid ! { ok, {Pages, Lines}, self() },
-            counter_daemon(Pages, Lines);
+            Pid ! { ok, {Saved, Parsed, Lines}, self() },
+            counter_daemon(Saved, Parsed, Lines);
         {incr1, Pid} ->
-            Newlines = Lines+1,
-            Pid ! { ok, {Pages, Newlines}, self() },
-            counter_daemon(Pages, Newlines);
+            Pid ! { ok, {Saved, Parsed, Lines+1}, self() },
+            counter_daemon(Saved, Parsed, Lines+1);
         {incr2, Pid} ->
-            Newlines = Lines+1,
-            Newpages = Pages+1,
-            Pid ! { ok, {Newpages, Newlines}, self() },
-            counter_daemon(Newpages, Newlines);
+            Pid ! { ok, {Saved, Parsed+1, Lines+1}, self() },
+            counter_daemon(Saved, Parsed+1, Lines+1);
+        {incr3, Pid} ->
+            Pid ! { ok, {Saved+1, Parsed+1, Lines+1}, self() },
+            counter_daemon(Saved+1, Parsed+1, Lines+1);
         _ -> unit
     end.
 
 start_parse(Args) ->
 
-    register(cd, spawn(parseWikipediaXML, counter_daemon, [0,0] )),
+    register(cd, spawn(parseWikipediaXML, counter_daemon, [0,0,0] )),
     register(pw, spawn(parseWikipediaXML, process_wait, [0,false] )),
 
     Dict = read_dictionary(Args),
@@ -207,14 +207,13 @@ line_read(File) ->
 
 line_concat(Args,Dict,File,Line) ->
     L = line_read(File),
+    cd ! {incr1, self()},
+    show_counts(),
     case L of
         eof ->
             cd ! {get, self()},
-            receive
-                {ok, {Saved,Parsed}, _} ->
-                    show_counts( Saved, Parsed ),
-                    io:format("\n")
-            end,
+            show_counts(),
+            io:format("\n"),
             pw ! { join, self() };
         _ ->
             Lines = concat([Line,L,' ']),
@@ -300,24 +299,22 @@ post_parse(Fho,Fht,Bofw,C,Title)->
     end.
 
 do_not_save() ->
-    cd ! {incr1, self()},
-    receive
-        {ok, {Saved,Parsed}, _} ->
-            show_counts( Saved, Parsed )
-    end.
+    cd ! {incr2, self()},
+    show_counts().
 
 do_save(Fho,B,Fht,T) ->
-    cd ! {incr2, self()},
-    receive
-        {ok, {Saved,Parsed}, _} ->
-            show_counts( Saved, Parsed )
-    end,
+    cd ! {incr3, self()},
+    show_counts(),
     save_maps(sort(fun({_,V1},{_,V2})-> V1>V2 end, maps:to_list(B)),Fho),
     case Fht of
         unit -> unit;
         _ -> io:format(Fht,"~s~n",[T])
     end.
 
-show_counts(Saved, Parsed) ->
-    io:format(" > Read database [ # page (saved/parsed) ~.10B / ~.10B ]\r", [Saved, Parsed]).
+show_counts() ->
+    receive
+        {ok, {Saved,Parsed,Lines}, _} ->
+            io:format(" > Read database [ # page (saved/parsed) ~.10B / ~.10B / # line ~.10B ]\r",
+                      [Saved, Parsed, Lines])
+    end.
 
