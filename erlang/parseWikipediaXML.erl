@@ -1,5 +1,5 @@
 -module(parseWikipediaXML).
--export([main/0,counter_daemon/2]).
+-export([main/0,counter_daemon/2,process_wait/2]).
 -import(string,[tokens/2,to_lower/1,to_integer/1,join/2]).
 -import(lists,[sublist/3,concat/1,map/2,filter/2,nth/2,any/2,reverse/1,keyfind/3,keydelete/3,reverse/1,sort/2]).
 -import(maps,[put/3,find/2]).
@@ -11,6 +11,19 @@ main() ->
     case keyfind(h,1,Args) of
         false -> start_parse(Args);
         _ -> unit
+    end.
+
+process_wait(Num,Last) ->
+    receive
+        {add, _} -> process_wait(Num+1,Last);
+        {done,_} when Num == 1 ->
+            case Last of
+                true  -> unit;
+                false -> process_wait(Num-1,Last)
+            end;
+        {done,_} -> process_wait(Num-1,Last);
+        {join,_} when Num == 0 -> unit;
+        {join,_} -> process_wait(Num,true)
     end.
 
 counter_daemon(Pages,Lines) ->
@@ -31,7 +44,9 @@ counter_daemon(Pages,Lines) ->
     end.
 
 start_parse(Args) ->
+
     register(cd, spawn(parseWikipediaXML, counter_daemon, [0,0] )),
+    register(pw, spawn(parseWikipediaXML, process_wait, [0,false] )),
 
     Dict = read_dictionary(Args),
     case keyfind(fhi,1,Args) of
@@ -49,21 +64,22 @@ read_dictionary(Args) ->
     {_,S,US} = os:timestamp(),
     Maps = case keyfind(fhd,1,Args) of
         false -> error(badarg);
-        {fhd,Fhd} -> read_baseforms(Fhd, maps:new(), 0)
+        {fhd,Fhd} -> read_baseforms(Fhd, maps:new(), 0, 0)
     end,
     {_,F,UF} = os:timestamp(),
     io:format("~n > Read dictionary in ~.3f sec.~n",[((F*Usec+UF)-(S*Usec+US))/Usec]),
     Maps.
 
-read_baseforms(Fhd, Maps, Cnt) ->
-    io:format(" > Read dictionary [ # word ~.10B ]\r", [Cnt]),
+read_baseforms(Fhd, Maps, Loaded, Parsed) ->
+    io:format(" > Read dictionary [ # word (loaded/parsed) ~.10B / ~.10B ]\r",
+              [Loaded, Parsed]),
     L = line_read(Fhd),
     case L of
         eof -> Maps;
-        _-> get_baseform(Fhd, Maps, Cnt, L)
+        _-> get_baseform(Fhd, Maps, L, Loaded, Parsed)
     end.
 
-get_baseform(Fhd, Maps, Cnt, L) ->
+get_baseform(Fhd, Maps, L, Loaded, Parsed) ->
     Newmaps = case tokens(L,"\t") of
         [";;;"|_] -> Maps;
         [P|[B|_]] ->
@@ -73,7 +89,11 @@ get_baseform(Fhd, Maps, Cnt, L) ->
             end;
         _ -> Maps
     end,
-    read_baseforms(Fhd, Newmaps, Cnt+1).
+    if
+        Newmaps == Maps -> read_baseforms(Fhd, Newmaps, Loaded, Parsed+1);
+        true  -> read_baseforms(Fhd, Newmaps, Loaded+1, Parsed+1)
+    end.
+
 
 take_args([{K,[]}|_],Args) when
     K=:=h ->
@@ -190,10 +210,11 @@ line_concat(Args,Dict,File,Line) ->
         eof ->
             cd ! {get, self()},
             receive
-                {ok, {Pages,Lines}, _} ->
-                    show_counts( Pages, Lines ),
+                {ok, {Saved,Parsed}, _} ->
+                    show_counts( Saved, Parsed ),
                     io:format("\n")
-            end;
+            end,
+            pw ! { join, self() };
         _ ->
             Lines = concat([Line,L,' ']),
             %io:format("Page=~p.~n",[Page]),
@@ -250,10 +271,12 @@ seq_parse(WordList,N) ->
     end.
 
 par_parse(WordList, Fho, C) ->
+    pw ! { add, self() },
     spawn(
         fun() ->
             Bofw = word_count(WordList, maps:new()),
-            post_parse(Fho,Bofw,C)
+            post_parse(Fho,Bofw,C),
+            pw ! { done, self() }
         end
     ).
 
@@ -263,18 +286,18 @@ post_parse(Fho,Bofw,C)->
         0 ->
             cd ! {incr1, self()},
             receive
-                {ok, {Pages,Lines}, _} ->
-                    show_counts( Pages, Lines )
+                {ok, {Saved,Parsed}, _} ->
+                    show_counts( Saved, Parsed )
             end;
         _ ->
             cd ! {incr2, self()},
             receive
-                {ok, {Pages,Lines}, _} ->
-                    show_counts( Pages, Lines )
+                {ok, {Saved,Parsed}, _} ->
+                    show_counts( Saved, Parsed )
             end,
             save_maps(sort(fun({_,V1},{_,V2})-> V1>V2 end, maps:to_list(B)),Fho)
     end.
 
-show_counts(Pages, Lines) ->
-    io:format(" > Read database [ # page ~.10B / ~.10B ]\r", [Pages, Lines]).
+show_counts(Saved, Parsed) ->
+    io:format(" > Read database [ # page (saved/parsed) ~.10B / ~.10B ]\r", [Saved, Parsed]).
 
