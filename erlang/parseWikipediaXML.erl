@@ -240,7 +240,7 @@ parse_text(Args, Dict, File, Lines) ->
             % Match contains index starting from 0
             % However, sublist takes index starting from 1
             {Idx, Num} = nth(1,Match),
-            Text = tokens(sublist(Lines, Idx+1, Num),"\n,. "),
+            Text = tokens(sublist(Lines, Idx+1, Num),"\n,.; "),
             Title = parse_title(Lines),
             %io:format("~p~n",[tokens(sublist(Line,Idx+1,Num),"\n,. ")]),
             run_parse(Args, Dict, Text, Title),
