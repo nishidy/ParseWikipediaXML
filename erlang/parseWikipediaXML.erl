@@ -1,13 +1,15 @@
 -module(parseWikipediaXML).
 -export([main/0,counter_daemon/3,process_wait/2]).
 -import(string,[tokens/2,to_lower/1,to_integer/1,join/2]).
--import(lists,[sublist/3,concat/1,map/2,filter/2,nth/2,any/2,reverse/1,keyfind/3,keydelete/3,reverse/1,sort/2]).
--import(maps,[put/3,find/2]).
+-import(lists,[sublist/3,concat/1,map/2,filter/2,nth/2,any/2,reverse/1,keyfind/3,keydelete/3,reverse/1,sort/2,sum/1]).
+-import(maps,[put/3,find/2,values/1]).
 
 %$ erl -noshell -s parseWikipediaXML main -i ../share/enwiki-test-5000 -o o1 -s init stop
 
 main() ->
-    Args=take_args(init:get_arguments(),[{c,1},{n,1},{fht,unit}]),
+    Init=[{c,1},{n,1},{m,1},{x,65535},{fht,unit}],
+    Args=take_args(init:get_arguments(),Init),
+    %io:format("~p~n",[Args]),
     case keyfind(h,1,Args) of
         false -> start_parse(Args);
         _ -> unit
@@ -98,6 +100,8 @@ get_baseform(Fhd, Maps, L, Loaded, Parsed) ->
 take_args([{K,[]}|_],Args) when
     K=:=h ->
         io:format("-c count : Mininum number of a term~n"),
+        io:format("-m count : Mininum number of a page~n"),
+        io:format("-x count : Maximum number of a page~n"),
         io:format("-n ngram : N-gram supported~n"),
         io:format("-o path : Output file path~n"),
         io:format("-t path : Output title path~n"),
@@ -110,7 +114,7 @@ take_args([{K,[]}|T],Args) when
     K=:=p ->
     take_args(T,[{K,[]}|Args]);
 take_args([{K,[V|_]}|T],Args) when
-    K=:=c; K=:=n ->
+    K=:=c; K=:=n; K=:=x; K=:=m ->
     NewArgs = delete_arg(K,Args),
     {I,_} = to_integer(V),
     take_args(T,[{K,I}|NewArgs]);
@@ -258,7 +262,6 @@ run_parse(Args, Dict, Text, Title) ->
 
     {fho,Fho} = keyfind(fho,1,Args),
     {fht,Fht} = keyfind(fht,1,Args),
-    {c,C} = keyfind(c,1,Args),
     {n,N} = keyfind(n,1,Args),
 
     WordList=
@@ -270,9 +273,9 @@ run_parse(Args, Dict, Text, Title) ->
     case keyfind(p,1,Args) of
         false ->
             Bofw = seq_parse(WordList, N),
-            post_parse(Fho,Fht,Bofw,C,Title);
+            post_parse(Args,Fho,Fht,Bofw,Title);
         _ ->
-            par_parse(WordList,Fho,Fht,C,Title)
+            par_parse(WordList,N,Args,Fho,Fht,Title)
     end.
 
 convert_word(Word,Dict) ->
@@ -287,21 +290,33 @@ seq_parse(WordList,N) ->
         N -> ngram_count(WordList, [], N, maps:new())
     end.
 
-par_parse(WordList,Fho,Fht,C,Title) ->
+par_parse(WordList,N,Args,Fho,Fht,Title) ->
     pw ! { add, self() },
     spawn(
         fun() ->
-            Bofw = word_count(WordList, maps:new()),
-            post_parse(Fho,Fht,Bofw,C,Title),
+            Bofw = case N of
+                1 -> word_count(WordList, maps:new());
+                N -> ngram_count(WordList, [], N, maps:new())
+            end,
+            post_parse(Args,Fho,Fht,Bofw,Title),
             pw ! { done, self() }
         end
     ).
 
-post_parse(Fho,Fht,Bofw,C,Title)->
-    B = maps:filter(fun(_,V)-> V>=C end, Bofw),
-    case maps:size(B) of
-        0 -> do_not_save();
-        _ -> do_save(Fho,B,Fht,Title)
+post_parse(Args,Fho,Fht,Bofw,Title)->
+    {c,C} = keyfind(c,1,Args),
+    {m,M} = keyfind(m,1,Args),
+    {x,X} = keyfind(x,1,Args),
+
+    Bofwmaps = maps:filter(fun(_,V)-> V>=C end, Bofw),
+    Freqs = sum(values(Bofwmaps)),
+    if
+        Freqs >= M, Freqs =< X ->
+            case maps:size(Bofwmaps) of
+                0 -> do_not_save();
+                _ -> do_save(Fho,Bofwmaps,Fht,Title)
+            end;
+        true -> do_not_save()
     end.
 
 do_not_save() ->
