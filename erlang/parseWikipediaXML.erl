@@ -233,7 +233,7 @@ parse_text(Args, Dict, File, Lines) ->
     % Regular expression '.' does not match with \n.
     % So, \n will be deleted by chomp.
     {ok,MP}=re:compile("<text[^<>]*>(.*)</text>"),
-    case re:run([Lines],MP) of
+    case re:run([Lines],MP,[{capture,all_but_first}]) of
         nomatch ->
             line_concat(Args, Dict, File, Lines);
         {match, Match} ->
