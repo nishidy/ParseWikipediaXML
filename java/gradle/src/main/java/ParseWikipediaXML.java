@@ -29,22 +29,26 @@ import com.google.common.collect.Lists;
 
 class ArgStore {
 
-	static String ifwiki;
-	static String ifdict;
-	static String ofcont;
-	static String oftitle;
-	static String recateg;
-	static int minl;
-	static int maxl;
-	static int minc;
-	static int ngram;
-	static boolean isJap;
-	static boolean isVerb;
-	static boolean preferListNgram; // make ngram like list or set
-	static boolean ngramsCollection;
-	static String oftfidf;
+	String ifwiki;
+	String ifdict;
+	String ofcont;
+	String oftitle;
+	String recateg;
+	int minl;
+	int maxl;
+	int minc;
+	int ngram;
+	boolean isJap;
+	boolean isVerb;
+	boolean preferListNgram; // make ngram like list or set
+	boolean ngramsCollection;
+	String oftfidf;
 
-	static void init(CommandLine cl) throws ParseException {
+    ArgStore(CommandLine cl) throws ParseException {
+        init(cl);
+    };
+
+	void init(CommandLine cl) throws ParseException {
 
 		if(cl.hasOption("j")) isJap= true;
 		else isJap= false;
@@ -113,6 +117,7 @@ class ArgStore {
 abstract class AbstParser {
 
 	List<String> stopwords= null;
+    ArgStore args;
 
 	abstract void createMapDictionary(String file) throws IOException;
 	abstract String convertToBaseWord(String line);
@@ -133,6 +138,10 @@ abstract class AbstParser {
 		return line.indexOf("</page>")>=0;
 	}
 
+    void takeArgs(ArgStore args) {
+        this.args = args;
+    }
+
 }
 
 // Singleton
@@ -143,7 +152,10 @@ class EngParser extends AbstParser {
 	}
 
 	private static final EngParser instance = new EngParser();
-	public static EngParser getInstance(){ return instance; }
+	public static EngParser getInstance(ArgStore args){
+        instance.takeArgs(args);
+        return instance;
+    }
 
 	Map<String,String> mapDict = new HashMap<String,String>();
 
@@ -240,7 +252,10 @@ class JapParser extends AbstParser {
 	}
 
 	private static final JapParser instance = new JapParser();
-	public static JapParser getInstance(){ return instance; }
+	public static JapParser getInstance(ArgStore args){
+        instance.takeArgs(args);
+        return instance;
+    }
 
 	@Override
 	boolean isJap(){ return true; }
@@ -273,7 +288,7 @@ class JapParser extends AbstParser {
 					words.add(baseword);
 				}
 			}
-			if(ArgStore.isVerb && isJap()){
+			if(args.isVerb && isJap()){
 				System.out.printf("%s: %s\n",token.getSurfaceForm(),token.getAllFeatures());
 			}
 		}
@@ -315,14 +330,14 @@ class RunParser implements Runnable {
 		if(listNgrams.size()==0) return false;
 
 		//if( listNgrams instanceof Set<String> )
-		if( ArgStore.preferListNgram ){
+		if( parser.args.preferListNgram ){
 			if(listNgrams.get(listNgrams.size()-1).equals(word)){
-				if(ArgStore.isVerb) System.out.printf("%s is duplicated.\n",word);
+				if(parser.args.isVerb) System.out.printf("%s is duplicated.\n",word);
 				return true;
 			}
 		}else{
 			if(listNgrams.contains(word)){
-				if(ArgStore.isVerb) System.out.printf("%s is duplicated.\n",word);
+				if(parser.args.isVerb) System.out.printf("%s is duplicated.\n",word);
 				return true;
 			}
 		}
@@ -340,14 +355,14 @@ class RunParser implements Runnable {
 		int wordcnt= 0;
 
 		int ngramcountinit;
-		if(ArgStore.ngramsCollection){
+		if(parser.args.ngramsCollection){
 			ngramcountinit=1;
 		}else{
-			ngramcountinit=ArgStore.ngram;
+			ngramcountinit=parser.args.ngram;
 		}
 
-		for(int ngramcnt=(ArgStore.ngramsCollection?1:ArgStore.ngram);
-				ngramcnt<=ArgStore.ngram;
+		for(int ngramcnt=(parser.args.ngramsCollection?1:parser.args.ngram);
+				ngramcnt<=parser.args.ngram;
 				ngramcnt++){
 
 			for(String word: parser.getWordList(text)){
@@ -360,7 +375,7 @@ class RunParser implements Runnable {
 
 				listNgrams.add(word);
 				listSaveNgramsOrder.add(word);
-				if(!ArgStore.preferListNgram) Collections.sort(listNgrams);
+				if(!parser.args.preferListNgram) Collections.sort(listNgrams);
 
 				if(listNgrams.size()<ngramcnt) continue;
 				if(listNgrams.size()>ngramcnt){
@@ -378,13 +393,13 @@ class RunParser implements Runnable {
 				}
 				wordcnt+=1;
 
-				if(ArgStore.isVerb && !parser.isJap()){
+				if(parser.args.isVerb && !parser.isJap()){
 					System.out.printf("%s -> %s.\n",ngramstr,bowWord);
 				}
 
-				if(wordcnt>ArgStore.maxl) return;
+				if(wordcnt>parser.args.maxl) return;
 			}
-			if(wordcnt<ArgStore.minl) return;
+			if(wordcnt<parser.args.minl) return;
 		}
 
 		List<Map.Entry<String,Integer>> entries= new ArrayList<>(mapbow.entrySet());
@@ -398,7 +413,7 @@ class RunParser implements Runnable {
 		int cnt=0;
 		StringBuffer bowBuf = new StringBuffer("");
 		for(Map.Entry<String,Integer> entry: entries){
-			if(entry.getValue()<ArgStore.minc) continue;
+			if(entry.getValue()<parser.args.minc) continue;
 			if(cnt>0) bowBuf.append(" ");
 			bowBuf.append(String.format("%s %d",entry.getKey(),entry.getValue()));
 			cnt+=1;
@@ -425,7 +440,7 @@ class RunParser implements Runnable {
 		while(categoryTagMatcher.find()){
 			cmatflag= false;
 			String category= categoryTagMatcher.group(1);
-			Pattern categoryPattern= Pattern.compile(ArgStore.recateg);
+			Pattern categoryPattern= Pattern.compile(parser.args.recateg);
 			Matcher categoryMatcher= categoryPattern.matcher(category);
 			if(categoryMatcher.find()){ cmatflag= true; break; }
 		}
@@ -468,35 +483,35 @@ public class ParseWikipediaXML {
 		HelpFormatter help = new HelpFormatter();
 
 		try{
+
 			CommandLine cl = basicparser.parse(options, args);
-			ArgStore.init(cl);
+            ArgStore argstore = new ArgStore(cl);
+
+			AbstParser parser;
+			if(argstore.isJap){
+				parser = JapParser.getInstance(argstore);
+			}else{
+				parser = EngParser.getInstance(argstore);
+			}
+
+			outputBofw(parser);
+			inputBofwForTfidf(parser);
 
 		} catch (ParseException e){
 			help.printHelp("ParseWikipediaXML",options);
 			System.exit(1);
-		}
 
-
-		AbstParser parser;
-		if(ArgStore.isJap){
-			parser = JapParser.getInstance();
-		}else{
-			parser = EngParser.getInstance();
-		}
-
-		if(ArgStore.oftfidf.equals("")){
-			outputBofw(parser);
-		}else{
-			inputBofwForTfidf(parser);
 		}
 
 	}
 
 	private static void inputBofwForTfidf(AbstParser parser) {
 
+    	if(parser.args.oftfidf.equals("")){ return; }
+
 		BufferedWriter bw = null;
 		try{
-			bw = new BufferedWriter(new FileWriter(ArgStore.oftfidf));
+			bw = new BufferedWriter(new FileWriter(parser.args.oftfidf));
 		} catch (IOException e){
 			System.err.println("BufferedWriter error "+e);
 			System.exit(13);
@@ -507,7 +522,7 @@ public class ParseWikipediaXML {
 		String line;
 		int numDocInFile = 0;
 
-		try( BufferedReader br = new BufferedReader(new FileReader(ArgStore.ofcont)) ){
+		try( BufferedReader br = new BufferedReader(new FileReader(parser.args.ofcont)) ){
 
 			while((line=br.readLine())!=null){
 				String terms[] = line.split(" ");
@@ -531,7 +546,7 @@ public class ParseWikipediaXML {
 		}
 
 		int cntDoc = 0;
-		try( BufferedReader br = new BufferedReader(new FileReader(ArgStore.ofcont)) ){
+		try( BufferedReader br = new BufferedReader(new FileReader(parser.args.ofcont)) ){
 
 			while((line=br.readLine())!=null){
 
@@ -587,8 +602,8 @@ public class ParseWikipediaXML {
 
 		BufferedWriter bw = null;
 		try{
-			if(ArgStore.ofcont!=null){
-				bw = new BufferedWriter(new FileWriter(ArgStore.ofcont));
+			if(parser.args.ofcont!=null){
+				bw = new BufferedWriter(new FileWriter(parser.args.ofcont));
 			}else{
 				bw = new BufferedWriter(new OutputStreamWriter(System.out));
 			}
@@ -597,17 +612,17 @@ public class ParseWikipediaXML {
 		}
 
 		int numofcpus = Runtime.getRuntime().availableProcessors();
-		if(ArgStore.isVerb) System.out.printf("# of CPU is %d.\n",numofcpus);
+		if(parser.args.isVerb) System.out.printf("# of CPU is %d.\n",numofcpus);
 
 		ExecutorService ex = Executors.newFixedThreadPool(numofcpus);
 
 		try{
-			parser.createMapDictionary(ArgStore.ifdict);
+			parser.createMapDictionary(parser.args.ifdict);
 		} catch (IOException e){
 			System.exit(211);
 		}
 
-		try( BufferedReader br = new BufferedReader(new FileReader(ArgStore.ifwiki)) ){
+		try( BufferedReader br = new BufferedReader(new FileReader(parser.args.ifwiki)) ){
 
 			StringBuffer buf = new StringBuffer("");
 			String line;
