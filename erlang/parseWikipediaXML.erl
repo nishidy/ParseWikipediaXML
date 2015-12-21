@@ -100,6 +100,7 @@ take_args([{K,[]}|_],Args) when
         io:format("-c count : Mininum number of a term~n"),
         io:format("-n ngram : N-gram supported~n"),
         io:format("-o path : Output file path~n"),
+        io:format("-t path : Output title path~n"),
         io:format("-i path : Input file path~n"),
         io:format("-d path : Input dictionary file path~n"),
         io:format("-p : Spawn processes~n"),
@@ -115,26 +116,24 @@ take_args([{K,[V|_]}|T],Args) when
     {I,_} = to_integer(V),
     take_args(T,[{K,I}|NewArgs]);
 take_args([{K,[V|_]}|T],Args) when
-    K=:=o ->
+    K=:=o; K=:=t ->
     case file:open(V,write) of
-        {ok,Fho} ->
-            take_args(T,[{K,V},{fho,Fho}|Args]);
+        {ok,F} ->
+            case K of
+                o -> take_args(T,[{K,V},{fho,F}|Args]);
+                t -> take_args(T,[{K,V},{fht,F}|Args])
+            end;
         {error,FsReason} ->
             io:format("~p.~n",[FsReason])
     end;
 take_args([{K,[V|_]}|T],Args) when
-    K=:=i ->
+    K=:=i; K=:=d ->
     case file:open(V,read) of
-        {ok,Fhi} ->
-            take_args(T,[{K,V},{fhi,Fhi}|Args]);
-        {error,FiReason} ->
-            io:format("~p.~n",[FiReason])
-    end;
-take_args([{K,[V|_]}|T],Args) when
-    K=:=d ->
-    case file:open(V,read) of
-        {ok,Fhd} ->
-            take_args(T,[{K,V},{fhd,Fhd}|Args]);
+        {ok,F} ->
+            case K of
+                i -> take_args(T,[{K,V},{fhi,F}|Args]);
+                d -> take_args(T,[{K,V},{fhd,F}|Args])
+            end;
         {error,FiReason} ->
             io:format("~p.~n",[FiReason])
     end;
@@ -221,6 +220,15 @@ line_concat(Args,Dict,File,Line) ->
             parse_text(Args, Dict, File, Lines)
     end.
 
+parse_title(Lines) ->
+    {ok,MP}=re:compile("<title[^<>]*>(.*)</title>"),
+    case re:run([Lines],MP,[{capture,all_but_first}]) of
+        nomatch -> "";
+        {match, Match} ->
+            {Idx, Num} = nth(1,Match),
+            sublist(Lines, Idx+1, Num)
+    end.
+
 parse_text(Args, Dict, File, Lines) ->
     % Regular expression '.' does not match with \n.
     % So, \n will be deleted by chomp.
@@ -233,14 +241,16 @@ parse_text(Args, Dict, File, Lines) ->
             % However, sublist takes index starting from 1
             {Idx, Num} = nth(1,Match),
             Text = tokens(sublist(Lines, Idx+1, Num),"\n,. "),
+            Title = parse_title(Lines),
             %io:format("~p~n",[tokens(sublist(Line,Idx+1,Num),"\n,. ")]),
-            run_parse(Args, Dict, Text),
+            run_parse(Args, Dict, Text, Title),
             line_concat(Args, Dict, File, "")
     end.
 
-run_parse(Args, Dict, Text) ->
+run_parse(Args, Dict, Text, Title) ->
 
     {fho,Fho} = keyfind(fho,1,Args),
+    {fht,Fht} = keyfind(fht,1,Args),
     {c,C} = keyfind(c,1,Args),
     {n,N} = keyfind(n,1,Args),
 
@@ -253,9 +263,9 @@ run_parse(Args, Dict, Text) ->
     case keyfind(p,1,Args) of
         false ->
             Bofw = seq_parse(WordList, N),
-            post_parse(Fho,Bofw,C);
+            post_parse(Fho,Fht,Bofw,C,Title);
         _ ->
-            par_parse(WordList, Fho, C)
+            par_parse(WordList,Fho,Fht,C,Title)
     end.
 
 convert_word(Word,Dict) ->
@@ -270,33 +280,38 @@ seq_parse(WordList,N) ->
         N -> ngram_count(WordList, [], N, maps:new())
     end.
 
-par_parse(WordList, Fho, C) ->
+par_parse(WordList,Fho,Fht,C,Title) ->
     pw ! { add, self() },
     spawn(
         fun() ->
             Bofw = word_count(WordList, maps:new()),
-            post_parse(Fho,Bofw,C),
+            post_parse(Fho,Fht,Bofw,C,Title),
             pw ! { done, self() }
         end
     ).
 
-post_parse(Fho,Bofw,C)->
+post_parse(Fho,Fht,Bofw,C,Title)->
     B = maps:filter(fun(_,V)-> V>=C end, Bofw),
     case maps:size(B) of
-        0 ->
-            cd ! {incr1, self()},
-            receive
-                {ok, {Saved,Parsed}, _} ->
-                    show_counts( Saved, Parsed )
-            end;
-        _ ->
-            cd ! {incr2, self()},
-            receive
-                {ok, {Saved,Parsed}, _} ->
-                    show_counts( Saved, Parsed )
-            end,
-            save_maps(sort(fun({_,V1},{_,V2})-> V1>V2 end, maps:to_list(B)),Fho)
+        0 -> do_not_save();
+        _ -> do_save(Fho,B,Fht,Title)
     end.
+
+do_not_save() ->
+    cd ! {incr1, self()},
+    receive
+        {ok, {Saved,Parsed}, _} ->
+            show_counts( Saved, Parsed )
+    end.
+
+do_save(Fho,B,Fht,T) ->
+    cd ! {incr2, self()},
+    receive
+        {ok, {Saved,Parsed}, _} ->
+            show_counts( Saved, Parsed )
+    end,
+    save_maps(sort(fun({_,V1},{_,V2})-> V1>V2 end, maps:to_list(B)),Fho),
+    io:format(Fht,"~s~n",[T]).
 
 show_counts(Saved, Parsed) ->
     io:format(" > Read database [ # page (saved/parsed) ~.10B / ~.10B ]\r", [Saved, Parsed]).
