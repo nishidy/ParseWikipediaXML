@@ -7,7 +7,7 @@
 %$ erl -noshell -s parseWikipediaXML main -i ../share/enwiki-test-5000 -o o1 -s init stop
 
 main() ->
-    Args=take_args(init:get_arguments(),[{c,1},{n,1}]),
+    Args=take_args(init:get_arguments(),[{c,1},{n,1},{fht,unit}]),
     case keyfind(h,1,Args) of
         false -> start_parse(Args);
         _ -> unit
@@ -108,11 +108,7 @@ take_args([{K,[]}|_],Args) when
         [{h,[]}|Args];
 take_args([{K,[V|_]}|T],Args) when
     K=:=c; K=:=n ->
-    NewArgs =
-        case keyfind(K,1,Args) of
-            false -> Args;
-            _ -> keydelete(K,1,Args)
-        end,
+    NewArgs = delete_arg(K,Args),
     {I,_} = to_integer(V),
     take_args(T,[{K,I}|NewArgs]);
 take_args([{K,[V|_]}|T],Args) when
@@ -121,7 +117,7 @@ take_args([{K,[V|_]}|T],Args) when
         {ok,F} ->
             case K of
                 o -> take_args(T,[{K,V},{fho,F}|Args]);
-                t -> take_args(T,[{K,V},{fht,F}|Args])
+                t -> take_args(T,[{K,V},{fht,F}|delete_arg(K,Args)])
             end;
         {error,FsReason} ->
             io:format("~p.~n",[FsReason])
@@ -143,6 +139,12 @@ take_args([{K,[]}|T],Args) ->
     take_args(T,[{K,""}|Args]);
 take_args([],Args) ->
     Args.
+
+delete_arg(K,Args) ->
+    case keyfind(K,1,Args) of
+        false -> Args;
+        _ -> keydelete(K,1,Args)
+    end.
 
 if_stopwords(Word) ->
     Stopwords = "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your",
@@ -311,7 +313,10 @@ do_save(Fho,B,Fht,T) ->
             show_counts( Saved, Parsed )
     end,
     save_maps(sort(fun({_,V1},{_,V2})-> V1>V2 end, maps:to_list(B)),Fho),
-    io:format(Fht,"~s~n",[T]).
+    case Fht of
+        unit -> unit;
+        _ -> io:format(Fht,"~s~n",[T])
+    end.
 
 show_counts(Saved, Parsed) ->
     io:format(" > Read database [ # page (saved/parsed) ~.10B / ~.10B ]\r", [Saved, Parsed]).
