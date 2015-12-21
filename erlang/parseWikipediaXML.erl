@@ -276,5 +276,5 @@ post_parse(Fho,Bofw,C)->
     end.
 
 show_counts(Pages, Lines) ->
-    io:format(" > Read database [ # page ~.10B / # line ~.10B ]\r", [Pages, Lines]).
+    io:format(" > Read database [ # page ~.10B / ~.10B ]\r", [Pages, Lines]).
 
