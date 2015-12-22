@@ -142,6 +142,154 @@ abstract class AbstParser {
         this.args = args;
     }
 
+    void ParseBofwForTfIdf() {
+
+        if(args.oftfidf.equals("")){ return; }
+
+        BufferedWriter bw = null;
+        try{
+            bw = new BufferedWriter(new FileWriter(args.oftfidf));
+        } catch (IOException e){
+            System.err.println("BufferedWriter error "+e);
+            System.exit(13);
+        }
+
+        List<Integer> numTermsInDoc = new ArrayList<>();
+        Map<String,Integer> numDocForTerms = new HashMap<String,Integer>();
+        String line;
+        int numDocInFile = 0;
+
+        try( BufferedReader br = new BufferedReader(new FileReader(args.ofcont)) ){
+
+            while((line=br.readLine())!=null){
+                String terms[] = line.split(" ");
+                int num=0;
+                boolean b=false;
+                for( String term : terms ){
+                    if(b=!b){
+                        numDocForTerms.putIfAbsent(term,1);
+                        numDocForTerms.compute(term,(k,v) -> v+1); // Require Java 8
+                    }else{
+                        num += Integer.parseInt(term);
+                    }
+                }
+                numTermsInDoc.add(num);
+                numDocInFile++;
+            }
+
+        } catch (IOException e){
+            System.err.println("BufferedReader error "+e);
+            System.exit(111);
+        }
+
+        int cntDoc = 0;
+        try( BufferedReader br = new BufferedReader(new FileReader(args.ofcont)) ){
+
+            while((line=br.readLine())!=null){
+
+                String terms[] = line.split(" ");
+                StringBuffer bowBuf = new StringBuffer("");
+                boolean isTerm=false;
+                String currentTerm="";
+
+                for( String term : terms ){
+
+                    // term
+                    if(isTerm=!isTerm){
+
+                        if(!term.equals(terms[0])) bowBuf.append(" ");
+                        bowBuf.append(term);
+                        bowBuf.append(" ");
+                        currentTerm = term;
+
+                    // number of the term
+                    }else{
+
+                        int numTermInDoc = Integer.parseInt(term);
+                        int numTermsInCurrentDoc = numTermsInDoc.get(cntDoc);
+                        int tf = numTermInDoc / numTermsInCurrentDoc;
+
+                        int numDocForTerm = numDocForTerms.get(currentTerm);
+                        int idf = (int)Math.log10(numDocInFile/numDocForTerm)+1;
+
+                        bowBuf.append(String.format("%d",tf*idf));
+
+                    }
+                }
+                cntDoc++;
+                bowBuf.append("\n");
+
+                try{
+                    bw.write(bowBuf.toString());
+                    bw.flush();
+                } catch (IOException e){
+                    System.err.println("BufferedWriter error.");
+                    System.exit(12);
+                }
+
+            }
+        } catch (IOException e){
+            System.err.println("BufferedReader error "+e);
+            System.exit(12);
+        }
+
+    }
+
+    void ParseTextToBofw() {
+
+        BufferedWriter bw = null;
+        try{
+            if(args.ofcont!=null){
+                bw = new BufferedWriter(new FileWriter(args.ofcont));
+            }else{
+                bw = new BufferedWriter(new OutputStreamWriter(System.out));
+            }
+        } catch (IOException e){
+            System.exit(13);
+        }
+
+        int numofcpus = Runtime.getRuntime().availableProcessors();
+        if(args.isVerb) System.out.printf("# of CPU is %d.\n",numofcpus);
+
+        ExecutorService ex = Executors.newFixedThreadPool(numofcpus);
+
+        try{
+            createMapDictionary(args.ifdict);
+        } catch (IOException e){
+            System.exit(211);
+        }
+
+        try( BufferedReader br = new BufferedReader(new FileReader(args.ifwiki)) ){
+
+            StringBuffer buf = new StringBuffer("");
+            String line;
+            boolean sflag=false, eflag=false;
+
+            while((line=br.readLine())!=null){
+
+                if(ifPageStart(line)) sflag = true;
+                if(ifPageEnd(line))   eflag = true;
+
+                if(sflag){
+                    buf.append(line);
+                    if(eflag){
+                        ex.execute(new RunParser(buf.toString(),bw,this));
+                        sflag=eflag=false;
+                        buf.delete(0, buf.length());
+                    }
+                }
+            }
+
+        } catch (IOException e){
+            System.err.println("BufferedReader error "+e);
+            System.exit(10);
+        } finally {
+            ex.shutdown();
+        }
+
+    }
+
+
 }
 
 // Singleton
@@ -494,160 +642,13 @@ public class ParseWikipediaXML {
                 parser = EngParser.getInstance(argstore);
             }
 
-            outputBofw(parser);
-            inputBofwForTfidf(parser);
+            parser.ParseTextToBofw();
+            parser.ParseBofwForTfIdf();
 
         } catch (ParseException e){
             help.printHelp("ParseWikipediaXML",options);
             System.exit(1);
 
-        }
-
-    }
-
-    private static void inputBofwForTfidf(AbstParser parser) {
-
-        if(parser.args.oftfidf.equals("")){ return; }
-
-        BufferedWriter bw = null;
-        try{
-            bw = new BufferedWriter(new FileWriter(parser.args.oftfidf));
-        } catch (IOException e){
-            System.err.println("BufferedWriter error "+e);
-            System.exit(13);
-        }
-
-        List<Integer> numTermsInDoc = new ArrayList<>();
-        Map<String,Integer> numDocForTerms = new HashMap<String,Integer>();
-        String line;
-        int numDocInFile = 0;
-
-        try( BufferedReader br = new BufferedReader(new FileReader(parser.args.ofcont)) ){
-
-            while((line=br.readLine())!=null){
-                String terms[] = line.split(" ");
-                int num=0;
-                boolean b=false;
-                for( String term : terms ){
-                    if(b=!b){
-                        numDocForTerms.putIfAbsent(term,1);
-                        numDocForTerms.compute(term,(k,v) -> v+1); // Require Java 8
-                    }else{
-                        num += Integer.parseInt(term);
-                    }
-                }
-                numTermsInDoc.add(num);
-                numDocInFile++;
-            }
-
-        } catch (IOException e){
-            System.err.println("BufferedReader error "+e);
-            System.exit(111);
-        }
-
-        int cntDoc = 0;
-        try( BufferedReader br = new BufferedReader(new FileReader(parser.args.ofcont)) ){
-
-            while((line=br.readLine())!=null){
-
-                String terms[] = line.split(" ");
-                StringBuffer bowBuf = new StringBuffer("");
-                boolean isTerm=false;
-                String currentTerm="";
-
-                for( String term : terms ){
-
-                    // term
-                    if(isTerm=!isTerm){
-
-                        if(!term.equals(terms[0])) bowBuf.append(" ");
-                        bowBuf.append(term);
-                        bowBuf.append(" ");
-                        currentTerm = term;
-
-                    // number of the term
-                    }else{
-
-                        int numTermInDoc = Integer.parseInt(term);
-                        int numTermsInCurrentDoc = numTermsInDoc.get(cntDoc);
-                        int tf = numTermInDoc / numTermsInCurrentDoc;
-
-                        int numDocForTerm = numDocForTerms.get(currentTerm);
-                        int idf = (int)Math.log10(numDocInFile/numDocForTerm)+1;
-
-                        bowBuf.append(String.format("%d",tf*idf));
-
-                    }
-                }
-                cntDoc++;
-                bowBuf.append("\n");
-
-                try{
-                    bw.write(bowBuf.toString());
-                    bw.flush();
-                } catch (IOException e){
-                    System.err.println("BufferedWriter error.");
-                    System.exit(12);
-                }
-
-            }
-        } catch (IOException e){
-            System.err.println("BufferedReader error "+e);
-            System.exit(12);
-        }
-
-    }
-
-    private static void outputBofw(AbstParser parser) {
-
-        BufferedWriter bw = null;
-        try{
-            if(parser.args.ofcont!=null){
-                bw = new BufferedWriter(new FileWriter(parser.args.ofcont));
-            }else{
-                bw = new BufferedWriter(new OutputStreamWriter(System.out));
-            }
-        } catch (IOException e){
-            System.exit(13);
-        }
-
-        int numofcpus = Runtime.getRuntime().availableProcessors();
-        if(parser.args.isVerb) System.out.printf("# of CPU is %d.\n",numofcpus);
-
-        ExecutorService ex = Executors.newFixedThreadPool(numofcpus);
-
-        try{
-            parser.createMapDictionary(parser.args.ifdict);
-        } catch (IOException e){
-            System.exit(211);
-        }
-
-        try( BufferedReader br = new BufferedReader(new FileReader(parser.args.ifwiki)) ){
-
-            StringBuffer buf = new StringBuffer("");
-            String line;
-            boolean sflag=false, eflag=false;
-
-            while((line=br.readLine())!=null){
-
-                if(parser.ifPageStart(line)) sflag = true;
-                if(parser.ifPageEnd(line))   eflag = true;
-
-                if(sflag){
-                    buf.append(line);
-                    if(eflag){
-                        ex.execute(new RunParser(buf.toString(),bw,parser));
-                        sflag=eflag=false;
-                        buf.delete(0, buf.length());
-                    }
-                }
-            }
-
-        } catch (IOException e){
-            System.err.println("BufferedReader error "+e);
-            System.exit(10);
-        } finally {
-            ex.shutdown();
         }
 
     }
