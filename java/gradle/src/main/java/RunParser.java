@@ -129,9 +129,9 @@ class RunParser implements Runnable {
             bowBuf.append(String.format("%s %d",entry.getKey(),entry.getValue()));
             cnt+=1;
         }
-        bowBuf.append("\n");
 
         if(bowBuf.length()>1){
+            bowBuf.append("\n");
             try{
                 synchronized(lock){
                     bw.write(bowBuf.toString());
