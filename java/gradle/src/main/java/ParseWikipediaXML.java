@@ -114,52 +114,39 @@ class ArgStore {
     }
 }
 
-abstract class AbstParser {
+class ParseTfIdf {
 
-    List<String> stopwords= null;
-    ArgStore args;
+    private String inFile;
+    private String outFile;
 
-    abstract void createMapDictionary(String file) throws IOException;
-    abstract String convertToBaseWord(String line);
-    abstract boolean isJap();
-    abstract List<String> getWordList(String text);
-    abstract boolean isWord(String word);
+    private List<Integer> numTermsInDoc;
+    private Map<String,Integer> numDocForTerms;
+    private int numDocInFile;
 
-    boolean isCommonWord(String word){
-        if(stopwords.contains(word)) return true;
-        return false;
+    ParseTfIdf(String inFile, String outFile) {
+        this.inFile = inFile;
+        this.outFile = outFile;
+        numTermsInDoc = new ArrayList<>();
+        numDocForTerms = new HashMap<String,Integer>();
+        numDocInFile = 0;
     }
 
-    boolean ifPageStart(String line){
-        return line.indexOf("<page")>=0;
-    }
-
-    boolean ifPageEnd(String line){
-        return line.indexOf("</page>")>=0;
-    }
-
-    void takeArgs(ArgStore args) {
-        this.args = args;
-    }
-
-    void ParseBofwForTfIdf() {
-
-        if(args.oftfidf.equals("")){ return; }
-
+    private BufferedWriter getBofwBufferedWriter() {
         BufferedWriter bw = null;
         try{
-            bw = new BufferedWriter(new FileWriter(args.oftfidf));
+            bw = new BufferedWriter(new FileWriter(outFile));
         } catch (IOException e){
             System.err.println("BufferedWriter error "+e);
             System.exit(13);
         }
+        return bw;
+    }
 
-        List<Integer> numTermsInDoc = new ArrayList<>();
-        Map<String,Integer> numDocForTerms = new HashMap<String,Integer>();
+    void getDocFreq() {
+
         String line;
-        int numDocInFile = 0;
 
-        try( BufferedReader br = new BufferedReader(new FileReader(args.ofcont)) ){
+        try( BufferedReader br = new BufferedReader(new FileReader(inFile)) ){
 
             while((line=br.readLine())!=null){
                 String terms[] = line.split(" ");
@@ -182,8 +169,16 @@ abstract class AbstParser {
             System.exit(111);
         }
 
+    }
+
+    void getTfIdf() {
+
+        BufferedWriter bw = getBofwBufferedWriter();
+
+        String line;
         int cntDoc = 0;
-        try( BufferedReader br = new BufferedReader(new FileReader(args.ofcont)) ){
+
+        try( BufferedReader br = new BufferedReader(new FileReader(inFile)) ){
 
             while((line=br.readLine())!=null){
 
@@ -194,17 +189,15 @@ abstract class AbstParser {
 
                 for( String term : terms ){
 
-                    // term
-                    if(isTerm=!isTerm){
-
+                    if( isTerm = !isTerm ) {
+                        // term
                         if(!term.equals(terms[0])) bowBuf.append(" ");
                         bowBuf.append(term);
                         bowBuf.append(" ");
                         currentTerm = term;
 
-                    // number of the term
                     }else{
-
+                        // freq
                         int numTermInDoc = Integer.parseInt(term);
                         int numTermsInCurrentDoc = numTermsInDoc.get(cntDoc);
                         int tf = numTermInDoc / numTermsInCurrentDoc;
@@ -216,6 +209,7 @@ abstract class AbstParser {
 
                     }
                 }
+
                 cntDoc++;
                 bowBuf.append("\n");
 
@@ -226,8 +220,8 @@ abstract class AbstParser {
                     System.err.println("BufferedWriter error.");
                     System.exit(12);
                 }
-
             }
+
         } catch (IOException e){
             System.err.println("BufferedReader error "+e);
             System.exit(12);
@@ -235,29 +229,89 @@ abstract class AbstParser {
 
     }
 
-    void ParseTextToBofw() {
+}
 
+abstract class AbstParser {
+
+    List<String> stopwords;
+    ArgStore args;
+
+    abstract void createBaseformsMap(String file) throws Exception;
+    abstract String convertToBaseWord(String line);
+    abstract boolean isJap();
+    abstract List<String> getWordList(String text);
+    abstract boolean isWord(String word);
+
+    private ParseTfIdf parseTfIdf;
+
+    boolean isCommonWord(String word){
+        if(stopwords.contains(word)) return true;
+        return false;
+    }
+
+    boolean ifPageStart(String line){
+        return line.indexOf("<page")>=0;
+    }
+
+    boolean ifPageEnd(String line){
+        return line.indexOf("</page>")>=0;
+    }
+
+    void takeArgs(ArgStore args) {
+        this.args = args;
+    }
+
+    private void initTfIdf() {
+        parseTfIdf = new ParseTfIdf(args.ofcont, args.oftfidf);
+    }
+
+    void ParseBofwForTfIdf() {
+
+        if(args.oftfidf.equals("")) return;
+
+        initTfIdf();
+        parseTfIdf.getDocFreq();
+        parseTfIdf.getTfIdf();
+
+    }
+
+    BufferedWriter getBufferedWriter() {
         BufferedWriter bw = null;
         try{
-            if(args.ofcont!=null){
-                bw = new BufferedWriter(new FileWriter(args.ofcont));
-            }else{
+            if(args.ofcont==null){
+                // stdout
                 bw = new BufferedWriter(new OutputStreamWriter(System.out));
+            }else{
+                bw = new BufferedWriter(new FileWriter(args.ofcont));
             }
         } catch (IOException e){
             System.exit(13);
         }
+        return bw;
+    }
 
+    int getRuntimeCpuNum() {
         int numofcpus = Runtime.getRuntime().availableProcessors();
         if(args.isVerb) System.out.printf("# of CPU is %d.\n",numofcpus);
+        return numofcpus;
+    }
 
-        ExecutorService ex = Executors.newFixedThreadPool(numofcpus);
-
+    void readDictionary() {
         try{
-            createMapDictionary(args.ifdict);
-        } catch (IOException e){
+            createBaseformsMap(args.ifdict);
+        } catch (Exception e){
             System.exit(211);
         }
+    }
+
+    void ParseTextToBofw() {
+
+        BufferedWriter bw = getBufferedWriter();
+
+        int numofcpus = getRuntimeCpuNum();
+        ExecutorService ex = Executors.newFixedThreadPool(numofcpus);
+
+        readDictionary();
 
         try( BufferedReader br = new BufferedReader(new FileReader(args.ifwiki)) ){
 
@@ -270,13 +324,12 @@ abstract class AbstParser {
                 if(ifPageStart(line)) sflag = true;
                 if(ifPageEnd(line))   eflag = true;
 
-                if(sflag){
-                    buf.append(line);
-                    if(eflag){
-                        ex.execute(new RunParser(buf.toString(),bw,this));
-                        sflag=eflag=false;
-                        buf.delete(0, buf.length());
-                    }
+                if(sflag) buf.append(line);
+
+                if(sflag && eflag){
+                    ex.execute(new RunParser(buf.toString(),bw,this));
+                    sflag=eflag=false;
+                    buf.delete(0, buf.length());
                 }
             }
 
@@ -284,12 +337,11 @@ abstract class AbstParser {
             System.err.println("BufferedReader error "+e);
             System.exit(10);
         } finally {
+            // shutdown() waits for currently running tasks to finish
             ex.shutdown();
         }
 
     }
-
-
 }
 
 // Singleton
@@ -310,47 +362,53 @@ class EngParser extends AbstParser {
     @Override
     boolean isJap(){ return false; }
 
+    void readAsMsgpack(String file) throws Exception {
+        MessagePack msgpack = new MessagePack();
+
+        File f = new File(file);
+        byte [] bytes = new byte[(int) f.length() ];;
+
+        InputStream inputStream = new FileInputStream(f);
+        inputStream.read(bytes);
+
+        ByteArrayInputStream in = new ByteArrayInputStream(bytes);
+        Unpacker unpacker = msgpack.createUnpacker(in);
+
+        Template<Map<String,String>> mapTmpl = tMap(TString,TString);
+        mapDict = unpacker.read(mapTmpl);
+
+        final Iterator<String> mapIter = mapDict.keySet().iterator();
+        while(mapIter.hasNext()){
+            String key = mapIter.next();
+            if(key.equals(mapDict.get(key))){
+                mapIter.remove();
+            }
+        }
+    }
+
+    void readAsFile(String file) throws IOException {
+        String line;
+        try( BufferedReader br = new BufferedReader(new FileReader(file)) ){
+            while((line=br.readLine())!=null){
+                if(line.indexOf(";;;")>=0) continue;
+                String cols[] = line.split("[ \\t]");
+                if(cols[0].equals(cols[3])) continue;
+                mapDict.put(cols[0],cols[3]);
+            }
+        } catch (IOException io){
+            throw io;
+        }
+    }
+
     @Override
-    void createMapDictionary(String file) throws IOException {
+    void createBaseformsMap(String file) throws Exception {
 
         try{ // try MessagePack format first
-
-            MessagePack msgpack = new MessagePack();
-
-            File f = new File(file);
-            byte [] bytes = new byte[(int) f.length() ];;
-
-            InputStream inputStream = new FileInputStream(f);
-            inputStream.read(bytes);
-
-            ByteArrayInputStream in = new ByteArrayInputStream(bytes);
-            Unpacker unpacker = msgpack.createUnpacker(in);
-
-            Template<Map<String,String>> mapTmpl = tMap(TString,TString);
-            mapDict = unpacker.read(mapTmpl);
-
-            final Iterator<String> mapIter = mapDict.keySet().iterator();
-            while(mapIter.hasNext()){
-                String key = mapIter.next();
-                if(key.equals(mapDict.get(key))){
-                    mapIter.remove();
-                }
-            }
-
+            readAsMsgpack(file);
         } catch (MessageTypeException e) {
-
-            String line;
-            try( BufferedReader br = new BufferedReader(new FileReader(file)) ){
-                while((line=br.readLine())!=null){
-                    if(line.indexOf(";;;")>=0) continue;
-                    String cols[] = line.split("[ \\t]");
-                    if(cols[0].equals(cols[3])) continue;
-                    mapDict.put(cols[0],cols[3]);
-                }
-            } catch (IOException io){
-                throw io;
-            }
-
+            readAsFile(file);
+        } catch (Exception io){
+            throw io;
         }
 
     }
@@ -414,7 +472,7 @@ class JapParser extends AbstParser {
     }
 
     @Override
-    void createMapDictionary(String file) { }
+    void createBaseformsMap(String file) { }
 
     @Override
     List<String> getWordList(String text){
@@ -648,7 +706,6 @@ public class ParseWikipediaXML {
         } catch (ParseException e){
             help.printHelp("ParseWikipediaXML",options);
             System.exit(1);
-
         }
 
     }
