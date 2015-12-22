@@ -1,5 +1,3 @@
-package com.github.nishidy;
-
 import java.io.*;
 import java.util.regex.*;
 import java.util.Arrays;
@@ -12,20 +10,15 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 
-import org.apache.commons.cli.*;
+import com.github.nishidy.ParseWikipediaXML.*;
 
-public class ParseWikipediaXML {
+public class Main {
 
     public static void main(String... args){
 
-        ArgStore argstore = new ArgStore(args);
-
         AbstParser parser;
-        if(argstore.isJap){
-            parser = JapParser.getInstance(argstore);
-        }else{
-            parser = EngParser.getInstance(argstore);
-        }
+        parser = EngParser.getInstance(args);
+        //parser = JapParser.getInstance(args);
 
         parser.ParseTextToBofw();
         parser.ParseBofwForTfIdf();
