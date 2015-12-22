@@ -41,6 +41,28 @@ public class EngParser extends AbstParser {
     @Override
     boolean isJap(){ return false; }
 
+    private String message = "Read dictionary";
+    private int loadedWords = 0;
+    private int parsedWords = 0;
+
+    private void incrLoadedWords() {
+        loadedWords ++;
+    }
+
+    private void incrParsedWords() {
+        parsedWords ++;
+    }
+
+    private void showReadDictProgress() {
+        if ( parsedWords > 1 ){
+            System.out.print("\033[1A");
+            System.out.flush();
+        }
+
+        System.out.printf(" > %s [ # word (loaded/parsed)  %d / %d ]\n",
+                message,loadedWords,parsedWords);
+    }
+
     void readAsMsgpack(String file) throws Exception {
         MessagePack msgpack = new MessagePack();
 
@@ -62,6 +84,8 @@ public class EngParser extends AbstParser {
             if(key.equals(mapDict.get(key))){
                 mapIter.remove();
             }
+            incrLoadedWords();
+            showReadDictProgress();
         }
     }
 
@@ -69,18 +93,26 @@ public class EngParser extends AbstParser {
         String line;
         try( BufferedReader br = new BufferedReader(new FileReader(file)) ){
             while((line=br.readLine())!=null){
+                showReadDictProgress();
+                incrParsedWords();
+
                 if(line.indexOf(";;;")>=0) continue;
                 String cols[] = line.split("[ \\t]");
                 if(cols[0].equals(cols[3])) continue;
                 mapDict.put(cols[0],cols[3]);
+
+                incrLoadedWords();
             }
         } catch (IOException io){
             throw io;
         }
+        showReadDictProgress();
     }
 
     @Override
     void createBaseformsMap(String file) throws Exception {
+
+        long s = System.currentTimeMillis();
 
         try{ // try MessagePack format first
             readAsMsgpack(file);
@@ -89,6 +121,9 @@ public class EngParser extends AbstParser {
         } catch (Exception io){
             throw io;
         }
+
+        long f = System.currentTimeMillis();
+        System.out.printf("\n %s in %.2f sec.\n",message,(f-s)/1000.0);
 
     }
 
