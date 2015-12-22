@@ -131,6 +131,7 @@ class RunParser implements Runnable {
         }
 
         if(bowBuf.length()>1){
+
             bowBuf.append("\n");
             try{
                 synchronized(lock){
@@ -141,14 +142,14 @@ class RunParser implements Runnable {
                 System.err.println("BufferedWriter error.");
                 System.exit(12);
             }
-
             parser.incrSavedPages();
+
         } else {
             parser.incrParsedPages();
+
         }
 
         parser.showProgress();
-
     }
 
     public void run(){

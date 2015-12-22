@@ -114,10 +114,9 @@ abstract class AbstParser {
                     buf.delete(0, buf.length());
                 }
 
+                incrLines();
+                showProgress();
             }
-
-            incrLines();
-            showProgress();
 
         } catch (IOException e){
             System.err.println("BufferedReader error "+e);
@@ -156,7 +155,6 @@ abstract class AbstParser {
 
     void incrParsedPages () {
         parsedPages ++;
-        incrLines();
     }
 
     void incrLines () {
@@ -164,6 +162,11 @@ abstract class AbstParser {
     }
 
     synchronized void showProgress () {
+        if ( parsedLines > 1 ){
+            System.out.print("\033[1A");
+            System.out.flush();
+        }
+
         System.out.printf(" > %s [ # page (saved/parsed) %d / %d / # line %d ]\n",
                 message, savedPages, parsedPages, parsedLines);
     }
