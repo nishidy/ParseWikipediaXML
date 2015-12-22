@@ -19,8 +19,37 @@ class ArgStore {
     boolean ngramsCollection;
     String oftfidf;
 
-    ArgStore(CommandLine cl) throws ParseException {
-        init(cl);
+    ArgStore(String... args) {
+
+        BasicParser basicparser = new BasicParser();
+        Options options = new Options();
+
+        options.addOption("i","input-file",true,"Input File(Wikipedia)");
+        options.addOption("d","dict-file",true,"Input File(Dictionary)");
+        options.addOption("s","cont-file",true,"Output File(Contents)");
+        options.addOption("t","title-file",true,"Output File(Title)");
+        options.addOption("m","min-page-words",true,"Minimum number of words that a page should have");
+        options.addOption("x","max-page-words",true,"Maxmum number of words that a page should have");
+        options.addOption("c","min-word-count",true,"Minimum number that a word should have");
+        options.addOption("g","category-regex",true,"Category in regular expression");
+        options.addOption("n","ngram",true,"Enables Ngram on N>1");
+
+        options.addOption("j","japanese",false,"Flag for Japanese");
+        options.addOption("l","ngram-list",false,"Flag for Ngram as list");
+        options.addOption("e","ngram-collection",false,"Flag for Ngram collection");
+        options.addOption("v","verbose",false,"Verbose");
+        options.addOption("f","tf-idf",true,"TF-IDF");
+
+        HelpFormatter help = new HelpFormatter();
+
+        try {
+            init( basicparser.parse(options, args) );
+        } catch (ParseException e){
+            help.printHelp("ParseWikipediaXML",options);
+            System.exit(1);
+        }
+
+
     };
 
     void init(CommandLine cl) throws ParseException {
