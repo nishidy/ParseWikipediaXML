@@ -141,7 +141,13 @@ class RunParser implements Runnable {
                 System.err.println("BufferedWriter error.");
                 System.exit(12);
             }
+
+            parser.incrSavedPages();
+        } else {
+            parser.incrParsedPages();
         }
+
+        parser.showProgress();
 
     }
 

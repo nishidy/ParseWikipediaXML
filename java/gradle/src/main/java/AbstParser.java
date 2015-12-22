@@ -87,15 +87,14 @@ abstract class AbstParser {
         }
     }
 
-    void ParseTextToBofw() {
-
-        BufferedWriter bw = getBufferedWriter();
+    void parseText() {
 
         int numofcpus = getRuntimeCpuNum();
         ExecutorService ex = Executors.newFixedThreadPool(numofcpus);
 
-        readDictionary();
+        BufferedWriter bw = getBufferedWriter();
 
+        long s = System.currentTimeMillis();
         try( BufferedReader br = new BufferedReader(new FileReader(args.ifwiki)) ){
 
             StringBuffer buf = new StringBuffer("");
@@ -114,16 +113,60 @@ abstract class AbstParser {
                     sflag=eflag=false;
                     buf.delete(0, buf.length());
                 }
+
             }
+
+            incrLines();
+            showProgress();
 
         } catch (IOException e){
             System.err.println("BufferedReader error "+e);
             System.exit(10);
         } finally {
-            // shutdown() waits for currently running tasks to finish
             ex.shutdown();
         }
 
+        try{
+            ex.awaitTermination(1, TimeUnit.HOURS);
+        } catch (InterruptedException e){
+            System.err.println("Executor awaitTermination error "+e);
+            System.exit(11);
+        }
+
+        long f = System.currentTimeMillis();
+        System.out.printf("\n > %s in %.2f sec.\n", message, (f-s)/1000.0);
+
     }
+
+    void ParseTextToBofw() {
+        readDictionary();
+        parseText();
+    }
+
+
+    private int savedPages = 0;
+    private int parsedPages = 0;
+    private int parsedLines = 0;
+    private String message = "Read database";
+
+    void incrSavedPages () {
+        savedPages ++;
+        incrParsedPages();
+    }
+
+    void incrParsedPages () {
+        parsedPages ++;
+        incrLines();
+    }
+
+    void incrLines () {
+        parsedLines ++;
+    }
+
+    synchronized void showProgress () {
+        System.out.printf(" > %s [ # page (saved/parsed) %d / %d / # line %d ]\n",
+                message, savedPages, parsedPages, parsedLines);
+    }
+
 }
 
