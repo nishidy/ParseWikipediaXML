@@ -1,8 +1,8 @@
-package com.github.nishidy;
+package com.github.nishidy.ParseWikipediaXML;
 
 import org.apache.commons.cli.*;
 
-class ArgStore {
+public class ArgStore {
 
     String ifwiki;
     String ifdict;
@@ -19,7 +19,7 @@ class ArgStore {
     boolean ngramsCollection;
     String oftfidf;
 
-    ArgStore(String... args) {
+    public ArgStore(String... args) {
 
         BasicParser basicparser = new BasicParser();
         Options options = new Options();

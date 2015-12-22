@@ -1,4 +1,4 @@
-package com.github.nishidy;
+package com.github.nishidy.ParseWikipediaXML;
 
 import java.io.*;
 import java.util.regex.*;
@@ -14,7 +14,7 @@ import java.util.Iterator;
 
 import java.lang.Runtime;
 
-abstract class AbstParser {
+public abstract class AbstParser {
 
     List<String> stopwords;
     ArgStore args;
@@ -40,15 +40,15 @@ abstract class AbstParser {
         return line.indexOf("</page>")>=0;
     }
 
-    void takeArgs(ArgStore args) {
-        this.args = args;
+    void takeArgs(String... args) {
+        this.args = new ArgStore(args);
     }
 
     private void initTfIdf() {
         parseTfIdf = new ParseTfIdf(args.ofcont, args.oftfidf);
     }
 
-    void ParseBofwForTfIdf() {
+    public void ParseBofwForTfIdf() {
 
         if(args.oftfidf.equals("")) return;
 
@@ -137,9 +137,11 @@ abstract class AbstParser {
 
     }
 
-    void ParseTextToBofw() {
+    public void ParseTextToBofw() {
+
         readDictionary();
         parseText();
+
     }
 
 

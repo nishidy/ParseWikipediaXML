@@ -1,7 +1,5 @@
 apply plugin: 'java'
-
 apply plugin: 'application'
-mainClassName = 'com.github.nishidy.ParseWikipediaXML'
 
 repositories {
 	jcenter()
@@ -26,7 +24,13 @@ dependencies {
 }
 
 run {
+    mainClassName = 'com.github.nishidy.ParseWikipediaXML.ParseMain'
     if (project.hasProperty('args')) {
         args project.args.split(' ')
     }
+}
+
+jar {
+    baseName = "ParseWikipediaXML"
+    manifest.attributes 'Main-Class': 'com.github.nishidy.ParseWikipediaXML'
 }

@@ -1,4 +1,4 @@
-package com.github.nishidy;
+package com.github.nishidy.ParseWikipediaXML;
 
 import java.io.*;
 import java.util.regex.*;
@@ -16,7 +16,7 @@ import org.atilika.kuromoji.Token;
 import org.atilika.kuromoji.Tokenizer;
 
 // Singleton
-class JapParser extends AbstParser {
+public class JapParser extends AbstParser {
 
     Tokenizer tokenizer;
 
@@ -28,7 +28,7 @@ class JapParser extends AbstParser {
     }
 
     private static final JapParser instance = new JapParser();
-    public static JapParser getInstance(ArgStore args){
+    public static JapParser getInstance(String... args){
         instance.takeArgs(args);
         return instance;
     }

@@ -1,4 +1,4 @@
-package com.github.nishidy;
+package com.github.nishidy.ParseWikipediaXML;
 
 import java.io.*;
 import java.util.regex.*;
