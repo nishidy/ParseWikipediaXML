@@ -59,7 +59,7 @@ public class EngParser extends AbstParser {
             System.out.flush();
         }
 
-        System.out.printf(" %s [ # word (loaded/parsed)  %d / %d ]\n",
+        System.out.printf(" %s [ # word (loaded/parsed) %d / %d ]\n",
                 message,loadedWords,parsedWords);
     }
 

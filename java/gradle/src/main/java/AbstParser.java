@@ -185,8 +185,8 @@ public abstract class AbstParser {
     }
 
     synchronized void postParse (BufferedWriter bwBofw, String bofw, BufferedWriter bwTitle, String title) {
-        writeOutput(bwBofw, bofw);
-        writeOutput(bwTitle, title);
+        writeOutput(bwBofw, bofw+"\n");
+        writeOutput(bwTitle, title+"\n");
 
         incrSavedPages();
     }

@@ -133,7 +133,7 @@ class RunParser implements Runnable {
         }
 
         if(bowBuf.length()>1){
-            parser.postParse(bwBofw, bowBuf.append("\n").toString(), bwTitle, title);
+            parser.postParse(bwBofw, bowBuf.toString(), bwTitle, title);
         }else{
             parser.postParse();
         }
