@@ -54,7 +54,7 @@ public class EngParser extends AbstParser {
     }
 
     private void showReadDictProgress() {
-        if ( parsedWords > 1 ){
+        if ( parsedWords > 0 ){
             System.out.print("\033[1A");
             System.out.flush();
         }
