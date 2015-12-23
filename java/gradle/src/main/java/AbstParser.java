@@ -25,6 +25,13 @@ public abstract class AbstParser {
     abstract List<String> getWordList(String text);
     abstract boolean isWord(String word);
 
+    private String pageStartTag, pageEndTag;
+
+    public void registPageTag(String tag) {
+        pageStartTag = "<"+tag;
+        pageEndTag = "</"+tag;
+    }
+
     private ParseTfIdf parseTfIdf;
 
     boolean isCommonWord(String word){
@@ -33,11 +40,11 @@ public abstract class AbstParser {
     }
 
     boolean ifPageStart(String line){
-        return line.indexOf("<page")>=0;
+        return line.indexOf(pageStartTag)>=0;
     }
 
     boolean ifPageEnd(String line){
-        return line.indexOf("</page>")>=0;
+        return line.indexOf(pageEndTag)>=0;
     }
 
     void takeArgs(String... args) {

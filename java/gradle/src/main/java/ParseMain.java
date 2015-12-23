@@ -7,6 +7,8 @@ public class ParseMain {
         AbstParser parser = EngParser.getInstance(args);
         //AbstParser parser = JapParser.getInstance(args);
 
+        parser.registPageTag("page");
+
         parser.ParseTextToBofw();
         parser.ParseBofwForTfIdf();
 
