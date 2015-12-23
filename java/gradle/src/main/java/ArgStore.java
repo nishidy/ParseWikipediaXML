@@ -18,6 +18,7 @@ public class ArgStore {
     boolean preferListNgram; // make ngram like list or set
     boolean ngramsCollection;
     String oftfidf;
+    int workers;
 
     public ArgStore(String... args) {
 
@@ -39,6 +40,7 @@ public class ArgStore {
         options.addOption("e","ngram-collection",false,"Flag for Ngram collection");
         options.addOption("v","verbose",false,"Verbose");
         options.addOption("f","tf-idf",true,"TF-IDF");
+        options.addOption("w","workers",true,"Maximum number of workers to run in parallel");
 
         HelpFormatter help = new HelpFormatter();
 
@@ -115,6 +117,8 @@ public class ArgStore {
         if(cl.hasOption("l")) preferListNgram = true;
         else preferListNgram = false;
 
+        if(cl.hasOption("w")) workers = Integer.parseInt(cl.getOptionValue("w"));
+        else workers = 0;
     }
 }
 

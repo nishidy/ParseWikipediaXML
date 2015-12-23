@@ -96,8 +96,13 @@ public abstract class AbstParser {
 
     void parseText() {
 
-        int numofcpus = getRuntimeCpuNum();
-        ExecutorService ex = Executors.newFixedThreadPool(numofcpus);
+        ExecutorService ex;
+        if ( args.workers == 0 ) {
+            int numofcpus = getRuntimeCpuNum();
+            ex = Executors.newFixedThreadPool(numofcpus);
+        } else {
+            ex = Executors.newFixedThreadPool(args.workers);
+        }
 
         BufferedWriter bwBofw = getBufferedWriter(args.ofcont);
         BufferedWriter bwTitle = getBufferedWriter(args.oftitle);
