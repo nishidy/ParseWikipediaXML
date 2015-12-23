@@ -133,7 +133,7 @@ public abstract class AbstParser {
         }
 
         long f = System.currentTimeMillis();
-        System.out.printf("\n > %s in %.2f sec.\n", message, (f-s)/1000.0);
+        System.out.printf(" %s in %.2f sec.\n", message, (f-s)/1000.0);
 
     }
 
@@ -148,7 +148,7 @@ public abstract class AbstParser {
     private int savedPages = 0;
     private int parsedPages = 0;
     private int parsedLines = 0;
-    private String message = "Read database";
+    private String message = "> Read database";
 
     void incrSavedPages () {
         savedPages ++;
@@ -169,7 +169,7 @@ public abstract class AbstParser {
             System.out.flush();
         }
 
-        System.out.printf(" > %s [ # page (saved/parsed) %d / %d / # line %d ]\n",
+        System.out.printf(" %s [ # page (saved/parsed) %d / %d / # line %d ]\n",
                 message, savedPages, parsedPages, parsedLines);
     }
 

@@ -41,7 +41,7 @@ public class EngParser extends AbstParser {
     @Override
     boolean isJap(){ return false; }
 
-    private String message = "Read dictionary";
+    private String message = "> Read dictionary";
     private int loadedWords = 0;
     private int parsedWords = 0;
 
@@ -59,7 +59,7 @@ public class EngParser extends AbstParser {
             System.out.flush();
         }
 
-        System.out.printf(" > %s [ # word (loaded/parsed)  %d / %d ]\n",
+        System.out.printf(" %s [ # word (loaded/parsed)  %d / %d ]\n",
                 message,loadedWords,parsedWords);
     }
 
@@ -123,7 +123,7 @@ public class EngParser extends AbstParser {
         }
 
         long f = System.currentTimeMillis();
-        System.out.printf("\n %s in %.2f sec.\n",message,(f-s)/1000.0);
+        System.out.printf(" %s in %.2f sec.\n",message,(f-s)/1000.0);
 
     }
 
