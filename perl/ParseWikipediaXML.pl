@@ -414,19 +414,22 @@ sub readDictionary {
 
         open $fh, '<:utf8', $self->{Args}->inDictFile or die "Cannot open $self->{Args}->inDictFile :$!";
 
-        my $c = 0;
-        my $m = " > Read dictionary @ ".(caller 0)[3];
+        my $lc = 0;
+        my $pc = 0;
+        my $m = "> Read dictionary @ ".(caller 0)[3];
         while(<$fh>){
             if( index($_,";;;") == -1 ){
-                my @words = map { $_ =~ s/\s*$//; $_ } split(/\t/, $_);
+                $pc++;
+                my @words = map { $_ =~ s/ $//; $_ } split(/\t/, $_);
                 next if $words[2] =~ /\s/;
+                next if $words[0] eq $words[2];
                 $self->{hashDict}->{$words[0]} = $words[2];
-                print("$m [# word $c]\r");
-                $c++;
+                print(" $m [ # word (loaded/parsed) $lc / $pc ]\r");
+                $lc++;
             }
         }
         close $fh;
-        printf("$m [# word $c] in %.2f sec\n", gettimeofday()-$start);
+        printf(" $m in %.2f sec\n", gettimeofday()-$start);
     }
 }
 
