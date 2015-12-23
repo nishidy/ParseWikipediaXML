@@ -18,7 +18,8 @@ import org.apache.commons.cli.*;
 class RunParser implements Runnable {
 
     String page;
-    BufferedWriter bw;
+    BufferedWriter bwBofw;
+    BufferedWriter bwTitle;
     AbstParser parser;
 
     //Collection<String> listNgrams; /* list can manipulate set with sort */
@@ -26,9 +27,10 @@ class RunParser implements Runnable {
 
     private final static Object lock = new Object();
 
-    public RunParser(String page, BufferedWriter bw, AbstParser parser){
+    public RunParser(String page, BufferedWriter bwBofw, BufferedWriter bwTitle, AbstParser parser){
         this.page= page;
-        this.bw= bw;
+        this.bwBofw= bwBofw;
+        this.bwTitle= bwTitle;
         this.parser= parser;
     }
 
@@ -131,22 +133,9 @@ class RunParser implements Runnable {
         }
 
         if(bowBuf.length()>1){
-
-            bowBuf.append("\n");
-            try{
-                synchronized(lock){
-                    bw.write(bowBuf.toString());
-                    bw.flush();
-                }
-            } catch (IOException e){
-                System.err.println("BufferedWriter error.");
-                System.exit(12);
-            }
-            parser.incrSavedPages();
-
-        } else {
-            parser.incrParsedPages();
-
+            parser.postParse(bwBofw, bowBuf.append("\n").toString(), bwTitle, title);
+        }else{
+            parser.postParse();
         }
 
         parser.showProgress();

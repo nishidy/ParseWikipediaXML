@@ -71,7 +71,7 @@ public class ArgStore {
         else ofcont = null;
 
         if(cl.hasOption("t")) oftitle= cl.getOptionValue("t");
-        //else throw new ParseException("t is not specified.");
+        else oftitle = null;
 
         if(cl.hasOption("m")) minl = Integer.parseInt(cl.getOptionValue("m"));
         else minl=2;

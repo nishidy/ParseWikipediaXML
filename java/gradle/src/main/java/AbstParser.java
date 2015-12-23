@@ -58,14 +58,14 @@ public abstract class AbstParser {
 
     }
 
-    BufferedWriter getBufferedWriter() {
+    BufferedWriter getBufferedWriter(String file) {
         BufferedWriter bw = null;
         try{
-            if(args.ofcont==null){
+            if(file==null){
                 // stdout
                 bw = new BufferedWriter(new OutputStreamWriter(System.out));
             }else{
-                bw = new BufferedWriter(new FileWriter(args.ofcont));
+                bw = new BufferedWriter(new FileWriter(file));
             }
         } catch (IOException e){
             System.exit(13);
@@ -92,7 +92,8 @@ public abstract class AbstParser {
         int numofcpus = getRuntimeCpuNum();
         ExecutorService ex = Executors.newFixedThreadPool(numofcpus);
 
-        BufferedWriter bw = getBufferedWriter();
+        BufferedWriter bwBofw = getBufferedWriter(args.ofcont);
+        BufferedWriter bwTitle = getBufferedWriter(args.oftitle);
 
         long s = System.currentTimeMillis();
         try( BufferedReader br = new BufferedReader(new FileReader(args.ifwiki)) ){
@@ -109,7 +110,7 @@ public abstract class AbstParser {
                 if(sflag) buf.append(line);
 
                 if(sflag && eflag){
-                    ex.execute(new RunParser(buf.toString(),bw,this));
+                    ex.execute(new RunParser(buf.toString(),bwBofw,bwTitle,this));
                     sflag=eflag=false;
                     buf.delete(0, buf.length());
                 }
@@ -173,5 +174,25 @@ public abstract class AbstParser {
                 message, savedPages, parsedPages, parsedLines);
     }
 
+    private void writeOutput (BufferedWriter bw, String output) {
+        try{
+            bw.write(output);
+            bw.flush();
+        } catch (IOException e){
+            System.err.println("BufferedWriter error.");
+            System.exit(12);
+        }
+    }
+
+    synchronized void postParse (BufferedWriter bwBofw, String bofw, BufferedWriter bwTitle, String title) {
+        writeOutput(bwBofw, bofw);
+        writeOutput(bwTitle, title);
+
+        incrSavedPages();
+    }
+
+    synchronized void postParse () {
+        incrParsedPages();
+    }
 }
 
