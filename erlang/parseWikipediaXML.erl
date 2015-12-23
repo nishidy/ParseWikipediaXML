@@ -85,9 +85,12 @@ get_baseform(Fhd, Maps, L, Loaded, Parsed) ->
     Newmaps = case tokens(L,"\t") of
         [";;;"|_] -> Maps;
         [P|[B|_]] ->
+            Pc = chomp(P),
+            Bc = chomp(B),
             case any(fun(X)-> X==$\ end, B) of
                 true -> Maps;
-                false -> put(chomp(P),chomp(B),Maps)
+                false when Pc==Bc -> Maps;
+                false -> put(Pc,Bc,Maps)
             end;
         _ -> Maps
     end,
