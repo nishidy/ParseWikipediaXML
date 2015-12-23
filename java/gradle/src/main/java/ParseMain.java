@@ -9,7 +9,8 @@ public class ParseMain {
 
         parser.registPageTag("page");
 
-        parser.ParseTextToBofw();
+        //parser.ParseTextToBofw();
+        parser.ParseXMLToBofw();
         parser.ParseBofwForTfIdf();
 
     }

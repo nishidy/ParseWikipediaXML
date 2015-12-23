@@ -138,12 +138,15 @@ public class EngParser extends AbstParser {
 
     @Override
     List<String> getWordList(String text){
-        return Lists.transform( Arrays.asList(text.split(" ")), new Function<String, String>() {
-            @Override
-            public String apply(String arg0) {
-                return arg0.toLowerCase();
+        return Lists.transform(
+            Arrays.asList(text.replaceAll("[.,;\n]"," ").split(" ")),
+            new Function<String, String>() {
+                @Override
+                public String apply(String arg0) {
+                    return arg0.toLowerCase();
+                }
             }
-        });
+        );
     }
 
     @Override

@@ -14,6 +14,12 @@ import java.util.Iterator;
 
 import java.lang.Runtime;
 
+import org.xml.sax.Attributes;
+import org.xml.sax.helpers.DefaultHandler;
+import org.xml.sax.SAXException;
+
+import javax.xml.parsers.*;
+
 public abstract class AbstParser {
 
     List<String> stopwords;
@@ -130,13 +136,11 @@ public abstract class AbstParser {
                 if(sflag) buf.append(line);
 
                 if(sflag && eflag){
-                    ex.execute(new RunParser(buf.toString(),bwBofw,bwTitle,this));
+                    ex.execute(new RunParserText(buf.toString(),bwBofw,bwTitle,this));
                     sflag=eflag=false;
                     buf.delete(0, buf.length());
                 }
 
-                incrLines();
-                showProgress();
             }
 
         } catch (IOException e){
@@ -167,19 +171,20 @@ public abstract class AbstParser {
     }
 
     public void ParseTextToBofw() {
-
         if(!canRunParseTextToBofw()) return;
-
         readDictionary();
         parseText();
-
     }
 
+    public void ParseXMLToBofw() {
+        if(!canRunParseTextToBofw()) return;
+        readDictionary();
+        parseXML();
+    }
 
     private int savedPages = 0;
     private int parsedPages = 0;
-    private int parsedLines = 0;
-    private String message = "> Read database";
+    protected String message = "> Read database";
 
     void incrSavedPages () {
         savedPages ++;
@@ -190,18 +195,14 @@ public abstract class AbstParser {
         parsedPages ++;
     }
 
-    void incrLines () {
-        parsedLines ++;
-    }
-
     synchronized void showProgress () {
-        if ( parsedLines > 1 ){
+        if ( parsedPages > 1 ){
             System.out.print("\033[1A");
             System.out.flush();
         }
 
-        System.out.printf(" %s [ # page (saved/parsed) %d / %d / # line %d ]\n",
-                message, savedPages, parsedPages, parsedLines);
+        System.out.printf(" %s [ # page (saved/parsed) %d / %d ]\n",
+                message, savedPages, parsedPages);
     }
 
     private void writeOutput (BufferedWriter bw, String output) {
@@ -224,5 +225,129 @@ public abstract class AbstParser {
     synchronized void postParse () {
         incrParsedPages();
     }
+
+    private void parseXML() {
+
+        ExecutorService ex;
+        if ( args.workers == 0 ) {
+            int numofcpus = getRuntimeCpuNum();
+            ex = Executors.newFixedThreadPool(numofcpus);
+        } else {
+            ex = Executors.newFixedThreadPool(args.workers);
+        }
+
+        BufferedWriter bwBofw = getBufferedWriter(args.ofcont);
+        BufferedWriter bwTitle = getBufferedWriter(args.oftitle);
+
+        long s = System.currentTimeMillis();
+        try {
+            SAXParserFactory spfactory = SAXParserFactory.newInstance();
+            SAXParser parser = spfactory.newSAXParser();
+            parser.parse(new File(args.ifwiki), new ParseXML(ex,bwBofw,bwTitle,this));
+        } catch (IOException | ParserConfigurationException e) {
+            System.err.println("testSax error "+e);
+        } catch (SAXException e) {
+            System.err.println("*** The structure of XML sseems broken ***\n");
+        } finally {
+            ex.shutdown();
+
+            try{
+                ex.awaitTermination(1, TimeUnit.HOURS);
+            } catch (InterruptedException e){
+                System.err.println("Executor awaitTermination error "+e);
+                System.exit(11);
+            }
+
+            long f = System.currentTimeMillis();
+            System.out.printf(" %s in %.2f sec.\n", message, (f-s)/1000.0);
+        }
+    }
+
 }
 
+class ParseXML extends DefaultHandler {
+
+    private ExecutorService ex;
+
+    BufferedWriter bwBofw;
+    BufferedWriter bwTitle;
+
+    AbstParser parser;
+
+    private StringBuffer bufferText;
+    private StringBuffer bufferTitle;
+
+    private boolean flagText = false;
+    private boolean flagTitle = false;
+
+    ParseXML(
+        ExecutorService ex,
+        BufferedWriter bwBofw,
+        BufferedWriter bwTitle,
+        AbstParser parser)
+    {
+        this.ex = ex;
+        this.bwBofw = bwBofw;
+        this.bwTitle = bwTitle;
+        this.parser = parser;
+    }
+
+    public void startDocument() {
+        bufferText = new StringBuffer();
+        bufferTitle = new StringBuffer();
+    }
+
+    public void startElement(
+            String uri,
+            String localName,
+            String qName,
+            Attributes attr ) {
+
+        if(qName.equals("text")) {
+            flagText = true;
+        }
+
+        if(qName.equals("title")) {
+            flagTitle = true;
+        }
+    }
+
+    public void characters(char []ch, int offset, int length) {
+
+        if(flagText) {
+            bufferText.append(new String(ch, offset, length));
+        }
+
+        if(flagTitle) {
+            bufferTitle.append(new String(ch, offset, length));
+        }
+    }
+
+    public void endElement(String uri, String localName, String qName){
+
+        if(qName.equals("text")){
+
+            ex.execute(
+                new RunParserXML(
+                    bufferText.toString(),
+                    bufferTitle.toString(),
+                    bwBofw,
+                    bwTitle,
+                    parser
+                )
+            );
+
+            bufferText.setLength(0);
+            bufferTitle.setLength(0);
+            flagText = false;
+        }
+
+        if(qName.equals("title")){
+            flagTitle = false;
+        }
+    }
+
+    public void endDocument() {
+    }
+
+}

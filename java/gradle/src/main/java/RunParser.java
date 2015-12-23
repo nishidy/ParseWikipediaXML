@@ -15,24 +15,15 @@ import java.util.Iterator;
 import org.apache.commons.lang.*;
 import org.apache.commons.cli.*;
 
-class RunParser implements Runnable {
+class RunParser {
 
-    String page;
+    String category;
     BufferedWriter bwBofw;
     BufferedWriter bwTitle;
     AbstParser parser;
 
     //Collection<String> listNgrams; /* list can manipulate set with sort */
     List<String> listNgrams = new ArrayList<>();
-
-    private final static Object lock = new Object();
-
-    public RunParser(String page, BufferedWriter bwBofw, BufferedWriter bwTitle, AbstParser parser){
-        this.page= page;
-        this.bwBofw= bwBofw;
-        this.bwTitle= bwTitle;
-        this.parser= parser;
-    }
 
     boolean isTooShortWord(String word){
         if(word.length()==1) return true;
@@ -56,6 +47,22 @@ class RunParser implements Runnable {
         }
 
         return false;
+    }
+
+    boolean matchCategory() {
+        Pattern categoryTagPattern =
+            Pattern.compile("\\[\\[:*Category:([^\\[\\]\\|]+)\\|*[^\\[\\]]*\\]\\]");
+        Matcher categoryTagMatcher= categoryTagPattern.matcher(category);
+
+        boolean cmatflag= true; // no category, no check
+        while(categoryTagMatcher.find()){
+            cmatflag= false;
+            String category= categoryTagMatcher.group(1);
+            Pattern categoryPattern= Pattern.compile(parser.args.recateg);
+            Matcher categoryMatcher= categoryPattern.matcher(category);
+            if(categoryMatcher.find()){ cmatflag= true; break; }
+        }
+        return cmatflag;
     }
 
     void bowCreator(String text, String title){
@@ -141,37 +148,5 @@ class RunParser implements Runnable {
         parser.showProgress();
     }
 
-    public void run(){
-        Pattern categoryTagPattern =
-            Pattern.compile("\\[\\[:*Category:([^\\[\\]\\|]+)\\|*[^\\[\\]]*\\]\\]");
-        Matcher categoryTagMatcher= categoryTagPattern.matcher(page);
-
-        boolean cmatflag= true; // no category, no check
-        while(categoryTagMatcher.find()){
-            cmatflag= false;
-            String category= categoryTagMatcher.group(1);
-            Pattern categoryPattern= Pattern.compile(parser.args.recateg);
-            Matcher categoryMatcher= categoryPattern.matcher(category);
-            if(categoryMatcher.find()){ cmatflag= true; break; }
-        }
-        if(!cmatflag) return;
-
-        Pattern p = Pattern.compile("<title[^<>]*>([^<>]+)</title>");
-        Matcher m = p.matcher(page);
-
-        String title= "";
-        if(m.find()){
-            title= m.group(1);
-        }
-
-        p = Pattern.compile("<text[^<>]*>([^<>]+)</text>");
-        m = p.matcher(page);
-
-        String text= "";
-        if(m.find()){
-            text= m.group(1);
-            bowCreator(text,title);
-        }
-    }
 }
 

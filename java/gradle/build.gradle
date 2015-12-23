@@ -20,6 +20,8 @@ dependencies {
 		'com.google.guava:guava:15.0',
 		'com.sparkjava:spark-core:2.3',
 		'com.sparkjava:spark-template-mustache:1.0.0',
+		'sax:sax:2.0.1',
+        'javax.xml.parsers:jaxp-api:1.4.5',
 	)
 }
 
