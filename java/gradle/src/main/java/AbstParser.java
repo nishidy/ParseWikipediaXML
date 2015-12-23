@@ -25,7 +25,7 @@ public abstract class AbstParser {
     abstract List<String> getWordList(String text);
     abstract boolean isWord(String word);
 
-    private String pageStartTag, pageEndTag;
+    private String pageStartTag="", pageEndTag="";
 
     public void registPageTag(String tag) {
         pageStartTag = "<"+tag;
@@ -55,9 +55,17 @@ public abstract class AbstParser {
         parseTfIdf = new ParseTfIdf(args.ofcont, args.oftfidf);
     }
 
+    private boolean canRunParseBofwForTfIdf() {
+        if( args.oftfidf.equals("") ){
+            System.err.println("You did not give the file path to save the result of TF-IDF.");
+            return false;
+        }
+        return true;
+    }
+
     public void ParseBofwForTfIdf() {
 
-        if(args.oftfidf.equals("")) return;
+        if(!canRunParseBofwForTfIdf()) return;
 
         initTfIdf();
         parseTfIdf.getDocFreq();
@@ -150,7 +158,17 @@ public abstract class AbstParser {
 
     }
 
+    private boolean canRunParseTextToBofw() {
+        if( pageStartTag.equals("") || pageEndTag.equals("") ){
+            System.err.println("You did not register a tag to parse pages.");
+            return false;
+        }
+        return true;
+    }
+
     public void ParseTextToBofw() {
+
+        if(!canRunParseTextToBofw()) return;
 
         readDictionary();
         parseText();
