@@ -108,13 +108,18 @@ func readDictionary(inDictFile string, baseforms map[string]string) {
 	defer file.Close()
 
 	m := " > Read dictionary"
-	c := 0
+	lc := 0
+	pc := 0
 
 	s := time.Now().UnixNano() / int64(time.Millisecond)
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
+
+		fmt.Printf("%s [ # word (loaded/parsed) %d / %d ]\r", m, lc, pc)
+
 		line := scanner.Text()
+		pc++
 
 		splitline := strings.Split(line, " \t\t")
 		if len(splitline) != 2 {
@@ -130,14 +135,16 @@ func readDictionary(inDictFile string, baseforms map[string]string) {
 			continue
 		}
 
-		baseforms[inflect] = baseform
+		if inflect == baseform {
+			continue
+		}
 
-		c++
-		fmt.Printf("%s [ # word %d ]\r", m, c)
+		baseforms[inflect] = baseform
+		lc++
 	}
 
 	f := time.Now().UnixNano() / int64(time.Millisecond)
-	fmt.Printf("%s [ # word %d ] in %.2f sec.\n", m, c, float64(f-s)/1000.0)
+	fmt.Printf("%s [ # word (loaded/parsed) %d / %d ] in %.2f sec.\n", m, lc, pc, float64(f-s)/1000.0)
 
 }
 

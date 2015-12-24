@@ -2,7 +2,8 @@ package main
 
 import (
 	"fmt"
-	pxml "github.com/nishidy/ParseWikipediaXML/go"
+	//pxml "github.com/nishidy/ParseWikipediaXML/go"
+	pxml "ParseWikipediaXML"
 	"os"
 )
 
