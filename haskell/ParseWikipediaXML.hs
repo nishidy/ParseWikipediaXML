@@ -127,11 +127,14 @@ getDictionaryFromFile args = do
 getLineFromInDictFile :: Handle -> M.Map S S -> (Int,Int) -> IO (M.Map S S)
 getLineFromInDictFile hInDictFile mapDict (lc,pc) = do
     hInDictFileEOF <- hIsEOF hInDictFile
-    if hInDictFileEOF then return mapDict
+    if hInDictFileEOF then do
+        putStrLn ""
+        return mapDict
     else do
         line <- hGetLine hInDictFile
         newMapDict <- getNewMapDict line mapDict
-        case M.null $ M.difference newMapDict mapDict of
+        --case M.null $ M.difference newMapDict mapDict of
+        case M.size newMapDict == M.size mapDict of
             True -> do
                 showProgress (lc,pc+1)
                 getLineFromInDictFile hInDictFile newMapDict (lc,pc+1)
