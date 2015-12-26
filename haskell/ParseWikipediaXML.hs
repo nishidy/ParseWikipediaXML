@@ -140,10 +140,10 @@ getLineFromInDictFile hInDictFile mapDict (lc,pc) = do
         newMapDict <- getNewMapDict line mapDict
         case M.size newMapDict == M.size mapDict of
             True -> do
-                showProgress (lc,pc+1)
+                showReadDictProg (lc,pc+1)
                 getLineFromInDictFile hInDictFile newMapDict (lc,pc+1)
             False-> do
-                showProgress (lc+1,pc+1)
+                showReadDictProg (lc+1,pc+1)
                 getLineFromInDictFile hInDictFile newMapDict (lc+1,pc+1)
 
 getNewMapDict :: S -> M.Map S S -> IO (M.Map S S)
@@ -155,25 +155,36 @@ getNewMapDict line mapDict = do
             (a,b,c,d) -> mapDict
     return newMapDict
 
-showProgress :: (Int,Int) -> IO ()
-showProgress (lc,pc) = do
+showReadDictProg :: (Int,Int) -> IO ()
+showReadDictProg (lc,pc) = do
     putStr (" > Read dictionary [ # word (loaded/parsed) " ++ (show lc) ++ " / " ++ (show pc) ++ " ]\r")
+
+
+showReadDataProg :: (Int,Int,Int) -> IO ()
+showReadDataProg (sc,pc,lc) = do
+    putStr (" > Read database [ # page (saved/parsed) " ++ (show sc) ++ " / " ++ (show pc) ++ " / # line " ++ (show lc) ++ " ]\r")
 
 getContentFromFile :: ArgsRec -> M.Map S S -> [S] -> IO ()
 getContentFromFile args mapDict stopwords = do
 
     let (ArgsRec { inWikiFile = i }) = args
+
+    s <- getCurrentTime
     hInWikiFile <- openFile i ReadMode
     encoding <- mkTextEncoding "UTF-8"
     hSetEncoding hInWikiFile encoding
-    _ <- getLineFromFile hInWikiFile "" args mapDict stopwords
+    getLineFromFile hInWikiFile "" args mapDict stopwords (0,0,0)
     hClose hInWikiFile
+    e <- getCurrentTime
+    putStrLn $ " > Read database in " ++ (printf "%.2f" (realToFrac  (diffUTCTime e s)::Double)) ++ " sec."
 
-getLineFromFile :: Handle -> S -> ArgsRec -> M.Map S S -> [S] -> IO ()
-getLineFromFile hInWikiFile page args mapDict stopwords = do
+getLineFromFile :: Handle -> S -> ArgsRec -> M.Map S S -> [S] -> (Int,Int,Int) -> IO ()
+getLineFromFile hInWikiFile page args mapDict stopwords (sc,pc,lc)= do
 
     hInWikiFileEOF <- hIsEOF hInWikiFile
-    if hInWikiFileEOF then return ()
+    if hInWikiFileEOF then do
+        putStrLn ""
+        return ()
     else do
         line <- hGetLine hInWikiFile
         let pageline = page++line
@@ -184,13 +195,22 @@ getLineFromFile hInWikiFile page args mapDict stopwords = do
         --        ASCII compatible characters in UTF8 is probably OK.
         --case pageline =~ "</page>" :: Bool of
         case search line "</page>" of
-            True -> parsePage args mapDict stopwords pageline
-            False -> getLineFromFile hInWikiFile pageline args mapDict stopwords
-        getLineFromFile hInWikiFile "" args mapDict stopwords
+            True -> do
+                len <- parsePage args mapDict stopwords pageline (sc,pc,lc+1)
+                case len of
+                    0 -> do
+                        showReadDataProg (sc,pc+1,lc+1)
+                        getLineFromFile hInWikiFile "" args mapDict stopwords (sc,pc+1,lc+1)
+                    _ -> do
+                        showReadDataProg (sc+1,pc+1,lc+1)
+                        getLineFromFile hInWikiFile "" args mapDict stopwords (sc+1,pc+1,lc+1)
+            False -> do
+                showReadDataProg (sc,pc,lc+1)
+                getLineFromFile hInWikiFile pageline args mapDict stopwords (sc,pc,lc+1)
 
-parsePage :: ArgsRec -> M.Map S S -> [S] -> S -> IO ()
-parsePage _ _ _ "" = return ()
-parsePage args mapDict stopwords page =
+parsePage :: ArgsRec -> M.Map S S -> [S] -> S -> (Int,Int,Int) -> IO (Int)
+parsePage _ _ _ "" _ = return (0)
+parsePage args mapDict stopwords page (sc,pc,lc) =
     let
         (ArgsRec { outBofwFile = s }) = args
     in
@@ -199,6 +219,7 @@ parsePage args mapDict stopwords page =
                 output <- return $ parseText args mapDict stopwords text
                 unlessEmptyWriteToFile s output
                 parsePageTitle args page output
+                return $ length output
             Left err -> trace(show err ++ ": Nothing for "++ show page) $ exitFailure
 
 parseText :: ArgsRec -> M.Map S S -> [S] -> S -> S
