@@ -74,16 +74,14 @@ main = do
     shortargs <- return $ parseShortArgs args init
     args <- return $ parseLongArgs args shortargs
 
-    putStrLn "Begin reading dictionary."
     mapDict <- getDictionaryFromFile args
     -- Force strict evaluation for mapDict
     _mapDict <- return $! mapDict
-    putStrLn "Finish reading dictionary."
 
     stopwords <- return getStopwords
     getContentFromFile args _mapDict stopwords
 
-    getTfIdf args
+    --getTfIdf args
 
 getTfIdf :: ArgsRec -> IO ()
 getTfIdf args = 
@@ -122,24 +120,37 @@ splitByComma (x:xs) s arr = splitByComma xs (s++[x]) arr
 
 getDictionaryFromFile :: ArgsRec -> IO (M.Map S S)
 getDictionaryFromFile args = do
-
     let (ArgsRec { inDictFile = d }) = args
     hdlr <- openFile d ReadMode
-    getLineFromInDictFile hdlr M.empty
+    getLineFromInDictFile hdlr M.empty (0,0)
 
-getLineFromInDictFile :: Handle -> M.Map S S -> IO (M.Map S S)
-getLineFromInDictFile hInDictFile mapDict = do
+getLineFromInDictFile :: Handle -> M.Map S S -> (Int,Int) -> IO (M.Map S S)
+getLineFromInDictFile hInDictFile mapDict (lc,pc) = do
     hInDictFileEOF <- hIsEOF hInDictFile
     if hInDictFileEOF then return mapDict
     else do
         line <- hGetLine hInDictFile
-        let newMapDict = case line =~ "^([\\S]*)[\\s]*([\\S]*)\\s" :: (S,S,S,[S]) of
-                (_,_,_,(prac:base:_))
-                    | prac == base -> mapDict
-                    | otherwise    -> M.insertWithKey (\_ _ _->base) prac base mapDict
-                _ -> mapDict
-        getLineFromInDictFile hInDictFile newMapDict
+        newMapDict <- getNewMapDict line mapDict
+        case M.null $ M.difference newMapDict mapDict of
+            True -> do
+                showProgress (lc,pc+1)
+                getLineFromInDictFile hInDictFile newMapDict (lc,pc+1)
+            False-> do
+                showProgress (lc+1,pc+1)
+                getLineFromInDictFile hInDictFile newMapDict (lc+1,pc+1)
 
+getNewMapDict :: S -> M.Map S S -> IO (M.Map S S)
+getNewMapDict line mapDict = do
+    let newMapDict = case line =~ "^(.*) \t\t(.*)\t" :: (S,S,S,[S]) of
+            (_,_,_,(prac:base:_))
+                | prac == base -> mapDict
+                | otherwise -> M.insertWithKey (\_ _ _->base) prac base mapDict
+            (a,b,c,d) -> mapDict
+    return newMapDict
+
+showProgress :: (Int,Int) -> IO ()
+showProgress (lc,pc) = do
+    putStr (" > Read dictionary [ # word (loaded/parsed) " ++ (show lc) ++ " / " ++ (show pc) ++ " ]\r")
 
 getContentFromFile :: ArgsRec -> M.Map S S -> [S] -> IO ()
 getContentFromFile args mapDict stopwords = do
