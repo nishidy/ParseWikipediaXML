@@ -11,6 +11,7 @@ import Debug.Trace
 --import Control.Exception as E
 import System.Locale.SetLocale
 import Data.Time
+import Text.Printf
 
 type S = String
 
@@ -80,7 +81,7 @@ main = do
     -- Force strict evaluation for mapDict
     _mapDict <- return $! mapDict
     e <- getCurrentTime
-    putStrLn $ " > Read dictionary in " ++ show (diffUTCTime e s) ++ " sec."
+    putStrLn $ " > Read dictionary in " ++ (printf "%.2f" (realToFrac  (diffUTCTime e s)::Double)) ++ " sec."
 
     stopwords <- return getStopwords
     getContentFromFile args _mapDict stopwords
