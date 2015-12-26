@@ -137,7 +137,7 @@ getLineFromInDictFile hInDictFile mapDict (lc,pc) = do
         return mapDict
     else do
         line <- hGetLine hInDictFile
-        newMapDict <- getNewMapDict line mapDict
+        newMapDict <- return $ getNewMapDict line mapDict
         case M.size newMapDict == M.size mapDict of
             True -> do
                 showReadDictProg (lc,pc+1)
@@ -146,14 +146,13 @@ getLineFromInDictFile hInDictFile mapDict (lc,pc) = do
                 showReadDictProg (lc+1,pc+1)
                 getLineFromInDictFile hInDictFile newMapDict (lc+1,pc+1)
 
-getNewMapDict :: S -> M.Map S S -> IO (M.Map S S)
+getNewMapDict :: S -> M.Map S S -> M.Map S S
 getNewMapDict line mapDict = do
-    let newMapDict = case line =~ "^(.*) \t\t(.*)\t" :: (S,S,S,[S]) of
+    case line =~ "^([a-zA-Z'-]+) \t\t([a-zA-Z'-]+)" :: (S,S,S,[S]) of
             (_,_,_,(prac:base:_))
                 | prac == base -> mapDict
                 | otherwise -> M.insertWithKey (\_ _ _->base) prac base mapDict
-            (a,b,c,d) -> mapDict
-    return newMapDict
+            (_,_,_,[]) -> mapDict -- trace("!"++line) $ mapDict
 
 showReadDictProg :: (Int,Int) -> IO ()
 showReadDictProg (lc,pc) = do
