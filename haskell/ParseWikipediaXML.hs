@@ -10,6 +10,7 @@ import Debug.Trace
 --import Codec.Binary.UTF8.String
 --import Control.Exception as E
 import System.Locale.SetLocale
+import Data.Time
 
 type S = String
 
@@ -74,9 +75,12 @@ main = do
     shortargs <- return $ parseShortArgs args init
     args <- return $ parseLongArgs args shortargs
 
+    s <- getCurrentTime
     mapDict <- getDictionaryFromFile args
     -- Force strict evaluation for mapDict
     _mapDict <- return $! mapDict
+    e <- getCurrentTime
+    putStrLn $ " > Read dictionary in " ++ show (diffUTCTime e s) ++ " sec."
 
     stopwords <- return getStopwords
     getContentFromFile args _mapDict stopwords
@@ -133,7 +137,6 @@ getLineFromInDictFile hInDictFile mapDict (lc,pc) = do
     else do
         line <- hGetLine hInDictFile
         newMapDict <- getNewMapDict line mapDict
-        --case M.null $ M.difference newMapDict mapDict of
         case M.size newMapDict == M.size mapDict of
             True -> do
                 showProgress (lc,pc+1)
