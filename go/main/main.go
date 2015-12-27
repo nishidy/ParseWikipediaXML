@@ -19,7 +19,9 @@ func main() {
 	p := pxml.NewParseType(args)
 	p.RunParse(args)
 
-	t := pxml.NewTfIdfType(args)
-	t.RunTfIdf(args)
+	t, err := pxml.NewTfIdfType(args)
+	if err == nil {
+		t.RunTfIdf(args)
+	}
 
 }

@@ -2,6 +2,7 @@ package ParseWikipediaXML
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -170,7 +171,11 @@ func (t *tfidfType) RunTfIdf(args *Args) {
 
 }
 
-func NewTfIdfType(args *Args) *tfidfType {
+func NewTfIdfType(args *Args) (*tfidfType, error) {
+	if args.outTfIdfFile == "" {
+		return nil, errors.New("File to save not specified for TF-IDF.")
+	}
+
 	rdHdrBofw, err := os.Open(args.outBofwFile)
 	if err != nil {
 		os.Exit(1)
@@ -181,5 +186,5 @@ func NewTfIdfType(args *Args) *tfidfType {
 	return &tfidfType{
 		rdHdrBofw,
 		wrHdrTfIdf,
-	}
+	}, nil
 }
