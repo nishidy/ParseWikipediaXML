@@ -22,6 +22,8 @@ func main() {
 	t, err := pxml.NewTfIdfType(args)
 	if err == nil {
 		t.RunTfIdf(args)
+	} else {
+		fmt.Println(err)
 	}
 
 }
