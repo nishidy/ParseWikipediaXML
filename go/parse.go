@@ -3,6 +3,7 @@ package ParseWikipediaXML
 import (
 	"bufio"
 	"encoding/json"
+	"encoding/xml"
 	"flag"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	//"github.com/lestrrat/go-libxml2"
 	"gopkg.in/redis.v3"
 )
 
@@ -242,7 +244,68 @@ func (args *Args) getStopWords() []string {
 	return stopWords
 }
 
-func (p *parseType) RunParse(args *Args) {
+func (p *parseType) RunParseXML(args *Args) {
+
+	defer p.closeHdrs()
+	d := xml.NewDecoder(p.rdHdrWiki)
+
+	var titleBuf []string = make([]string, 0, 65535)
+	var titleFlag bool = false
+
+	var textBuf []string = make([]string, 0, 65535)
+	var textFlag bool = false
+
+	s := time.Now().UnixNano() / int64(time.Millisecond)
+
+	for {
+
+		token, err := d.Token()
+		if err == io.EOF {
+			err = nil
+			break
+		}
+		if err != nil {
+			panic(err)
+		}
+
+		switch token.(type) {
+		case xml.StartElement:
+			switch token.(xml.StartElement).Name.Local {
+			case "title":
+				titleFlag = true
+			case "text":
+				textFlag = true
+			}
+		case xml.CharData:
+			if titleFlag {
+				titleBuf = append(titleBuf, string(token.(xml.CharData)))
+			}
+			if textFlag {
+				textBuf = append(textBuf, string(token.(xml.CharData)))
+			}
+		case xml.EndElement:
+			switch token.(xml.EndElement).Name.Local {
+			case "title":
+				titleFlag = false
+			case "text":
+				p.goSemaph <- 1
+				p.wait.Add(1)
+				go p.goParseXML(*args, titleBuf, textBuf)
+
+				titleBuf = make([]string, 0, 65535)
+				textBuf = make([]string, 0, 65535)
+				textFlag = false
+			}
+		}
+	}
+
+	p.wait.Wait()
+
+	f := time.Now().UnixNano() / int64(time.Millisecond)
+	fmt.Printf(" > Parsed text [ # page %d ] in %.2f sec.\n", p.pages, float64(f-s)/1000.0)
+}
+
+func (p *parseType) RunParseText(args *Args) {
 
 	defer p.closeHdrs()
 
@@ -270,7 +333,7 @@ func (p *parseType) RunParse(args *Args) {
 			p.goSemaph <- 1
 			//fmt.Printf("+:%d\n", len(goSemaph))
 			p.wait.Add(1)
-			go p.goParse(*args, page)
+			go p.goParseText(*args, page)
 			page = make([]string, 0, 65535)
 			beginAppend = false
 			finishAppend = false
@@ -285,18 +348,25 @@ func (p *parseType) RunParse(args *Args) {
 	setFinishTime(p.client)
 }
 
-func (p *parseType) goParse(args Args, data []string) {
+func (p *parseType) goParseXML(args Args, title []string, text []string) {
+	p.goParse(args, strings.Join(title, ""), strings.Join(text, ""))
+}
+
+func (p *parseType) goParseText(args Args, page []string) {
+	str := strings.Join(page, "")
+
+	title := getMatchWord(str, "<title>(.*)</title>")
+	text := getMatchWord(str, "<text[^>]*>(.*)</text>")
+
+	p.goParse(args, title, text)
+}
+
+func (p *parseType) goParse(args Args, title string, text string) {
 
 	defer func() {
 		<-p.goSemaph
 		p.wait.Done()
 	}()
-
-	// strings.Join is fast enough to concat strings
-	str := strings.Join(data, "")
-
-	title := getMatchWord(str, "<title>(.*)</title>")
-	text := getMatchWord(str, "<text[^>]*>(.*)</text>")
 
 	if !categoryCheck(args.matchCategory, text) {
 		return

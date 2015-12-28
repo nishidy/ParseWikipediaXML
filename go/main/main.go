@@ -17,7 +17,8 @@ func main() {
 	args := pxml.GetOpts()
 
 	p := pxml.NewParseType(args)
-	p.RunParse(args)
+	//p.RunParseText(args)
+	p.RunParseXML(args)
 
 	t, err := pxml.NewTfIdfType(args)
 	if err == nil {
