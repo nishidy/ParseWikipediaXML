@@ -144,7 +144,7 @@ class AbstParser
 
       save_tfidf_to_file(
         hash_norm.sort do |(k1, v1), (k2, v2)|
-            v1 == v2 ? k1 <=> k2 : v2 <=> v1
+          v1 == v2 ? k1 <=> k2 : v2 <=> v1
         end.inject('') do |tfidf, arr|
           tfidf+ arr[0] + ' ' + arr[1].to_s + ' '
         end.rstrip + "\n"
@@ -159,10 +159,8 @@ class AbstParser
     terms.zip(freqs) { |term, freq|
       tf  = freq.to_f/total_terms.to_f
       idf = Math.log2(total_docs.to_f/corpus_df[term].to_f)+1
-
       hash_tfidf[term] = tf*idf
     }
-
     hash_tfidf
   end
 
@@ -172,7 +170,12 @@ class AbstParser
 
     hash_norm = {}
     hash_tfidf.map{ |term, freq|
-      hash_norm[term] = (freq * norm_ratio).round
+      begin
+        hash_norm[term] = (freq * norm_ratio).round
+      rescue => e
+        puts hash_tfidf
+        raise e
+      end
     }
 
     hash_norm
@@ -273,12 +276,17 @@ class EngParser < AbstParser
     m='> Reading dictionary'
     s = Time.now.to_f
     File.readlines(@options[:inDictFile]).each do |line|
-      pc+=1
       items = line.split(/\t/)
-      trans = items[0].gsub(/ $/,"")
-      base = items[2]
-      @hash_dict[trans] = base unless trans == base
-      print " #{m} [# word (loaded/parsed) #{lc+=1} / #{pc} ]\r"
+      if items.size > 2
+        pc+=1
+        trans = items[0].gsub(/ $/,"")
+        base = items[2]
+        unless trans == base or base.include?(' ')
+            @hash_dict[trans] = base
+            lc+=1
+        end
+        print " #{m} [# word (loaded/parsed) #{lc} / #{pc} ]\r"
+      end
     end
     f = Time.now.to_f
     puts""
