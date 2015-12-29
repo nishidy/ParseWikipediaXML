@@ -85,7 +85,6 @@ class AbstParser
     )
 
     save_title_to_file( title + "\n" )
-
     redis_save(total_num_of_words, hash_bofw.keys.size) unless @redis.nil?
   end
 
@@ -97,18 +96,31 @@ class AbstParser
     @page_queue = Queue.new
     DRb.start_service("druby://localhost:12345",@page_queue)
     pre_parse(&method(:push_page))
+    @page_queue.push "::FINISHED::"
     DRb.thread.join
   end
 
-  def run_popper
-    loop{
-      @page_queue = DRbObject.new_with_uri("druby://localhost:12345")
-      start_parse(@page_queue.pop)
-    }
+  def push_page(page)
+    @page_queue.push page
   end
 
-  def push_page(page)
-      @page_queue.push page
+  def run_popper
+    cp=0
+    m='> Reading database'
+    s = Time.now.to_f
+    loop{
+      @page_queue = DRbObject.new_with_uri("druby://localhost:12345")
+      page = @page_queue.pop
+      if page == "::FINISHED::"
+        break
+      else
+        start_parse(page)
+        print " #{m} [# pushed page #{cp} ]\r"
+        cp+=1
+      end
+    }
+    f = Time.now.to_f
+    puts format("\n %s in %.2f sec.", m, f-s)
   end
 
   def get_corpus_df
@@ -245,7 +257,7 @@ class EngParser < AbstParser
 
     cl=0
     cp=0
-    m=' > Reading database'
+    m='> Reading database'
     startflag = stopflag = false, page = ''
     s = Time.now.to_f
     File.readlines(@options[:inWikiFile]).each do |line|
@@ -260,7 +272,7 @@ class EngParser < AbstParser
         page = ''
         startflag = stopflag = false
       end
-      print "#{m} [# page #{cp} / # line #{cl}]\r"
+      print " #{m} [# page #{cp} / # line #{cl}]\r"
     end
     f = Time.now.to_f
     puts format("\n %s in %.2f sec.", m, f-s)
