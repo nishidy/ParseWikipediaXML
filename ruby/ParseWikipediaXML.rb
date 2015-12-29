@@ -115,12 +115,17 @@ class AbstParser
         break
       else
         start_parse(page)
-        print " #{m} [# pushed page #{cp} ]\r"
+        print " #{m} [#pushed page #{cp} ]\r"
         cp+=1
       end
     }
     f = Time.now.to_f
     puts format("\n %s in %.2f sec.", m, f-s)
+  end
+
+  def run_tfidf
+    corpus_df, total_docs = get_corpus_df
+    apply_tfidf corpus_df, total_docs
   end
 
   def get_corpus_df
@@ -136,11 +141,11 @@ class AbstParser
         corpus_df.key?(term) ? corpus_df[term] += 1 : corpus_df[term] = 1
       }
       total_docs += 1
-      print "#{m} [# page #{c+=1}]\r"
+      print "#{m} [#page #{c+=1}]\r"
     end
-    puts "#{m} [# page #{c}]"
+    puts "#{m} [#page #{c}]"
 
-    apply_tfidf corpus_df, total_docs
+    [corpus_df, total_docs]
   end
 
   def apply_tfidf(corpus_df, total_docs)
@@ -161,9 +166,9 @@ class AbstParser
           tfidf+ arr[0] + ' ' + arr[1].to_s + ' '
         end.rstrip + "\n"
       )
-      print "#{m} [# page #{c+=1}]\r"
+      print "#{m} [#page #{c+=1}]\r"
     end
-    puts "#{m} [# page #{c}]"
+    puts "#{m} [#page #{c}]"
   end
 
   def calc_tfidf(terms, freqs, total_terms, total_docs, corpus_df)
@@ -272,7 +277,7 @@ class EngParser < AbstParser
         page = ''
         startflag = stopflag = false
       end
-      print " #{m} [# page #{cp} / # line #{cl}]\r"
+      print " #{m} [#page #{cp}]/[#line #{cl}]\r"
     end
     f = Time.now.to_f
     puts format("\n %s in %.2f sec.", m, f-s)
@@ -299,12 +304,11 @@ class EngParser < AbstParser
             @hash_dict[trans] = base
             lc+=1
         end
-        print " #{m} [# word (loaded/parsed) #{lc} / #{pc} ]\r"
+        print " #{m} [#word(loaded/parsed) #{lc}/#{pc}]\r"
       end
     end
     f = Time.now.to_f
     puts format("\n %s in %.2f sec.", m, f-s)
-
   end
 end
 
@@ -382,12 +386,7 @@ class CLI < Thor
       parser.set_exps
     end
     parser.run_parser
-    parser.get_corpus_df
-  end
-
-  desc 'tfidf',
-       'convert bag-of-words according to TF-IDF desc'
-  def tfidf
+    parser.run_tfidf
   end
 
   desc 'parent','parent desc'
