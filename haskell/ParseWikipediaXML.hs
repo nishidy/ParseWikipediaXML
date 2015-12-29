@@ -138,21 +138,20 @@ getLineFromInDictFile hInDictFile mapDict (lc,pc) = do
     else do
         line <- hGetLine hInDictFile
         newMapDict <- return $ getNewMapDict line mapDict
-        case M.size newMapDict == M.size mapDict of
-            True -> do
-                showReadDictProg (lc,pc+1)
-                getLineFromInDictFile hInDictFile newMapDict (lc,pc+1)
-            False-> do
-                showReadDictProg (lc+1,pc+1)
-                getLineFromInDictFile hInDictFile newMapDict (lc+1,pc+1)
+        if M.size newMapDict == M.size mapDict then do
+            showReadDictProg (lc,pc+1)
+            getLineFromInDictFile hInDictFile newMapDict (lc,pc+1)
+        else do
+            showReadDictProg (lc+1,pc+1)
+            getLineFromInDictFile hInDictFile newMapDict (lc+1,pc+1)
 
 getNewMapDict :: S -> M.Map S S -> M.Map S S
 getNewMapDict line mapDict = do
-    case line =~ "^([a-zA-Z'-]+) \t\t([a-zA-Z'-]+)" :: (S,S,S,[S]) of
-            (_,_,_,(prac:base:_))
-                | prac == base -> mapDict
-                | otherwise -> M.insertWithKey (\_ _ _->base) prac base mapDict
-            (_,_,_,[]) -> mapDict -- trace("!"++line) $ mapDict
+    case line =~ "^([a-zA-Z'-]+) \t\t([a-zA-Z'-]+)\t" :: (S,S,S,[S]) of
+        (_,_,_,(prac:base:_))
+            | prac == base -> mapDict
+            | otherwise -> M.insertWithKey (\_ _ _->base) prac base mapDict
+        (_,_,_,[]) -> mapDict -- trace("!"++line) $ mapDict
 
 showReadDictProg :: (Int,Int) -> IO ()
 showReadDictProg (lc,pc) = do
@@ -321,23 +320,22 @@ search x y = doSearch x y
 
 doSearch :: S -> S -> Bool
 doSearch (x:xs) (y:ys)
-        | x==y = case doSearchIn xs ys of
-            True -> True
-            False -> doSearch xs (y:ys)
-        | otherwise = doSearch xs (y:ys)
+    | x==y = case doSearchIn xs ys of
+        True -> True
+        False -> doSearch xs (y:ys)
+    | otherwise = doSearch xs (y:ys)
 doSearch _ _ = False
 
 doSearchIn :: S -> S -> Bool
 doSearchIn _ [] = True
 doSearchIn [] _ = False
 doSearchIn (x:xs) (y:ys)
-        | x==y = doSearchIn xs ys
-        | otherwise = False
+    | x==y = doSearchIn xs ys
+    | otherwise = False
 
 myTextParser :: S -> P.Parsec S () S
 myTextParser tag = do
     _ <- P.manyTill P.anyChar (P.try $ P.string ("<"++tag) )
     _ <- P.manyTill P.anyChar (P.char '>')
     P.manyTill P.anyChar (P.try $ P.string ("</"++tag++">") )
-
 
