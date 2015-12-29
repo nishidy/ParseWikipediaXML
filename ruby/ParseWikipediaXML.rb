@@ -1,12 +1,16 @@
+#$LOAD_PATH.unshift File.expand_path "thor/lib"
+
 require 'thor'
 require 'redis'
+require 'thread'
+require 'drb/drb'
 
 # Abstract Parser class
 # Params:
 # +options+:: command line arguments
 class AbstParser
   attr_reader :options, :write_lock, :hdlr_bofw, :hdlr_title, :hdlr_tfidf, :redis
-  attr_reader :tospexp, :splexp, :termexp
+  attr_reader :tospexp, :splexp, :termexp, :page_queue
 
   def initialize(options)
     @options = options
@@ -52,6 +56,55 @@ class AbstParser
     @tospexp = '[,.;]'
     @splexp = "[ \n]"
     @termexp = "^[a-z][0-9a-z'-]*[0-9a-z]$"
+  end
+
+  def post_each_parse(hash_bofw, total_num_of_words, title)
+    return if hash_bofw.empty? ||
+              total_num_of_words > @options[:"max-page-words"] ||
+              total_num_of_words < @options[:"min-page-words"]
+
+    save_bofw_to_file(
+      hash_bofw.sort do |(k1, v1), (k2, v2)|
+        v1 == v2 ? k1 <=> k2 : v2 <=> v1
+      end.inject('') do |bofw, arr|
+        bofw + arr[0] + ' ' + arr[1].to_s + ' '
+      end.rstrip + "\n"
+    )
+
+    save_title_to_file( title + "\n" )
+
+    redis_save(total_num_of_words, hash_bofw.keys.size) unless @redis.nil?
+  end
+
+  def redis_save(t, n)
+    @redis.zincrby 'total_num', 1, get_set_val(t)
+    @redis.zincrby 'num', 1, get_set_val(n)
+  end
+
+  def run_parser
+    pre_parse(&method(:start_parse))
+  end
+
+  def run_pusher
+    @page_queue = Queue.new
+    DRb.start_service("druby://localhost:12345",@page_queue)
+    pre_parse(&method(:push_page))
+    DRb.thread.join
+  end
+
+  def run_popper
+    loop{
+      @page_queue = DRbObject.new_with_uri("druby://localhost:12345")
+      start_parse(@page_queue.pop)
+    }
+  end
+
+  def push_page(page)
+      @page_queue.push page
+  end
+
+  def get_set_val(num)
+    (num / 100 * 100).to_s
   end
 
   def get_corpus_df
@@ -180,30 +233,7 @@ class EngParser < AbstParser
     [hash_bofw, total_num_of_words]
   end
 
-  def post_each_parse(hash_bofw, total_num_of_words, title)
-    return if hash_bofw.empty? ||
-              total_num_of_words > @options[:"max-page-words"] ||
-              total_num_of_words < @options[:"min-page-words"]
-
-    save_bofw_to_file(
-      hash_bofw.sort do |(k1, v1), (k2, v2)|
-        v1 == v2 ? k1 <=> k2 : v2 <=> v1
-      end.inject('') do |bofw, arr|
-        bofw + arr[0] + ' ' + arr[1].to_s + ' '
-      end.rstrip + "\n"
-    )
-
-    save_title_to_file( title + "\n" )
-
-    redis_save(total_num_of_words, hash_bofw.keys.size) unless @redis.nil?
-  end
-
-  def redis_save(t, n)
-    @redis.zincrby 'total_num', 1, get_set_val(t)
-    @redis.zincrby 'num', 1, get_set_val(n)
-  end
-
-  def run_parse
+  def pre_parse
     @redis.set 'start_time', Time.now.to_f unless @redis.nil?
 
     cl=0
@@ -218,7 +248,7 @@ class EngParser < AbstParser
       page << line if startflag
       next unless startflag && stopflag
 
-      start_parse page
+      yield(page)
 
       cp += 1
       page = ''
@@ -234,21 +264,22 @@ class EngParser < AbstParser
     @hash_dict = {}
     return if @options[:inDictFile].nil?
 
-    c=0
-    m=' > Reading dictionary'
+    lc=0
+    pc=0
+    m='> Reading dictionary'
+    s = Time.now.to_f
     File.readlines(@options[:inDictFile]).each do |line|
-      items = line.split(/[ \t]/)
-      trans = items[0]
-      base = items[3]
+      pc+=1
+      items = line.split(/\t/)
+      trans = items[0].gsub(/ $/,"")
+      base = items[2]
       @hash_dict[trans] = base unless trans == base
-      print "#{m} [# word #{c+=1}]\r"
+      print " #{m} [# word (loaded/parsed) #{lc+=1} / #{pc} ]\r"
     end
-    puts "#{m} [# word #{c}]"
+    f = Time.now.to_f
+    puts""
+    puts " #{m} in #{f-s} sec."
 
-  end
-
-  def get_set_val(num)
-    (num / 100 * 100).to_s
   end
 end
 
@@ -261,52 +292,52 @@ class CLI < Thor
   package_name 'ParseWikipediaXML'
   default_command :bagofwords
 
-  option :inWikiFile,
+  class_option :inWikiFile,
          type: :string,
          aliases: '-i',
          required: true,
          desc: 'Input file of Wikipedia'
 
-  option :inDictFile,
+  class_option :inDictFile,
          type: :string,
          aliases: '-d',
          desc: 'Input file of dictionary'
 
-  option :outBofwFile,
+  class_option :outBofwFile,
          type: :string,
          aliases: '-s',
          required: true,
          desc: 'Ouput file for bag-of-words'
 
-  option :outTitleFile,
+  class_option :outTitleFile,
          type: :string,
          aliases: '-t',
          desc: 'Ouput file for title'
 
-  option :outTfIdfFile,
+  class_option :outTfIdfFile,
          type: :string,
          aliases: '-f',
          desc: 'Ouput file for bag-of-words normarized by tf-idf'
 
-  option :"min-page-words",
+  class_option :"min-page-words",
          type: :numeric,
          aliases: '-m',
          default: 1,
          desc: 'How many terms at least a page should contain'
 
-  option :"max-page-words",
+  class_option :"max-page-words",
          type: :numeric,
          aliases: '-x',
          default: 65_535,
          desc: 'How many terms at most a page should contain'
 
-  option :"min-word-count",
+  class_option :"min-word-count",
          type: :numeric,
          aliases: '-c',
          default: 1,
          desc: 'How many times a term should appear in a page'
 
-  option :workers,
+  class_option :workers,
          type: :numeric,
          aliases: '-w',
          default: 1,
@@ -315,7 +346,8 @@ class CLI < Thor
 
   method_option :japanese, aliases: '-j', desc: 'If it is in Japanese'
 
-  desc 'generate bag-of-words usage', 'generate bag-of-words desc'
+  desc '[bagofwords]',
+       'generate bag-of-words desc'
   def bagofwords
     if options[:japanese]
       parser = JapParser.new(options)
@@ -324,14 +356,37 @@ class CLI < Thor
       parser.read_dictionary
       parser.set_exps
     end
-    parser.run_parse
+    parser.run_parser
     parser.get_corpus_df
   end
 
-  desc 'convert bag-of-words according to TF-IDF usage',
+  desc 'tfidf',
        'convert bag-of-words according to TF-IDF desc'
   def tfidf
   end
+
+  desc 'parent','parent desc'
+  def parent
+    if options[:japanese]
+      parser = JapParser.new(options)
+    else
+      parser = EngParser.new(options)
+    end
+    parser.run_pusher
+  end
+
+  desc 'child','child desc'
+  def child
+    if options[:japanese]
+      parser = JapParser.new(options)
+    else
+      parser = EngParser.new(options)
+      parser.read_dictionary
+      parser.set_exps
+    end
+    parser.run_popper
+  end
+
 end
 
 CLI.start
