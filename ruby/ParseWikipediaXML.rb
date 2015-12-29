@@ -5,10 +5,33 @@ require 'redis'
 require 'thread'
 require 'drb/drb'
 
+module RedisClient
+  def set_redis
+    @redis = Redis.new
+    begin
+      @redis.ping
+    rescue
+      puts 'Redis server is not running.'
+      @redis = nil
+    end
+  end
+
+  def redis_save(t, n)
+    @redis.zincrby 'total_num', 1, get_set_val(t)
+    @redis.zincrby 'num', 1, get_set_val(n)
+  end
+
+  def get_set_val(num)
+    (num / 100 * 100).to_s
+  end
+end
+
 # Abstract Parser class
 # Params:
 # +options+:: command line arguments
 class AbstParser
+  include RedisClient
+
   attr_reader :options, :write_lock, :hdlr_bofw, :hdlr_title, :hdlr_tfidf, :redis
   attr_reader :tospexp, :splexp, :termexp, :page_queue
 
@@ -21,16 +44,6 @@ class AbstParser
       @hdlr_tfidf = File.open(options[:outTfIdfFile], 'a') unless options[:outTfIdfFile].nil?
     rescue => e
       e.message
-    end
-  end
-
-  def set_redis
-    @redis = Redis.new
-    begin
-      @redis.ping
-    rescue
-      puts 'Redis server is not running.'
-      @redis = nil
     end
   end
 
@@ -76,11 +89,6 @@ class AbstParser
     redis_save(total_num_of_words, hash_bofw.keys.size) unless @redis.nil?
   end
 
-  def redis_save(t, n)
-    @redis.zincrby 'total_num', 1, get_set_val(t)
-    @redis.zincrby 'num', 1, get_set_val(n)
-  end
-
   def run_parser
     pre_parse(&method(:start_parse))
   end
@@ -101,10 +109,6 @@ class AbstParser
 
   def push_page(page)
       @page_queue.push page
-  end
-
-  def get_set_val(num)
-    (num / 100 * 100).to_s
   end
 
   def get_corpus_df
