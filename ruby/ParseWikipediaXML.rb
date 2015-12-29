@@ -247,21 +247,23 @@ class EngParser < AbstParser
     cp=0
     m=' > Reading database'
     startflag = stopflag = false, page = ''
+    s = Time.now.to_f
     File.readlines(@options[:inWikiFile]).each do |line|
-      print "#{m} [# page #{cp} / # line #{cl+=1}]\r"
-
+      cl += 1
       startflag = true if line.include? '<page>'
       stopflag = true if line.include? '</page>'
       page << line if startflag
-      next unless startflag && stopflag
 
-      yield(page)
-
-      cp += 1
-      page = ''
-      startflag = stopflag = false
+      if startflag && stopflag then
+        yield(page)
+        cp += 1
+        page = ''
+        startflag = stopflag = false
+      end
+      print "#{m} [# page #{cp} / # line #{cl}]\r"
     end
-    puts "#{m} [# page #{cp} / # line #{cl}]"
+    f = Time.now.to_f
+    puts format("\n %s in %.2f sec.", m, f-s)
 
     post_run_parse
     @redis.set 'finish_time', Time.now.to_f unless @redis.nil?
@@ -289,8 +291,7 @@ class EngParser < AbstParser
       end
     end
     f = Time.now.to_f
-    puts""
-    puts " #{m} in #{f-s} sec."
+    puts format("\n %s in %.2f sec.", m, f-s)
 
   end
 end
