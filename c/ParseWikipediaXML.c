@@ -135,8 +135,29 @@ void toLower(char *term){
     }
 }
 
+void getStopwords(char stopwords[][16], ui* stopwords_num){
+
+    char stopwords_base[1024] = "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your";
+
+    char *c = strtok(stopwords_base,",");
+    while(c != NULL){
+        strcpy(*stopwords,c);
+        stopwords++;
+        (*stopwords_num)++;
+        c = strtok(NULL,",");
+    }
+}
+
+int isStopword(char *term, char stopwords[][16], ui stopwords_num){
+    for(ui i=0;i<stopwords_num;i++){
+        if(strcmp(term,stopwords[i])==0) return 1;
+    }
+    return 0;
+}
+
+
 int isValidTerm(char *term){
-    char *c;
+
     if(strlen(term)<2) return 0;
 
     for(ui i=0;i<strlen(term);i++){
@@ -197,30 +218,34 @@ int main(int argc, char* argv[]){
         fpo = fopen(outBofwFile,"w");
     }
 
+    char stopwords[1024][16] = {0};
+    ui stopwords_num = 0;
+    getStopwords(stopwords, &stopwords_num);
+
     char *page_raw;
     char *text_raw;
     while( (page_raw=getElementTextRaw(fpi,"page"))!=NULL ){
 
         text_raw=getElementDomText(page_raw, "text");
 
-        char *c;
-        c = strtok(text_raw, ".,;\n");
+        char *term;
+        term = strtok(text_raw, ".,;\n");
 
         Bofw bofw[LSIZE] = {0};
         ui cnt_bofw = 0;
-        while(c != NULL){
-            if(isValidTerm(c)>0){
-                toLower(c);
-                int idx_bofw = getIndexOfTerm(bofw, cnt_bofw, c);
+        while(term != NULL){
+            toLower(term);
+            if( isValidTerm(term)>0 && isStopword(term, stopwords, stopwords_num)==0 ){
+                int idx_bofw = getIndexOfTerm(bofw, cnt_bofw, term);
                 if(idx_bofw>-1){
                     bofw[idx_bofw].freq++;
                 }else{
-                    strncpy(bofw[cnt_bofw].term, c, strlen(c));
+                    strncpy(bofw[cnt_bofw].term, term, strlen(term));
                     bofw[cnt_bofw].freq = 1;
                     cnt_bofw++;
                 }
             }
-            c=strtok(NULL," .,;\n");
+            term = strtok(NULL," .,;\n");
         }
 
         if(cnt_bofw>0){
