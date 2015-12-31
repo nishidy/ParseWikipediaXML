@@ -4,6 +4,7 @@
 #include <ctype.h>
 
 #define LSIZE 65535
+#define BOFWNUM 655350
 #define ASCII 97
 #define TERMLEN 48
 
@@ -76,7 +77,7 @@ void strcaterr(){
     exit(1);
 }
 
-char* getElementDomText(char *dom, char *tag){
+char* getElementText(char *dom, char *tag){
     char open_tag[32] = {0};
     char close_tag[32] = {0};
 
@@ -89,6 +90,12 @@ char* getElementDomText(char *dom, char *tag){
     char *open_pos = strstr(strstr(dom, open_tag),">")+1;
     char *close_pos= strstr(dom, close_tag)-1;
 
+    if(close_pos-open_pos>LSIZE){
+        ui need_size = (close_pos-open_pos)/LSIZE+1;
+        text = (char*)realloc(text, sizeof(char) * LSIZE * need_size);
+        //fprintf(stderr, "Reallocate due to size over.\n");
+    }
+
     ui text_len = (close_pos-open_pos)/sizeof(char);
 
     if(open_pos!=NULL && close_pos!=NULL){
@@ -100,7 +107,7 @@ char* getElementDomText(char *dom, char *tag){
     return text;
 }
 
-char* getElementTextRaw(FILE* fp, char *tag){
+char* cbElementTextRaw(FILE* fp, char *tag){
 
     char l[LSIZE] = {0};
     char open_tag[32] = {0};
@@ -118,15 +125,18 @@ char* getElementTextRaw(FILE* fp, char *tag){
             tag_flag = 1;
         }
         if(tag_flag == 1){
+            if((strlen(text)%LSIZE)+strlen(l)>LSIZE){
+                text = (char*)realloc(text, sizeof(char) * LSIZE * (strlen(text)/LSIZE+2));
+            }
             if(strcat(text,l)!=text) strcaterr();
         }
         if(strstr(l,close_tag)!=NULL){
+            if((strlen(text)%LSIZE)+strlen(l)>LSIZE){
+                text = (char*)realloc(text, sizeof(char) * LSIZE * (strlen(text)/LSIZE+2));
+            }
             if(strcat(text,l)!=text) strcaterr();
             tag_flag = 2;
             break;
-        }
-        if(strlen(text)%LSIZE > (LSIZE/2)){
-            text = (char*)realloc(text, sizeof(char) * LSIZE * (strlen(text)/LSIZE));
         }
     }
 
@@ -137,7 +147,7 @@ char* getElementTextRaw(FILE* fp, char *tag){
     }
 }
 
-char* getElementText(char *tag){
+char* cbElementText(char *tag){
     return "";
 }
 
@@ -169,7 +179,7 @@ void readDictionary(FILE *fp, Dictionary *dictionary[27][27], ui dictionary_num[
         ui *n = NULL;
         ui i=0;
 
-        char *c = strtok(l," \t");
+        char *c = strtok(l,"\t");
         while(c!=NULL && i<2){
             if(i==0){
                 if(strlen(c)==1) break;
@@ -177,23 +187,26 @@ void readDictionary(FILE *fp, Dictionary *dictionary[27][27], ui dictionary_num[
                     if(ASCII<=(ui)c[1] && (ui)c[1]<ASCII+26){
                         n = &dictionary_num[(ui)c[0]-ASCII][(ui)c[1]-ASCII];
                         d = &dictionary[(ui)c[0]-ASCII][(ui)c[1]-ASCII][(*n)+1];
-                        strcpy(infl,c);
+                        strncpy(infl,c,strlen(c)-1); // remove the last space
                     }
                 }
             }
             if(i==1){
                 if(d!=NULL && n!=NULL){
                     strcpy(base,c);
-                    if(strcmp(infl,base)!=0){
-                        strcpy(d->base,base);
-                        strcpy(d->infl,infl);
-                        (*n)++;
-                        printf(" > %s [#word(loaded/parsed) %d/%d]\r",m,++lc,++pc);
-                    }else{
-                        printf(" > %s [#word(loaded/parsed) %d/%d]\r",m,lc,++pc);
+                    if(strchr(base,' ')==NULL){
+                        if(strcmp(infl,base)!=0){
+                            strcpy(d->infl,infl);
+                            strcpy(d->base,base);
+                            (*n)++;
+                            printf(" > %s [#word(loaded/parsed) %d/%d]\r",m,++lc,++pc);
+                        }else{
+                            printf(" > %s [#word(loaded/parsed) %d/%d]\r",m,lc,++pc);
+                        }
+                        fflush(stdout);
+                        d = NULL;
+                        n = NULL;
                     }
-                    d = NULL;
-                    n = NULL;
                 }
             }
             
@@ -248,13 +261,11 @@ int isValidTerm(char *term){
         if(i==0){
             if(!( isalpha(term[i]) )) return 0;
         }else if(i==strlen(term)-1){
+            if(!( isalnum(term[i]) )) return 0;
+        }else{
             if(!( isalnum(term[i]) ||
                   term[i]=='\''    ||
                   term[i]=='-'
-            )) return 0;
-        }else{
-            if(!( isalpha(term[i]) ||
-                  isdigit(term[i])
             )) return 0;
         }
     }
@@ -328,14 +339,14 @@ int main(int argc, char* argv[]){
 
     char *page_raw;
     char *text_raw;
-    while( (page_raw=getElementTextRaw(fpi,"page"))!=NULL ){
+    while( (page_raw=cbElementTextRaw(fpi,"page"))!=NULL ){
 
-        text_raw=getElementDomText(page_raw, "text");
+        text_raw=getElementText(page_raw, "text");
 
         char *term;
         term = strtok(text_raw, ".,;\n");
 
-        Bofw bofw[LSIZE] = {{{0}}};
+        Bofw bofw[BOFWNUM] = {{{0}}};
         ui cnt_bofw = 0;
         while(term != NULL){
             toLower(term);
@@ -360,6 +371,7 @@ int main(int argc, char* argv[]){
         }else{
             printf(" > %s [#page(saved/parsed) %d/%d]\r",m,lc,++pc);
         }
+        fflush(stdout);
 
         free(text_raw);
         free(page_raw);
