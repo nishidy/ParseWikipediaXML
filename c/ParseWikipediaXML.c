@@ -146,6 +146,8 @@ void readDictionary(FILE *fp, Dictionary *dictionary[27][27], ui dictionary_num[
 
     char l[256] = {0};
     int cnt_dict = 0;
+    char m[256] = "Read dictionary";
+    ui lc=0,pc=0;
 
     while(fgets(l,256,fp)){
         if(strlen(l)>0 && l[0]==';') continue;
@@ -176,6 +178,9 @@ void readDictionary(FILE *fp, Dictionary *dictionary[27][27], ui dictionary_num[
                         strcpy(d->base,base);
                         strcpy(d->infl,infl);
                         (*n)++;
+                        printf(" > %s [#word(loaded/parsed) %d/%d]\r",m,++lc,++pc);
+                    }else{
+                        printf(" > %s [#word(loaded/parsed) %d/%d]\r",m,lc,++pc);
                     }
                     d = NULL;
                     n = NULL;
@@ -187,6 +192,7 @@ void readDictionary(FILE *fp, Dictionary *dictionary[27][27], ui dictionary_num[
         }
         cnt_dict++;
     }
+    printf(" > %s [#word(loaded/parsed) %d/%d]\n",m,lc,++pc);
 }
 
 void toBaseform(char *term, Dictionary *dictionary[27][27], ui dictionary_num[27][27]){
@@ -307,6 +313,9 @@ int main(int argc, char* argv[]){
     ui dictionary_num[27][27] = {{0}};
     readDictionary(fpd, dictionary, dictionary_num);
 
+    char m[256] = "Read database";
+    ui lc=0,pc=0;
+
     char *page_raw;
     char *text_raw;
     while( (page_raw=getElementTextRaw(fpi,"page"))!=NULL ){
@@ -337,12 +346,16 @@ int main(int argc, char* argv[]){
         if(cnt_bofw>0){
             qsort((void *)bofw, cnt_bofw, sizeof(Bofw), sort_bofw);
             save(bofw, cnt_bofw, fpo);
+            printf(" > %s [#page(saved/parsed) %d/%d]\r",m,++lc,++pc);
+        }else{
+            printf(" > %s [#page(saved/parsed) %d/%d]\r",m,lc,++pc);
         }
 
         free(text_raw);
         free(page_raw);
 
     }
+    printf(" > %s [#page(saved/parsed) %d/%d]\n",m,lc,++pc);
 
     fclose(fpi);
     fclose(fpo);
