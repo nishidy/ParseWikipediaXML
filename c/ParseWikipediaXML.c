@@ -253,7 +253,6 @@ int isStopword(char *term, char stopwords[][16], ui stopwords_num){
     return 0;
 }
 
-
 int isValidTerm(char *term){
 
     if(strlen(term)<2) return 0;
@@ -323,6 +322,14 @@ void readDatabase(FILE *fpi, FILE *fpo, char stopwords[][16], ui stopwords_num, 
 
 }
 
+void allocMemDictionary(Dictionary *dictionary[27][27]){
+    for(ui i=0;i<27;i++){
+        for(ui j=0;j<27;j++){
+            dictionary[i][j] = (Dictionary*)malloc(sizeof(Dictionary)*65535);
+            if(dictionary[i][j]==NULL) exit(10);
+        }
+    }
+}
 
 int main(int argc, char* argv[]){
 
@@ -376,17 +383,14 @@ int main(int argc, char* argv[]){
     getStopwords(stopwords, &stopwords_num);
 
     Dictionary *dictionary[27][27];
-    for(ui i=0;i<27;i++){
-        for(ui j=0;j<27;j++){
-            dictionary[i][j] = (Dictionary*)malloc(sizeof(Dictionary)*65535);
-            if(dictionary[i][j]==NULL) exit(10);
-        }
-    }
+    allocMemDictionary(dictionary);
     ui dictionary_num[27][27] = {{0}};
 
-    clock_t s = clock();
+    clock_t s, f;
+
+    s = clock();
     readDictionary(fpd, dictionary, dictionary_num);
-    clock_t f = clock();
+    f = clock();
     printf(" > Read dictionary in %.2f sec.\n",((float)(f-s))/1000000.0);
 
     s = clock();
