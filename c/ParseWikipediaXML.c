@@ -53,11 +53,21 @@ int sort_bofw(const void *a, const void *b){
     }else if(((Bofw*)a)->freq < ((Bofw*)b)->freq){
         return 1;
     }else{
-        if(((Bofw*)a)->term > ((Bofw*)b)->term){
-            return 1;
-        }else{
-            return -1;
+
+        ui alen = strlen(((Bofw*)a)->term);
+        ui blen = strlen(((Bofw*)b)->term);
+        ui minlen=0;
+        minlen = alen<blen ? alen : blen;
+
+        for(ui i=0;i<minlen;i++){
+            if(((Bofw*)a)->term[i] > ((Bofw*)b)->term[i]){
+                return 1;
+            }else if(((Bofw*)a)->term[i] < ((Bofw*)b)->term[i]){
+                return -1;
+            }
         }
+
+        return alen<blen ? 1 : -1;
     }
 }
 
