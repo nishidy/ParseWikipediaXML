@@ -4,6 +4,8 @@
 #include <ctype.h>
 
 #define LSIZE 65535
+#define ASCII 97
+#define TERMLEN 48
 
 typedef unsigned int ui;
 
@@ -135,6 +137,72 @@ void toLower(char *term){
     }
 }
 
+typedef struct {
+    char infl[TERMLEN]; // inflected
+    char base[TERMLEN]; // baseform
+} Dictionary;
+
+void readDictionary(FILE *fp, Dictionary *dictionary[27][27], ui dictionary_num[27][27]){
+
+    char l[256] = {0};
+    int cnt_dict = 0;
+
+    while(fgets(l,256,fp)){
+        if(strlen(l)>0 && l[0]==';') continue;
+
+        char infl[TERMLEN] = {0};
+        char base[TERMLEN] = {0};
+
+        Dictionary *d = NULL;
+        ui *n = NULL;
+        ui i=0;
+
+        char *c = strtok(l," \t");
+        while(c!=NULL && i<2){
+            if(i==0){
+                if(strlen(c)==1) break;
+                if(ASCII<=(ui)c[0] && (ui)c[0]<ASCII+26){
+                    if(ASCII<=(ui)c[1] && (ui)c[1]<ASCII+26){
+                        n = &dictionary_num[(ui)c[0]-ASCII][(ui)c[1]-ASCII];
+                        d = &dictionary[(ui)c[0]-ASCII][(ui)c[1]-ASCII][(*n)+1];
+                        strcpy(infl,c);
+                    }
+                }
+            }
+            if(i==1){
+                if(d!=NULL && n!=NULL){
+                    strcpy(base,c);
+                    if(strcmp(infl,base)!=0){
+                        strcpy(d->base,base);
+                        strcpy(d->infl,infl);
+                        (*n)++;
+                    }
+                    d = NULL;
+                    n = NULL;
+                }
+            }
+            
+            c = strtok(NULL,"\t");
+            i++;
+        }
+        cnt_dict++;
+    }
+}
+
+void toBaseform(char *term, Dictionary *dictionary[27][27], ui dictionary_num[27][27]){
+    if(ASCII<=(ui)term[0] && (ui)term[0]<ASCII+26){
+        if(ASCII<=(ui)term[1] && (ui)term[1]<ASCII+26){
+            Dictionary *d = dictionary[(ui)term[0]-ASCII][(ui)term[1]-ASCII];
+            for(ui i=0;i<dictionary_num[(ui)term[0]-ASCII][(ui)term[1]-ASCII];i++){
+                if(strcmp(term,d[i].infl)==0){
+                    strcpy(term,d[i].base);
+                    break;
+                }
+            }
+        }
+    }
+}
+
 void getStopwords(char stopwords[][16], ui* stopwords_num){
 
     char stopwords_base[1024] = "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your";
@@ -181,6 +249,7 @@ int isValidTerm(char *term){
 int main(int argc, char* argv[]){
 
     char inDbFile[64] = {0};
+    char inDictFile[64] = {0};
     char outBofwFile[64] = {0};
 
     argc--;
@@ -197,6 +266,9 @@ int main(int argc, char* argv[]){
                 case 'i':
                     strncpy(inDbFile, argv[i+1], strlen(argv[i+1]));
                     break;
+                case 'd':
+                    strncpy(inDictFile, argv[i+1], strlen(argv[i+1]));
+                    break;
                 case 's':
                     strncpy(outBofwFile, argv[i+1], strlen(argv[i+1]));
                     break;
@@ -212,15 +284,28 @@ int main(int argc, char* argv[]){
         exit(1);
     }
 
-    FILE *fpi, *fpo = NULL;
+    FILE *fpi, *fpd = NULL, *fpo = NULL;
     fpi = fopen(inDbFile,"r");
+    if(strlen(inDictFile)>0){
+        fpd = fopen(inDictFile,"r");
+    }
     if(strlen(outBofwFile)>0){
         fpo = fopen(outBofwFile,"w");
     }
 
-    char stopwords[1024][16] = {0};
+    char stopwords[1024][16] = {{0}};
     ui stopwords_num = 0;
     getStopwords(stopwords, &stopwords_num);
+
+    Dictionary *dictionary[27][27];
+    for(ui i=0;i<27;i++){
+        for(ui j=0;j<27;j++){
+            dictionary[i][j] = (Dictionary*)malloc(sizeof(Dictionary)*65535);
+            if(dictionary[i][j]==NULL) exit(10);
+        }
+    }
+    ui dictionary_num[27][27] = {{0}};
+    readDictionary(fpd, dictionary, dictionary_num);
 
     char *page_raw;
     char *text_raw;
@@ -231,11 +316,12 @@ int main(int argc, char* argv[]){
         char *term;
         term = strtok(text_raw, ".,;\n");
 
-        Bofw bofw[LSIZE] = {0};
+        Bofw bofw[LSIZE] = {{{0}}};
         ui cnt_bofw = 0;
         while(term != NULL){
             toLower(term);
             if( isValidTerm(term)>0 && isStopword(term, stopwords, stopwords_num)==0 ){
+                toBaseform(term, dictionary, dictionary_num);
                 int idx_bofw = getIndexOfTerm(bofw, cnt_bofw, term);
                 if(idx_bofw>-1){
                     bofw[idx_bofw].freq++;
