@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <time.h>
 
 #define LSIZE 65535
 #define BOFWNUM 655350
@@ -273,6 +274,56 @@ int isValidTerm(char *term){
     return 1;
 }
 
+void readDatabase(FILE *fpi, FILE *fpo, char stopwords[][16], ui stopwords_num, Dictionary *dictionary[27][27], ui dictionary_num[27][27]){
+
+    char m[256] = "Read database";
+    ui lc=0,pc=0;
+
+    char *page_raw;
+    char *text_raw;
+    while( (page_raw=cbElementTextRaw(fpi,"page"))!=NULL ){
+
+        text_raw=getElementText(page_raw, "text");
+
+        char *term;
+        term = strtok(text_raw, ".,;\n");
+
+        Bofw bofw[BOFWNUM] = {{{0}}};
+        ui cnt_bofw = 0;
+        while(term != NULL){
+            toLower(term);
+            if( isValidTerm(term)>0 && isStopword(term, stopwords, stopwords_num)==0 ){
+                toBaseform(term, dictionary, dictionary_num);
+                int idx_bofw = getIndexOfTerm(bofw, cnt_bofw, term);
+                if(idx_bofw>-1){
+                    bofw[idx_bofw].freq++;
+                }else{
+                    strncpy(bofw[cnt_bofw].term, term, strlen(term));
+                    bofw[cnt_bofw].freq = 1;
+                    cnt_bofw++;
+                }
+            }
+            term = strtok(NULL," .,;\n");
+        }
+
+        if(cnt_bofw>0){
+            qsort((void *)bofw, cnt_bofw, sizeof(Bofw), sort_bofw);
+            save(bofw, cnt_bofw, fpo);
+            printf(" > %s [#page(saved/parsed) %d/%d]\r",m,++lc,++pc);
+        }else{
+            printf(" > %s [#page(saved/parsed) %d/%d]\r",m,lc,++pc);
+        }
+        fflush(stdout);
+
+        free(text_raw);
+        free(page_raw);
+
+    }
+    printf(" > %s [#page(saved/parsed) %d/%d]\n",m,lc,++pc);
+
+}
+
+
 int main(int argc, char* argv[]){
 
     char inDbFile[64] = {0};
@@ -332,52 +383,16 @@ int main(int argc, char* argv[]){
         }
     }
     ui dictionary_num[27][27] = {{0}};
+
+    clock_t s = clock();
     readDictionary(fpd, dictionary, dictionary_num);
+    clock_t f = clock();
+    printf(" > Read dictionary in %.2f sec.\n",((float)(f-s))/1000000.0);
 
-    char m[256] = "Read database";
-    ui lc=0,pc=0;
-
-    char *page_raw;
-    char *text_raw;
-    while( (page_raw=cbElementTextRaw(fpi,"page"))!=NULL ){
-
-        text_raw=getElementText(page_raw, "text");
-
-        char *term;
-        term = strtok(text_raw, ".,;\n");
-
-        Bofw bofw[BOFWNUM] = {{{0}}};
-        ui cnt_bofw = 0;
-        while(term != NULL){
-            toLower(term);
-            if( isValidTerm(term)>0 && isStopword(term, stopwords, stopwords_num)==0 ){
-                toBaseform(term, dictionary, dictionary_num);
-                int idx_bofw = getIndexOfTerm(bofw, cnt_bofw, term);
-                if(idx_bofw>-1){
-                    bofw[idx_bofw].freq++;
-                }else{
-                    strncpy(bofw[cnt_bofw].term, term, strlen(term));
-                    bofw[cnt_bofw].freq = 1;
-                    cnt_bofw++;
-                }
-            }
-            term = strtok(NULL," .,;\n");
-        }
-
-        if(cnt_bofw>0){
-            qsort((void *)bofw, cnt_bofw, sizeof(Bofw), sort_bofw);
-            save(bofw, cnt_bofw, fpo);
-            printf(" > %s [#page(saved/parsed) %d/%d]\r",m,++lc,++pc);
-        }else{
-            printf(" > %s [#page(saved/parsed) %d/%d]\r",m,lc,++pc);
-        }
-        fflush(stdout);
-
-        free(text_raw);
-        free(page_raw);
-
-    }
-    printf(" > %s [#page(saved/parsed) %d/%d]\n",m,lc,++pc);
+    s = clock();
+    readDatabase(fpi, fpo, stopwords, stopwords_num, dictionary, dictionary_num);
+    f = clock();
+    printf(" > Read database in %.2f sec.\n",((float)(f-s))/1000000.0);
 
     fclose(fpi);
     fclose(fpo);
