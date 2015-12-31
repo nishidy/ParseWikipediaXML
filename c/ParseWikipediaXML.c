@@ -3,18 +3,45 @@
 #include <string.h>
 #include <ctype.h>
 #include <time.h>
+#include <pthread.h>
 
 #define LSIZE 65535
-#define BOFWNUM 655350
+#define QSIZE 16
+#define BOFWNUM 65535
 #define ASCII 97
 #define TERMLEN 48
 
 typedef unsigned int ui;
 
 typedef struct {
-    char term[64];
+    char term[48];
     int  freq;
 } Bofw;
+
+typedef struct {
+    char infl[TERMLEN]; // inflected
+    char base[TERMLEN]; // baseform
+} Dictionary;
+
+char verbose = 0;
+
+ui queue_first= 0;
+ui queue_last = 0;
+char *queue[QSIZE];
+
+typedef struct {
+    FILE* fpi;
+    FILE* fpo;
+    char *stopwords;
+    ui stopwords_num;
+    Dictionary *dictionary;
+    ui *dictionary_num;
+} thread_args;
+
+pthread_mutex_t qmutex;
+pthread_mutex_t fmutex;
+
+///////////////////////////////////////////////////////
 
 int getIndexOfTerm(Bofw *bofw, ui cnt_bofw, char *term){
     for(ui i=0;i<cnt_bofw;i++){
@@ -42,11 +69,15 @@ void disp_stdio(Bofw *bofw, ui cnt_bofw){
 }
 
 void save(Bofw *bofw, ui cnt_bofw, FILE* fpo){
+    pthread_mutex_lock(&fmutex);
     if(fpo==NULL){
         disp_stdio(bofw,cnt_bofw);
+        fflush(stdout);
     }else{
         save_file(bofw,cnt_bofw,fpo);
+        fflush(fpo);
     }
+    pthread_mutex_unlock(&fmutex);
 }
 
 int sort_bofw(const void *a, const void *b){
@@ -78,23 +109,34 @@ void strcaterr(){
     exit(1);
 }
 
-char* getElementText(char *dom, char *tag){
+void reallocerr(char *p){
+    if(p==NULL){
+        fprintf(stderr,"Realloc could not allocate memory.");
+        exit(15);
+    }
+}
+
+char* getElementText(char *page, char *tag){
     char open_tag[32] = {0};
     char close_tag[32] = {0};
 
     char *text = (char*)malloc(sizeof(char)*LSIZE);
-    memset(text,0,sizeof(char)*LSIZE);
+    memset(text,'\0',sizeof(char)*LSIZE);
 
     sprintf(open_tag,"<%s",tag);
     sprintf(close_tag,"</%s",tag);
 
-    char *open_pos = strstr(strstr(dom, open_tag),">")+1;
-    char *close_pos= strstr(dom, close_tag)-1;
+    if(strstr(page, open_tag)==NULL){
+        fprintf(stderr,"Not found\n");
+        exit(20);
+    }
+    char *open_pos = strstr(strstr(page, open_tag),">")+1;
+    char *close_pos= strstr(page, close_tag)-1;
 
     if(close_pos-open_pos>LSIZE){
-        ui need_size = (close_pos-open_pos)/LSIZE+1;
-        text = (char*)realloc(text, sizeof(char) * LSIZE * need_size);
-        //fprintf(stderr, "Reallocate due to size over.\n");
+        ui need_size = sizeof(char) * LSIZE * ((close_pos-open_pos)/LSIZE+1);
+        text = (char*)realloc(text, need_size);
+        reallocerr(text);
     }
 
     ui text_len = (close_pos-open_pos)/sizeof(char);
@@ -119,7 +161,7 @@ char* cbElementTextRaw(FILE* fp, char *tag){
 
     char tag_flag = 0;
     char *text = (char*)malloc(sizeof(char)*LSIZE);
-    memset(text,0,sizeof(char)*LSIZE);
+    memset(text,'\0',sizeof(char)*LSIZE);
 
     while(fgets(l,LSIZE,fp)){
         if(strstr(l,open_tag)!=NULL){
@@ -127,13 +169,17 @@ char* cbElementTextRaw(FILE* fp, char *tag){
         }
         if(tag_flag == 1){
             if((strlen(text)%LSIZE)+strlen(l)>LSIZE){
-                text = (char*)realloc(text, sizeof(char) * LSIZE * (strlen(text)/LSIZE+2));
+                ui need_size = sizeof(char) * LSIZE * (strlen(text)/LSIZE+2);
+                text = (char*)realloc(text, need_size);
+                reallocerr(text);
             }
             if(strcat(text,l)!=text) strcaterr();
         }
         if(strstr(l,close_tag)!=NULL){
             if((strlen(text)%LSIZE)+strlen(l)>LSIZE){
-                text = (char*)realloc(text, sizeof(char) * LSIZE * (strlen(text)/LSIZE+2));
+                ui need_size = sizeof(char) * LSIZE * (strlen(text)/LSIZE+2);
+                text = (char*)realloc(text, need_size);
+                reallocerr(text);
             }
             if(strcat(text,l)!=text) strcaterr();
             tag_flag = 2;
@@ -157,11 +203,6 @@ void toLower(char *term){
         term[i] = tolower(term[i]);
     }
 }
-
-typedef struct {
-    char infl[TERMLEN]; // inflected
-    char base[TERMLEN]; // baseform
-} Dictionary;
 
 void readDictionary(FILE *fp, Dictionary *dictionary[27][27], ui dictionary_num[27][27]){
 
@@ -210,7 +251,7 @@ void readDictionary(FILE *fp, Dictionary *dictionary[27][27], ui dictionary_num[
                     }
                 }
             }
-            
+
             c = strtok(NULL,"\t");
             i++;
         }
@@ -273,53 +314,126 @@ int isValidTerm(char *term){
     return 1;
 }
 
-void readDatabase(FILE *fpi, FILE *fpo, char stopwords[][16], ui stopwords_num, Dictionary *dictionary[27][27], ui dictionary_num[27][27]){
+void allocMemQueue(){
+    for(ui i=0;i<QSIZE;i++){
+        queue[i] = (char*)malloc(sizeof(char)*LSIZE);
+        memset(queue[i],'\0',sizeof(char)*LSIZE);
+    }
+}
+
+char* queue_pop(){
+    if(verbose==1) printf("[POP] Queue pos: %d->%d",queue_first,queue_last);
+    while(queue_first==queue_last){ /* spin_lock */ }
+
+    char *page;
+
+    pthread_mutex_lock(&qmutex);
+    {
+        page = queue[queue_first++];
+        if(queue_first>QSIZE-1) queue_first=0;
+    }
+    pthread_mutex_unlock(&qmutex);
+
+    if(verbose==1) printf(" to %d->%d\n",queue_first,queue_last);
+    return page;
+}
+
+void queue_push(char* page){
+
+    while(queue_first==0 && queue_last==QSIZE-1){ /* spin_lock */ }
+
+    while(queue_first>0 && queue_last==queue_first-1){ /* spin_lock */ }
+
+    if(verbose==1) printf("[PUSH] Queue pos: %d->%d",queue_first,queue_last);
+
+    pthread_mutex_lock(&qmutex);
+    {
+        if(strlen(page)>=LSIZE){
+            ui need_size = sizeof(char) * LSIZE * (strlen(page)/LSIZE+1);
+            queue[queue_last] = (char*)realloc(queue[queue_last], need_size);
+            reallocerr(queue[queue_last]);
+        }
+        strcpy(queue[queue_last++], page);
+        if(queue_last>QSIZE-1) queue_last = 0;
+    }
+    pthread_mutex_unlock(&qmutex);
+
+    if(verbose==1) printf(" to %d->%d\n",queue_first,queue_last);
+}
+
+void readDatabase(FILE *fpi){
+    char *page_raw;
+    while( (page_raw=cbElementTextRaw(fpi,"page"))!=NULL ){
+        queue_push(page_raw);
+        free(page_raw);
+    }
+}
+
+void run_parse(char* page_raw, thread_args *targs){
+
+    char *text_raw = getElementText(page_raw, "text");
+    if(text_raw==NULL) return;
+
+    char *term;
+    term = strtok(text_raw, " .,;\n");
+
+    Bofw *bofw;
+    bofw = (Bofw*)malloc(sizeof(Bofw)*LSIZE);
+    if(bofw==NULL) return;
+    memset(bofw,'\0',sizeof(Bofw)*LSIZE);
+    ui cnt_bofw = 0;
 
     char m[256] = "Read database";
     ui lc=0,pc=0;
 
-    char *page_raw;
-    char *text_raw;
-    while( (page_raw=cbElementTextRaw(fpi,"page"))!=NULL ){
+    while(term != NULL){
+        toLower(term);
+        if( isValidTerm(term) > 0 &&
+            isStopword( term, (char(*)[16])targs->stopwords, targs->stopwords_num ) == 0 )
+        {
+            toBaseform(
+                term,
+                (Dictionary*(*)[27])targs->dictionary,
+                (ui(*)[27])targs->dictionary_num
+            );
 
-        text_raw=getElementText(page_raw, "text");
-
-        char *term;
-        term = strtok(text_raw, ".,;\n");
-
-        Bofw bofw[BOFWNUM] = {{{0}}};
-        ui cnt_bofw = 0;
-        while(term != NULL){
-            toLower(term);
-            if( isValidTerm(term)>0 && isStopword(term, stopwords, stopwords_num)==0 ){
-                toBaseform(term, dictionary, dictionary_num);
-                int idx_bofw = getIndexOfTerm(bofw, cnt_bofw, term);
-                if(idx_bofw>-1){
-                    bofw[idx_bofw].freq++;
-                }else{
-                    strncpy(bofw[cnt_bofw].term, term, strlen(term));
-                    bofw[cnt_bofw].freq = 1;
-                    cnt_bofw++;
-                }
+            int idx_bofw = getIndexOfTerm(bofw, cnt_bofw, term);
+            if(idx_bofw>-1){
+                bofw[idx_bofw].freq++;
+            }else{
+                strncpy(bofw[cnt_bofw].term, term, strlen(term));
+                bofw[cnt_bofw].freq = 1;
+                cnt_bofw++;
             }
-            term = strtok(NULL," .,;\n");
         }
-
-        if(cnt_bofw>0){
-            qsort((void *)bofw, cnt_bofw, sizeof(Bofw), sort_bofw);
-            save(bofw, cnt_bofw, fpo);
-            printf(" > %s [#page(saved/parsed) %d/%d]\r",m,++lc,++pc);
-        }else{
-            printf(" > %s [#page(saved/parsed) %d/%d]\r",m,lc,++pc);
-        }
-        fflush(stdout);
-
-        free(text_raw);
-        free(page_raw);
-
+        if(cnt_bofw>LSIZE){ fprintf(stderr,"Bofw size over."); exit(11); }
+        term = strtok(NULL," .,;\n");
     }
-    printf(" > %s [#page(saved/parsed) %d/%d]\n",m,lc,++pc);
 
+    if(cnt_bofw>0){
+        qsort((void *)bofw, cnt_bofw, sizeof(Bofw), sort_bofw);
+        save(bofw, cnt_bofw, targs->fpo);
+        printf(" > %s [#page(saved/parsed) %d/%d]\r",m,++lc,++pc);
+    }else{
+        printf(" > %s [#page(saved/parsed) %d/%d]\r",m,lc,++pc);
+    }
+    fflush(stdout);
+
+    free(text_raw);
+    free(bofw);
+
+}
+
+void* parse_thread(void* args){
+    thread_args *targs = args;
+
+    for(;;){
+        char *page_raw = queue_pop();
+        if(strcmp(page_raw,"::FINISHED::")==0) break;
+        run_parse(page_raw, targs);
+    }
+
+    return NULL;
 }
 
 void allocMemDictionary(Dictionary *dictionary[27][27]){
@@ -336,12 +450,14 @@ int main(int argc, char* argv[]){
     char inDbFile[64] = {0};
     char inDictFile[64] = {0};
     char outBofwFile[64] = {0};
+    ui workers = 1;
+    char r = 0;
 
     argc--;
     argv++;
 
     for(int i=0;i<argc;i++){
-        if(i%2==0){
+        if(i%2==r){
             if(strlen(argv[i])>2){
                 printf("Wrong option (%s).\n",argv[i]);
                 exit(0);
@@ -356,6 +472,13 @@ int main(int argc, char* argv[]){
                     break;
                 case 's':
                     strncpy(outBofwFile, argv[i+1], strlen(argv[i+1]));
+                    break;
+                case 'w':
+                    workers = atoi(argv[i+1]);
+                    break;
+                case 'v':
+                    verbose = 1;
+                    r^=r;
                     break;
                 default:
                     break;
@@ -393,8 +516,35 @@ int main(int argc, char* argv[]){
     f = clock();
     printf(" > Read dictionary in %.2f sec.\n",((float)(f-s))/1000000.0);
 
+    allocMemQueue();
+
+    thread_args targs;
+    targs.fpi = fpi;
+    targs.fpo = fpo;
+    targs.stopwords = (char*)stopwords;
+    targs.stopwords_num = stopwords_num;
+    targs.dictionary = (Dictionary*)dictionary;
+    targs.dictionary_num = (ui*)dictionary_num;
+
+    pthread_t *threads;
+    threads = (pthread_t*)malloc(sizeof(pthread_t)*workers);
+    for(ui i=0;i<workers;i++){
+        pthread_t th;
+        pthread_create(&th, NULL, parse_thread, &targs);
+        threads[i] = th;
+    }
+
     s = clock();
-    readDatabase(fpi, fpo, stopwords, stopwords_num, dictionary, dictionary_num);
+    readDatabase(fpi);
+
+    for(ui i=0;i<workers;i++){
+        queue_push("::FINISHED::");
+    }
+
+    for(ui i=0;i<workers;i++){
+        pthread_join(threads[i], NULL);
+    }
+
     f = clock();
     printf(" > Read database in %.2f sec.\n",((float)(f-s))/1000000.0);
 
