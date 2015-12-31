@@ -38,8 +38,11 @@ typedef struct {
     ui *dictionary_num;
 } thread_args;
 
-pthread_mutex_t qmutex;
-pthread_mutex_t fmutex;
+pthread_mutex_t qmutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t fmutex = PTHREAD_MUTEX_INITIALIZER;
+
+pthread_cond_t push_cond = PTHREAD_COND_INITIALIZER;
+pthread_cond_t pop_cond  = PTHREAD_COND_INITIALIZER;
 
 ///////////////////////////////////////////////////////
 
@@ -127,7 +130,7 @@ char* getElementText(char *page, char *tag){
     sprintf(close_tag,"</%s",tag);
 
     if(strstr(page, open_tag)==NULL){
-        fprintf(stderr,"Not found\n");
+        fprintf(stderr,"Not found : %s\n",page);
         exit(20);
     }
     char *open_pos = strstr(strstr(page, open_tag),">")+1;
@@ -322,32 +325,52 @@ void allocMemQueue(){
 }
 
 char* queue_pop(){
-    if(verbose==1) printf("[POP] Queue pos: %d->%d",queue_first,queue_last);
-    while(queue_first==queue_last){ /* spin_lock */ }
+
+    pthread_mutex_lock(&qmutex);
+    while(queue_first==queue_last){
+        pthread_cond_wait(&push_cond, &qmutex);
+    }
+    pthread_mutex_unlock(&qmutex);
 
     char *page;
 
     pthread_mutex_lock(&qmutex);
     {
+        if(verbose==1)
+            printf("[POP] Queue prev pos: %d->%d\n",queue_first,queue_last);
+
         page = queue[queue_first++];
         if(queue_first>QSIZE-1) queue_first=0;
+
+        if(verbose==1)
+            printf("[POP] Queue post pos: %d->%d\n",queue_first,queue_last);
+
+        pthread_cond_signal(&pop_cond);
     }
     pthread_mutex_unlock(&qmutex);
 
-    if(verbose==1) printf(" to %d->%d\n",queue_first,queue_last);
     return page;
 }
 
 void queue_push(char* page){
 
-    while(queue_first==0 && queue_last==QSIZE-1){ /* spin_lock */ }
+    pthread_mutex_lock(&qmutex);
+    while(queue_first==0 && queue_last==QSIZE-1){
+        pthread_cond_wait(&pop_cond, &qmutex);
+    }
+    pthread_mutex_unlock(&qmutex);
 
-    while(queue_first>0 && queue_last==queue_first-1){ /* spin_lock */ }
-
-    if(verbose==1) printf("[PUSH] Queue pos: %d->%d",queue_first,queue_last);
+    pthread_mutex_lock(&qmutex);
+    while(queue_first>0 && queue_last==queue_first-1){
+        pthread_cond_wait(&pop_cond, &qmutex);
+    }
+    pthread_mutex_unlock(&qmutex);
 
     pthread_mutex_lock(&qmutex);
     {
+        if(verbose==1)
+            printf("[PUSH] Queue prev pos: %d->%d\n",queue_first,queue_last);
+
         if(strlen(page)>=LSIZE){
             ui need_size = sizeof(char) * LSIZE * (strlen(page)/LSIZE+1);
             queue[queue_last] = (char*)realloc(queue[queue_last], need_size);
@@ -355,10 +378,14 @@ void queue_push(char* page){
         }
         strcpy(queue[queue_last++], page);
         if(queue_last>QSIZE-1) queue_last = 0;
+
+        if(verbose==1)
+            printf("[PUSH] Queue post pos: %d->%d\n",queue_first,queue_last);
+
+        pthread_cond_signal(&push_cond);
     }
     pthread_mutex_unlock(&qmutex);
 
-    if(verbose==1) printf(" to %d->%d\n",queue_first,queue_last);
 }
 
 void readDatabase(FILE *fpi){
