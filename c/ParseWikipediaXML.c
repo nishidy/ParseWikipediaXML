@@ -6,8 +6,8 @@
 #include <pthread.h>
 
 #define LSIZE 65535
-#define QSIZE 16
-#define BOFWNUM 65535
+#define QDATASIZE 65535
+#define QSIZE 32
 #define ASCII 97
 #define TERMLEN 48
 
@@ -123,9 +123,6 @@ char* getElementText(char *page, char *tag){
     char open_tag[32] = {0};
     char close_tag[32] = {0};
 
-    char *text = (char*)malloc(sizeof(char)*LSIZE);
-    memset(text,'\0',sizeof(char)*LSIZE);
-
     sprintf(open_tag,"<%s",tag);
     sprintf(close_tag,"</%s",tag);
 
@@ -136,13 +133,11 @@ char* getElementText(char *page, char *tag){
     char *open_pos = strstr(strstr(page, open_tag),">")+1;
     char *close_pos= strstr(page, close_tag)-1;
 
-    if(close_pos-open_pos>LSIZE){
-        ui need_size = sizeof(char) * LSIZE * ((close_pos-open_pos)/LSIZE+1);
-        text = (char*)realloc(text, need_size);
-        reallocerr(text);
-    }
-
     ui text_len = (close_pos-open_pos)/sizeof(char);
+
+    ui need_size = sizeof(char) * LSIZE * (text_len/LSIZE+1);
+    char *text = (char*)malloc(need_size+1);
+    memset(text,'\0',need_size+1);
 
     if(open_pos!=NULL && close_pos!=NULL){
         strncpy(text, open_pos, text_len);
@@ -151,6 +146,16 @@ char* getElementText(char *page, char *tag){
     }
 
     return text;
+}
+
+void append_text(char *text, char *l){
+    if((strlen(text)%LSIZE)+strlen(l)>LSIZE){
+        ui need_size = sizeof(char) * LSIZE * (strlen(text)/LSIZE+2);
+        text = (char*)realloc(text, need_size);
+        reallocerr(text);
+        memset(&text[need_size-LSIZE],'\0',LSIZE);
+    }
+    if(strcat(text,l)!=text) strcaterr();
 }
 
 char* cbElementTextRaw(FILE* fp, char *tag){
@@ -171,20 +176,10 @@ char* cbElementTextRaw(FILE* fp, char *tag){
             tag_flag = 1;
         }
         if(tag_flag == 1){
-            if((strlen(text)%LSIZE)+strlen(l)>LSIZE){
-                ui need_size = sizeof(char) * LSIZE * (strlen(text)/LSIZE+2);
-                text = (char*)realloc(text, need_size);
-                reallocerr(text);
-            }
-            if(strcat(text,l)!=text) strcaterr();
+            append_text(text,l);
         }
         if(strstr(l,close_tag)!=NULL){
-            if((strlen(text)%LSIZE)+strlen(l)>LSIZE){
-                ui need_size = sizeof(char) * LSIZE * (strlen(text)/LSIZE+2);
-                text = (char*)realloc(text, need_size);
-                reallocerr(text);
-            }
-            if(strcat(text,l)!=text) strcaterr();
+            append_text(text,l);
             tag_flag = 2;
             break;
         }
@@ -264,10 +259,13 @@ void readDictionary(FILE *fp, Dictionary *dictionary[27][27], ui dictionary_num[
 }
 
 void toBaseform(char *term, Dictionary *dictionary[27][27], ui dictionary_num[27][27]){
-    if(ASCII<=(ui)term[0] && (ui)term[0]<ASCII+26){
-        if(ASCII<=(ui)term[1] && (ui)term[1]<ASCII+26){
-            Dictionary *d = dictionary[(ui)term[0]-ASCII][(ui)term[1]-ASCII];
-            for(ui i=0;i<dictionary_num[(ui)term[0]-ASCII][(ui)term[1]-ASCII];i++){
+    ui t0 = (ui)term[0];
+    ui t1 = (ui)term[1];
+
+    if(ASCII<=t0 && t0<ASCII+26){
+        if(ASCII<=t1 && t1<ASCII+26){
+            Dictionary *d = dictionary[t0-ASCII][t1-ASCII];
+            for(ui i=0;i<dictionary_num[t0-ASCII][t1-ASCII];i++){
                 if(strcmp(term,d[i].infl)==0){
                     strcpy(term,d[i].base);
                     break;
@@ -319,8 +317,8 @@ int isValidTerm(char *term){
 
 void allocMemQueue(){
     for(ui i=0;i<QSIZE;i++){
-        queue[i] = (char*)malloc(sizeof(char)*LSIZE);
-        memset(queue[i],'\0',sizeof(char)*LSIZE);
+        queue[i] = (char*)malloc(sizeof(char)*QDATASIZE);
+        memset(queue[i],'\0',sizeof(char)*QDATASIZE);
     }
 }
 
@@ -352,6 +350,26 @@ char* queue_pop(){
     return page;
 }
 
+void stretch_qdatasize(ui block_size, char *queue_pos){
+    ui need_size = sizeof(char) * QDATASIZE * block_size;
+    queue_pos = (char*)realloc(queue_pos, need_size);
+    reallocerr(queue[queue_last]);
+    memset(queue_pos,'\0',need_size);
+}
+
+void copy_to_queue(char *page, char *queue_pos){
+    ui new_block_size = strlen(page)/QDATASIZE + 1;
+    ui old_block_size = strlen(queue_pos)/QDATASIZE + 1;
+
+    if(old_block_size < new_block_size){
+        stretch_qdatasize(new_block_size, queue_pos);
+    }else if(old_block_size > new_block_size){
+        stretch_qdatasize(old_block_size, queue_pos);
+    }
+
+    strcpy(queue_pos, page);
+}
+
 void queue_push(char* page){
 
     pthread_mutex_lock(&qmutex);
@@ -368,19 +386,12 @@ void queue_push(char* page){
 
     pthread_mutex_lock(&qmutex);
     {
-        if(verbose==1)
-            printf("[PUSH] Queue prev pos: %d->%d\n",queue_first,queue_last);
+        if(verbose==1) printf("[PUSH] Queue prev pos: %d->%d\n",queue_first,queue_last);
 
-        if(strlen(page)>=LSIZE){
-            ui need_size = sizeof(char) * LSIZE * (strlen(page)/LSIZE+1);
-            queue[queue_last] = (char*)realloc(queue[queue_last], need_size);
-            reallocerr(queue[queue_last]);
-        }
-        strcpy(queue[queue_last++], page);
-        if(queue_last>QSIZE-1) queue_last = 0;
+        copy_to_queue(page,queue[queue_last]);
+        if(++queue_last>QSIZE-1) queue_last = 0;
 
-        if(verbose==1)
-            printf("[PUSH] Queue post pos: %d->%d\n",queue_first,queue_last);
+        if(verbose==1) printf("[PUSH] Queue post pos: %d->%d\n",queue_first,queue_last);
 
         pthread_cond_signal(&push_cond);
     }
@@ -444,7 +455,6 @@ void run_parse(char* page_raw, thread_args *targs){
     }else{
         printf(" > %s [#page(saved/parsed) %d/%d]\r",m,lc,++pc);
     }
-    fflush(stdout);
 
     free(text_raw);
     free(bofw);
@@ -463,10 +473,12 @@ void* parse_thread(void* args){
     return NULL;
 }
 
+
 void allocMemDictionary(Dictionary *dictionary[27][27]){
     for(ui i=0;i<27;i++){
         for(ui j=0;j<27;j++){
-            dictionary[i][j] = (Dictionary*)malloc(sizeof(Dictionary)*65535);
+            dictionary[i][j] = (Dictionary*)malloc(sizeof(Dictionary)*LSIZE);
+            memset(dictionary[i][j],'\0',sizeof(Dictionary)*LSIZE);
             if(dictionary[i][j]==NULL) exit(10);
         }
     }
@@ -555,6 +567,7 @@ int main(int argc, char* argv[]){
 
     pthread_t *threads;
     threads = (pthread_t*)malloc(sizeof(pthread_t)*workers);
+
     for(ui i=0;i<workers;i++){
         pthread_t th;
         pthread_create(&th, NULL, parse_thread, &targs);
