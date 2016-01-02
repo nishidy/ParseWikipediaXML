@@ -116,6 +116,8 @@ void reallocerr(char *p){
     if(p==NULL){
         fprintf(stderr,"Realloc could not allocate memory.");
         exit(15);
+    }else{
+        if(verbose==1) printf("Realloc'd.\n");
     }
 }
 
@@ -137,6 +139,7 @@ char* getElementText(char *page, char *tag){
 
     ui need_size = sizeof(char) * LSIZE * (text_len/LSIZE+1);
     char *text = (char*)malloc(need_size+1);
+    if(text==NULL) exit(21);
     memset(text,'\0',need_size+1);
 
     if(open_pos!=NULL && close_pos!=NULL){
@@ -169,6 +172,7 @@ char* cbElementTextRaw(FILE* fp, char *tag){
 
     char tag_flag = 0;
     char *text = (char*)malloc(sizeof(char)*LSIZE);
+    if(text==NULL) exit(21);
     memset(text,'\0',sizeof(char)*LSIZE);
 
     while(fgets(l,LSIZE,fp)){
@@ -318,6 +322,7 @@ int isValidTerm(char *term){
 void allocMemQueue(){
     for(ui i=0;i<QSIZE;i++){
         queue[i] = (char*)malloc(sizeof(char)*QDATASIZE);
+        if(queue[i]==NULL) exit(21);
         memset(queue[i],'\0',sizeof(char)*QDATASIZE);
     }
 }
@@ -330,18 +335,19 @@ char* queue_pop(){
     }
     pthread_mutex_unlock(&qmutex);
 
-    char *page;
+    char *page = (char*)malloc(sizeof(char) * strlen(queue[queue_first]));
+    if(page==NULL) exit(21);
 
     pthread_mutex_lock(&qmutex);
     {
-        if(verbose==1)
-            printf("[POP] Queue prev pos: %d->%d\n",queue_first,queue_last);
+        if(verbose==1) printf("[POP] Queue prev pos: %d->%d\n",queue_first,queue_last);
 
-        page = queue[queue_first++];
+        // TODO: Remove strcpy to use memory address assgined into queue
+        //       in order to reduce times of copying data
+        strcpy(page, queue[queue_first++]);
         if(queue_first>QSIZE-1) queue_first=0;
 
-        if(verbose==1)
-            printf("[POP] Queue post pos: %d->%d\n",queue_first,queue_last);
+        if(verbose==1) printf("[POP] Queue post pos: %d->%d\n",queue_first,queue_last);
 
         pthread_cond_signal(&pop_cond);
     }
@@ -353,7 +359,7 @@ char* queue_pop(){
 void stretch_qdatasize(ui block_size, char *queue_pos){
     ui need_size = sizeof(char) * QDATASIZE * block_size;
     queue_pos = (char*)realloc(queue_pos, need_size);
-    reallocerr(queue[queue_last]);
+    reallocerr(queue_pos);
     memset(queue_pos,'\0',need_size);
 }
 
@@ -410,7 +416,11 @@ void readDatabase(FILE *fpi){
 void run_parse(char* page_raw, thread_args *targs){
 
     char *text_raw = getElementText(page_raw, "text");
-    if(text_raw==NULL) return;
+    if(text_raw==NULL){
+        printf("text is NULL\n");
+        return;
+    }
+    if(verbose==1) printf("%d %p\n",(int)pthread_self(),text_raw);
 
     char *term;
     term = strtok(text_raw, " .,;\n");
@@ -468,6 +478,7 @@ void* parse_thread(void* args){
         char *page_raw = queue_pop();
         if(strcmp(page_raw,"::FINISHED::")==0) break;
         run_parse(page_raw, targs);
+        free(page_raw);
     }
 
     return NULL;
@@ -478,6 +489,7 @@ void allocMemDictionary(Dictionary *dictionary[27][27]){
     for(ui i=0;i<27;i++){
         for(ui j=0;j<27;j++){
             dictionary[i][j] = (Dictionary*)malloc(sizeof(Dictionary)*LSIZE);
+            if(dictionary[i][j]==NULL) exit(22);
             memset(dictionary[i][j],'\0',sizeof(Dictionary)*LSIZE);
             if(dictionary[i][j]==NULL) exit(10);
         }
@@ -567,6 +579,7 @@ int main(int argc, char* argv[]){
 
     pthread_t *threads;
     threads = (pthread_t*)malloc(sizeof(pthread_t)*workers);
+    if(threads==NULL) return -1;
 
     for(ui i=0;i<workers;i++){
         pthread_t th;
