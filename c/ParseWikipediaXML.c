@@ -130,21 +130,22 @@ char* getElementText(char *page, char *tag){
 
     if(strstr(page, open_tag)==NULL){
         fprintf(stderr,"Not found : %s\n",page);
-        exit(20);
+        return NULL;
     }
     char *open_pos = strstr(strstr(page, open_tag),">")+1;
     char *close_pos= strstr(page, close_tag)-1;
 
     ui text_len = (close_pos-open_pos)/sizeof(char);
 
-    ui need_size = sizeof(char) * LSIZE * (text_len/LSIZE+1);
-    char *text = (char*)malloc(need_size+1);
+    ui need_size = sizeof(char) * (LSIZE * (text_len/LSIZE+1) + 1);
+    char *text = (char*)malloc(need_size);
     if(text==NULL) exit(21);
-    memset(text,'\0',need_size+1);
+    memset(text,'\0',need_size);
 
     if(open_pos!=NULL && close_pos!=NULL){
         strncpy(text, open_pos, text_len);
     }else{
+        fprintf(stderr, "Open tag : %p / Close tag : %p\n", open_pos, close_pos);
         text = NULL;
     }
 
@@ -417,7 +418,7 @@ void run_parse(char* page_raw, thread_args *targs){
 
     char *text_raw = getElementText(page_raw, "text");
     if(text_raw==NULL){
-        printf("text is NULL\n");
+        printf("\ntext is NULL.\n");
         return;
     }
     if(verbose==1) printf("%d %p\n",(int)pthread_self(),text_raw);
