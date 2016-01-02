@@ -151,14 +151,14 @@ char* getElementText(char *page, char *tag){
     return text;
 }
 
-void append_text(char *text, char *l){
-    if((strlen(text)%LSIZE)+strlen(l)>LSIZE){
-        ui need_size = sizeof(char) * LSIZE * (strlen(text)/LSIZE+2);
-        text = (char*)realloc(text, need_size);
-        reallocerr(text);
-        memset(&text[need_size-LSIZE],'\0',LSIZE);
+void append_text(char **text, char *l){
+    if((strlen(*text)%LSIZE)+strlen(l)>LSIZE){
+        ui need_size = sizeof(char) * LSIZE * (strlen(*text)/LSIZE+2);
+        *text = (char*)realloc(*text, need_size);
+        reallocerr(*text);
+        memset(&(*text)[need_size-LSIZE],'\0',LSIZE);
     }
-    if(strcat(text,l)!=text) strcaterr();
+    if(strcat(*text,l)!=*text) strcaterr();
 }
 
 char* cbElementTextRaw(FILE* fp, char *tag){
@@ -180,10 +180,10 @@ char* cbElementTextRaw(FILE* fp, char *tag){
             tag_flag = 1;
         }
         if(tag_flag == 1){
-            append_text(text,l);
+            append_text(&text,l);
         }
         if(strstr(l,close_tag)!=NULL){
-            append_text(text,l);
+            append_text(&text,l);
             tag_flag = 2;
             break;
         }
@@ -343,7 +343,7 @@ char* queue_pop(){
         if(verbose==1) printf("[POP] Queue prev pos: %d->%d\n",queue_first,queue_last);
 
         // TODO: Remove strcpy to use memory address assgined into queue
-        //       in order to reduce times of copying data
+        //       in order to avoid copying data as much as possible
         strcpy(page, queue[queue_first++]);
         if(queue_first>QSIZE-1) queue_first=0;
 
@@ -356,11 +356,11 @@ char* queue_pop(){
     return page;
 }
 
-void stretch_qdatasize(ui block_size, char *queue_pos){
+void stretch_qdatasize(ui block_size, char **queue_pos){
     ui need_size = sizeof(char) * QDATASIZE * block_size;
-    queue_pos = (char*)realloc(queue_pos, need_size);
-    reallocerr(queue_pos);
-    memset(queue_pos,'\0',need_size);
+    *queue_pos = (char*)realloc(*queue_pos, need_size);
+    reallocerr(*queue_pos);
+    memset(*queue_pos,'\0',need_size);
 }
 
 void copy_to_queue(char *page, char *queue_pos){
@@ -368,9 +368,9 @@ void copy_to_queue(char *page, char *queue_pos){
     ui old_block_size = strlen(queue_pos)/QDATASIZE + 1;
 
     if(old_block_size < new_block_size){
-        stretch_qdatasize(new_block_size, queue_pos);
+        stretch_qdatasize(new_block_size, &queue_pos);
     }else if(old_block_size > new_block_size){
-        stretch_qdatasize(old_block_size, queue_pos);
+        stretch_qdatasize(old_block_size, &queue_pos);
     }
 
     strcpy(queue_pos, page);
@@ -437,8 +437,8 @@ void run_parse(char* page_raw, thread_args *targs){
     while(term != NULL){
         toLower(term);
         if( isValidTerm(term) > 0 &&
-            isStopword( term, (char(*)[16])targs->stopwords, targs->stopwords_num ) == 0 )
-        {
+            isStopword(term, (char(*)[16])targs->stopwords, targs->stopwords_num) == 0
+        ){
             toBaseform(
                 term,
                 (Dictionary*(*)[27])targs->dictionary,
