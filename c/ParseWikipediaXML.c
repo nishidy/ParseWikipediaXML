@@ -9,7 +9,7 @@
 #define MSIZE 4096
 #define LSIZE 65536
 #define QDATASIZE 65536
-#define QSIZE 32
+#define QSIZE 16
 #define ASCII 97
 #define TERMLEN 48
 
@@ -452,8 +452,8 @@ void run_parse(char* page_raw, thread_args *targs){
     }
     if(verbose==1) printf("%d %p\n",(int)pthread_self(),text_raw);
 
-    char *term;
-    term = strtok(text_raw, " .,;\n");
+    char *term, *savep;
+    term = strtok_r(text_raw, " .,;\n", &savep);
 
     Bofw *bofw;
     bofw = (Bofw*)malloc(sizeof(Bofw)*LSIZE);
@@ -485,7 +485,7 @@ void run_parse(char* page_raw, thread_args *targs){
             }
         }
         if(cnt_bofw>LSIZE){ fprintf(stderr,"Bofw size over."); exit(11); }
-        term = strtok(NULL," .,;\n");
+        term = strtok_r(NULL, " .,;\n", &savep);
     }
 
     if(cnt_bofw>0){
