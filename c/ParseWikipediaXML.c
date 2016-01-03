@@ -159,7 +159,7 @@ void append_text(char **text, char *l){
         ui need_size = sizeof(char) * LSIZE * (strlen(*text)/LSIZE+2);
         *text = (char*)realloc(*text, need_size);
         reallocerr(*text);
-        memset(text+(need_size-LSIZE),'\0',LSIZE);
+        memset(*text+(need_size-LSIZE),'\0',LSIZE);
     }
     if(strcat(*text,l)!=*text) strcaterr();
 }
