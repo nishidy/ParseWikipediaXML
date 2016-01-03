@@ -186,7 +186,6 @@ char* cbElementTextRaw(FILE* fp, char *tag){
             append_text(&text,l);
         }
         if(strstr(l,close_tag)!=NULL){
-            append_text(&text,l);
             tag_flag = 2;
             break;
         }
