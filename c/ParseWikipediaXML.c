@@ -530,7 +530,7 @@ int main(int argc, char* argv[]){
                     break;
                 case 'v':
                     verbose = 1;
-                    r^=r;
+                    r^=1;
                     break;
                 default:
                     break;
