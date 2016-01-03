@@ -5,8 +5,10 @@
 #include <time.h>
 #include <pthread.h>
 
-#define LSIZE 65535
-#define QDATASIZE 65535
+#define SSIZE 256
+#define MSIZE 4096
+#define LSIZE 65536
+#define QDATASIZE 65536
 #define QSIZE 32
 #define ASCII 97
 #define TERMLEN 48
@@ -157,7 +159,7 @@ void append_text(char **text, char *l){
         ui need_size = sizeof(char) * LSIZE * (strlen(*text)/LSIZE+2);
         *text = (char*)realloc(*text, need_size);
         reallocerr(*text);
-        memset(&(*text)[need_size-LSIZE],'\0',LSIZE);
+        memset(text+(need_size-LSIZE),'\0',LSIZE);
     }
     if(strcat(*text,l)!=*text) strcaterr();
 }
@@ -207,6 +209,31 @@ void toLower(char *term){
     }
 }
 
+void allocMemDictionary(ui n, Dictionary **d){
+
+    if(n==0){
+        *d = (Dictionary*)malloc(sizeof(Dictionary)*SSIZE);
+        if(*d==NULL) exit(25);
+        memset(*d,'\0',sizeof(Dictionary)*SSIZE);
+    }
+    if(SSIZE==n){
+        *d = (Dictionary*)realloc(*d,sizeof(Dictionary)*MSIZE);
+        if(*d==NULL) exit(26);
+        memset(*d+SSIZE,'\0',sizeof(Dictionary)*(MSIZE-SSIZE));
+    }
+    if(MSIZE==n){
+        *d = (Dictionary*)realloc(*d,sizeof(Dictionary)*LSIZE);
+        if(*d==NULL) exit(27);
+        memset(*d+MSIZE,'\0',sizeof(Dictionary)*(LSIZE-MSIZE));
+    }
+    if(LSIZE==n){
+        *d = (Dictionary*)realloc(*d,sizeof(Dictionary)*LSIZE*2);
+        if(*d==NULL) exit(27);
+        memset(*d+LSIZE,'\0',sizeof(Dictionary)*(LSIZE));
+    }
+
+}
+
 void readDictionary(FILE *fp, Dictionary *dictionary[27][27], ui dictionary_num[27][27]){
 
     char l[256] = {0};
@@ -228,10 +255,13 @@ void readDictionary(FILE *fp, Dictionary *dictionary[27][27], ui dictionary_num[
         while(c!=NULL && i<2){
             if(i==0){
                 if(strlen(c)==1) break;
-                if(ASCII<=(ui)c[0] && (ui)c[0]<ASCII+26){
-                    if(ASCII<=(ui)c[1] && (ui)c[1]<ASCII+26){
-                        n = &dictionary_num[(ui)c[0]-ASCII][(ui)c[1]-ASCII];
-                        d = &dictionary[(ui)c[0]-ASCII][(ui)c[1]-ASCII][(*n)+1];
+                ui t0 = (ui)c[0];
+                ui t1 = (ui)c[1];
+                if(ASCII<=t0 && t0<ASCII+26){
+                    if(ASCII<=t1 && t1<ASCII+26){
+                        n = &dictionary_num[t0-ASCII][t1-ASCII];
+                        allocMemDictionary(*n, &dictionary[t0-ASCII][t1-ASCII]);
+                        d = &dictionary[t0-ASCII][t1-ASCII][(*n)];
                         strncpy(infl,c,strlen(c)-1); // remove the last space
                     }
                 }
@@ -486,17 +516,6 @@ void* parse_thread(void* args){
 }
 
 
-void allocMemDictionary(Dictionary *dictionary[27][27]){
-    for(ui i=0;i<27;i++){
-        for(ui j=0;j<27;j++){
-            dictionary[i][j] = (Dictionary*)malloc(sizeof(Dictionary)*LSIZE);
-            if(dictionary[i][j]==NULL) exit(22);
-            memset(dictionary[i][j],'\0',sizeof(Dictionary)*LSIZE);
-            if(dictionary[i][j]==NULL) exit(10);
-        }
-    }
-}
-
 int main(int argc, char* argv[]){
 
     char inDbFile[64] = {0};
@@ -558,7 +577,6 @@ int main(int argc, char* argv[]){
     getStopwords(stopwords, &stopwords_num);
 
     Dictionary *dictionary[27][27];
-    allocMemDictionary(dictionary);
     ui dictionary_num[27][27] = {{0}};
 
     clock_t s, f;
