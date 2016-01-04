@@ -9,7 +9,7 @@
 #define MSIZE 4096
 #define LSIZE 65536
 #define QDATASIZE 65536
-#define QSIZE 16
+#define QSIZE 32
 #define ASCII 97
 #define TERMLEN 48
 
@@ -119,7 +119,7 @@ void reallocerr(char *p){
         fprintf(stderr,"Realloc could not allocate memory.");
         exit(15);
     }else{
-        if(verbose==1) printf("Realloc'd.\n");
+        if(verbose==1) printf("Realloc'd. The size is %lu.\n",strlen(p));
     }
 }
 
@@ -393,17 +393,21 @@ void stretch_qdatasize(ui block_size, char **queue_pos){
     memset(*queue_pos,'\0',need_size);
 }
 
-void copy_to_queue(char *page, char *queue_pos){
+void copy_to_queue(char **queue_pos, char *page){
     ui new_block_size = strlen(page)/QDATASIZE + 1;
-    ui old_block_size = strlen(queue_pos)/QDATASIZE + 1;
+    ui old_block_size = strlen(*queue_pos)/QDATASIZE + 1;
 
     if(old_block_size < new_block_size){
-        stretch_qdatasize(new_block_size, &queue_pos);
+        if(verbose==1)
+            printf("Realloc'd with block size %d to %d.\n",old_block_size,new_block_size);
+        stretch_qdatasize(new_block_size, queue_pos);
     }else if(old_block_size > new_block_size){
-        stretch_qdatasize(old_block_size, &queue_pos);
+        if(verbose==1)
+            printf("Realloc'd with block size %d to %d.\n",old_block_size,new_block_size);
+        stretch_qdatasize(old_block_size, queue_pos);
     }
 
-    strcpy(queue_pos, page);
+    strcpy(*queue_pos, page);
 }
 
 void queue_push(char* page){
@@ -424,8 +428,8 @@ void queue_push(char* page){
     {
         if(verbose==1) printf("[PUSH] Queue prev pos: %d->%d\n",queue_first,queue_last);
 
-        copy_to_queue(page,queue[queue_last]);
-        if(++queue_last>QSIZE-1) queue_last = 0;
+        copy_to_queue(&queue[queue_last++],page);
+        if(queue_last>QSIZE-1) queue_last = 0;
 
         if(verbose==1) printf("[PUSH] Queue post pos: %d->%d\n",queue_first,queue_last);
 
@@ -447,7 +451,7 @@ void run_parse(char* page_raw, thread_args *targs){
 
     char *text_raw = getElementText(page_raw, "text");
     if(text_raw==NULL){
-        printf("\ntext is NULL.\n");
+        printf("\ntext is NULL. %s\n",page_raw);
         return;
     }
     if(verbose==1) printf("%d %p\n",(int)pthread_self(),text_raw);
