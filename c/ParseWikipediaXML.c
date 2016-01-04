@@ -42,6 +42,7 @@ typedef struct {
 
 pthread_mutex_t qmutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t fmutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t critical_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_cond_t push_cond = PTHREAD_COND_INITIALIZER;
 pthread_cond_t pop_cond  = PTHREAD_COND_INITIALIZER;
@@ -456,10 +457,15 @@ void run_parse(char* page_raw, thread_args *targs){
     }
     if(verbose==1) printf("%d %p\n",(int)pthread_self(),text_raw);
 
+    if(verbose==1){
+        printf("[%d]page:%p-%p\n",(int)pthread_self(),page_raw,page_raw+strlen(page_raw)+1);
+        printf("[%d]text:%p-%p\n",(int)pthread_self(),text_raw,text_raw+strlen(text_raw)+1);
+    }
+
+    Bofw *bofw;
     char *term, *savep;
     term = strtok_r(text_raw, " .,;\n", &savep);
 
-    Bofw *bofw;
     bofw = (Bofw*)malloc(sizeof(Bofw)*LSIZE);
     if(bofw==NULL) return;
     memset(bofw,'\0',sizeof(Bofw)*LSIZE);
@@ -509,11 +515,16 @@ void* parse_thread(void* args){
     thread_args *targs = args;
 
     for(;;){
+pthread_mutex_lock(&critical_mutex);
+{
         char *page_raw = queue_pop();
         if(strcmp(page_raw,"::FINISHED::")==0) break;
         run_parse(page_raw, targs);
         free(page_raw);
+}
+pthread_mutex_unlock(&critical_mutex);
     }
+pthread_mutex_unlock(&critical_mutex);
 
     return NULL;
 }
