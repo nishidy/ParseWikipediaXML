@@ -514,14 +514,14 @@ void run_parse(char* page_raw, thread_args *targs){
 void* parse_thread(void* args){
     thread_args *targs = args;
 
-    for(;;){
 pthread_mutex_lock(&critical_mutex);
+    for(;;){
         char *page_raw = queue_pop();
-pthread_mutex_unlock(&critical_mutex);
         if(strcmp(page_raw,"::FINISHED::")==0) break;
         run_parse(page_raw, targs);
         free(page_raw);
     }
+pthread_mutex_unlock(&critical_mutex);
 
     return NULL;
 }
