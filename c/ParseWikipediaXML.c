@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <time.h>
+#include <sys/time.h>
 #include <pthread.h>
 
 #define SSIZE 256
@@ -589,12 +589,12 @@ int main(int argc, char* argv[]){
     Dictionary *dictionary[27][27];
     ui dictionary_num[27][27] = {{0}};
 
-    clock_t s, f;
+    struct timeval s,f;
 
-    s = clock();
+    gettimeofday(&s,NULL);
     readDictionary(fpd, dictionary, dictionary_num);
-    f = clock();
-    printf(" > Read dictionary in %.2f sec.\n",((float)(f-s))/1000000.0);
+    gettimeofday(&f,NULL);
+    printf(" > Read dictionary in %.2f sec.\n",((float)(f.tv_sec-s.tv_sec)+(f.tv_usec-s.tv_usec)/1000000.0));
 
     allocMemQueue();
 
@@ -616,7 +616,7 @@ int main(int argc, char* argv[]){
         threads[i] = th;
     }
 
-    s = clock();
+    gettimeofday(&s,NULL);
     readDatabase(fpi);
 
     for(ui i=0;i<workers;i++){
@@ -627,8 +627,8 @@ int main(int argc, char* argv[]){
         pthread_join(threads[i], NULL);
     }
 
-    f = clock();
-    printf(" > Read database in %.2f sec.\n",((float)(f-s))/1000000.0);
+    gettimeofday(&f,NULL);
+    printf(" > Read database in %.2f sec.\n",((float)(f.tv_sec-s.tv_sec)+(f.tv_usec-s.tv_usec)/1000000.0));
 
     fclose(fpi);
     fclose(fpo);
