@@ -14,10 +14,13 @@ static char *queue[QSIZE];
 
 static pthread_mutex_t qmutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t fmutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t omutex = PTHREAD_MUTEX_INITIALIZER;
 
 static pthread_cond_t push_cond = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t pop_cond  = PTHREAD_COND_INITIALIZER;
 
+static ui page_saved = 0;
+static ui page_parsed= 0;
 
 int getIndexOfTerm(Bofw *bofw, ui cnt_bofw, char *term){
     for(ui i=0;i<cnt_bofw;i++){
@@ -444,7 +447,6 @@ void run_parse(char* page_raw, thread_args *targs){
     ui cnt_bofw = 0;
 
     char m[256] = "Read database";
-    ui lc=0,pc=0;
 
     while(term != NULL){
         toLower(term);
@@ -473,9 +475,17 @@ void run_parse(char* page_raw, thread_args *targs){
     if(cnt_bofw>0){
         qsort((void *)bofw, cnt_bofw, sizeof(Bofw), sort_bofw);
         save(bofw, cnt_bofw, targs->fpo);
-        printf(" > %s [#page(saved/parsed) %d/%d]\r",m,++lc,++pc);
+        pthread_mutex_lock(&omutex);
+        {
+            printf(" > %s [#page(saved/parsed) %d/%d]\r",m,++page_saved,++page_parsed);
+        }
+        pthread_mutex_unlock(&omutex);
     }else{
-        printf(" > %s [#page(saved/parsed) %d/%d]\r",m,lc,++pc);
+        pthread_mutex_lock(&omutex);
+        {
+            printf(" > %s [#page(saved/parsed) %d/%d]\r",m,page_saved,++page_parsed);
+        }
+        pthread_mutex_unlock(&omutex);
     }
 
     free(text_raw);
