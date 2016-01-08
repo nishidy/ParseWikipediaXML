@@ -5,10 +5,10 @@ STD= gnu99
 LIBS= -lpthread
 
 $(PROG):$(PROG).o
-	$(GCC) $^ -o $@ $(LIBS)
+	$(GCC) main.o $^ -o $@ $(LIBS)
 
 $(PROG).o:$(PROG).c
-	$(GCC) -c $^ $(CFLAGS) -std=$(STD)
+	$(GCC) -c main.c $^ $(CFLAGS) -std=$(STD)
 
 .PHONY: clean
 clean:

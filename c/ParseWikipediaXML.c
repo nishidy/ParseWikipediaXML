@@ -4,49 +4,20 @@
 #include <ctype.h>
 #include <sys/time.h>
 #include <pthread.h>
+#include "ParseWikipediaXML.h"
 
-#define SSIZE 256
-#define MSIZE 4096
-#define LSIZE 65536
-#define QDATASIZE 65536
-#define QSIZE 32
-#define ASCII 97
-#define TERMLEN 48
+extern char verbose;
 
-typedef unsigned int ui;
+static ui queue_first= 0;
+static ui queue_last = 0;
+static char *queue[QSIZE];
 
-typedef struct {
-    char term[48];
-    int  freq;
-} Bofw;
+static pthread_mutex_t qmutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t fmutex = PTHREAD_MUTEX_INITIALIZER;
 
-typedef struct {
-    char infl[TERMLEN]; // inflected
-    char base[TERMLEN]; // baseform
-} Dictionary;
+static pthread_cond_t push_cond = PTHREAD_COND_INITIALIZER;
+static pthread_cond_t pop_cond  = PTHREAD_COND_INITIALIZER;
 
-char verbose = 0;
-
-ui queue_first= 0;
-ui queue_last = 0;
-char *queue[QSIZE];
-
-typedef struct {
-    FILE* fpi;
-    FILE* fpo;
-    char *stopwords;
-    ui stopwords_num;
-    Dictionary *dictionary;
-    ui *dictionary_num;
-} thread_args;
-
-pthread_mutex_t qmutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t fmutex = PTHREAD_MUTEX_INITIALIZER;
-
-pthread_cond_t push_cond = PTHREAD_COND_INITIALIZER;
-pthread_cond_t pop_cond  = PTHREAD_COND_INITIALIZER;
-
-///////////////////////////////////////////////////////
 
 int getIndexOfTerm(Bofw *bofw, ui cnt_bofw, char *term){
     for(ui i=0;i<cnt_bofw;i++){
@@ -523,115 +494,5 @@ void* parse_thread(void* args){
     }
 
     return NULL;
-}
-
-
-int main(int argc, char* argv[]){
-
-    char inDbFile[64] = {0};
-    char inDictFile[64] = {0};
-    char outBofwFile[64] = {0};
-    ui workers = 1;
-    char r = 0;
-
-    argc--;
-    argv++;
-
-    for(int i=0;i<argc;i++){
-        if(i%2==r){
-            if(strlen(argv[i])>2){
-                printf("Wrong option (%s).\n",argv[i]);
-                exit(0);
-            }
-            char c = argv[i][1];
-            switch (c) {
-                case 'i':
-                    strncpy(inDbFile, argv[i+1], strlen(argv[i+1]));
-                    break;
-                case 'd':
-                    strncpy(inDictFile, argv[i+1], strlen(argv[i+1]));
-                    break;
-                case 's':
-                    strncpy(outBofwFile, argv[i+1], strlen(argv[i+1]));
-                    break;
-                case 'w':
-                    workers = atoi(argv[i+1]);
-                    break;
-                case 'v':
-                    verbose = 1;
-                    r^=1;
-                    break;
-                default:
-                    break;
-            }
-        } else {
-        }
-    }
-
-    if(strlen(inDbFile)==0){
-        printf("Need to give input file.\n");
-        exit(1);
-    }
-
-    FILE *fpi, *fpd = NULL, *fpo = NULL;
-    fpi = fopen(inDbFile,"r");
-    if(strlen(inDictFile)>0){
-        fpd = fopen(inDictFile,"r");
-    }
-    if(strlen(outBofwFile)>0){
-        fpo = fopen(outBofwFile,"w");
-    }
-
-    char stopwords[1024][16] = {{0}};
-    ui stopwords_num = 0;
-    getStopwords(stopwords, &stopwords_num);
-
-    Dictionary *dictionary[27][27];
-    ui dictionary_num[27][27] = {{0}};
-
-    struct timeval s,f;
-
-    gettimeofday(&s,NULL);
-    readDictionary(fpd, dictionary, dictionary_num);
-    gettimeofday(&f,NULL);
-    printf(" > Read dictionary in %.2f sec.\n",((float)(f.tv_sec-s.tv_sec)+(f.tv_usec-s.tv_usec)/1000000.0));
-
-    allocMemQueue();
-
-    thread_args targs;
-    targs.fpi = fpi;
-    targs.fpo = fpo;
-    targs.stopwords = (char*)stopwords;
-    targs.stopwords_num = stopwords_num;
-    targs.dictionary = (Dictionary*)dictionary;
-    targs.dictionary_num = (ui*)dictionary_num;
-
-    pthread_t *threads;
-    threads = (pthread_t*)malloc(sizeof(pthread_t)*workers);
-    if(threads==NULL) return -1;
-
-    for(ui i=0;i<workers;i++){
-        pthread_t th;
-        pthread_create(&th, NULL, parse_thread, &targs);
-        threads[i] = th;
-    }
-
-    gettimeofday(&s,NULL);
-    readDatabase(fpi);
-
-    for(ui i=0;i<workers;i++){
-        queue_push("::FINISHED::");
-    }
-
-    for(ui i=0;i<workers;i++){
-        pthread_join(threads[i], NULL);
-    }
-
-    gettimeofday(&f,NULL);
-    printf(" > Read database in %.2f sec.\n",((float)(f.tv_sec-s.tv_sec)+(f.tv_usec-s.tv_usec)/1000000.0));
-
-    fclose(fpi);
-    fclose(fpo);
-
 }
 
