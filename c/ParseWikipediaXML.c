@@ -42,7 +42,6 @@ typedef struct {
 
 pthread_mutex_t qmutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t fmutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t critical_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_cond_t push_cond = PTHREAD_COND_INITIALIZER;
 pthread_cond_t pop_cond  = PTHREAD_COND_INITIALIZER;
@@ -156,7 +155,7 @@ char* getElementText(char *page, char *tag){
 }
 
 void append_text(char **text, char *l){
-    if((strlen(*text)%LSIZE)+strlen(l)>LSIZE){
+    if((strlen(*text)%LSIZE)+strlen(l)>=LSIZE){
         ui need_size = sizeof(char) * LSIZE * (strlen(*text)/LSIZE+2);
         *text = (char*)realloc(*text, need_size);
         reallocerr(*text);
@@ -366,11 +365,13 @@ char* queue_pop(){
     }
     pthread_mutex_unlock(&qmutex);
 
-    char *page = (char*)malloc(sizeof(char) * strlen(queue[queue_first]));
-    if(page==NULL) exit(21);
 
+    char *page;
     pthread_mutex_lock(&qmutex);
     {
+        page = (char*)malloc(sizeof(char) * (strlen(queue[queue_first]) + 1));
+        if(page==NULL) exit(21);
+
         if(verbose==1) printf("[POP] Queue prev pos: %d->%d\n",queue_first,queue_last);
 
         // TODO: Remove strcpy to use memory address assgined into queue
@@ -514,14 +515,12 @@ void run_parse(char* page_raw, thread_args *targs){
 void* parse_thread(void* args){
     thread_args *targs = args;
 
-pthread_mutex_lock(&critical_mutex);
     for(;;){
         char *page_raw = queue_pop();
         if(strcmp(page_raw,"::FINISHED::")==0) break;
         run_parse(page_raw, targs);
         free(page_raw);
     }
-pthread_mutex_unlock(&critical_mutex);
 
     return NULL;
 }
