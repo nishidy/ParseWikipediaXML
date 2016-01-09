@@ -24,6 +24,23 @@ typedef struct {
 } Dictionary;
 
 typedef struct {
+    char s[1024][16];
+    ui n;
+} Stopwords;
+
+typedef struct {
+    Dictionary *dictionary[27][27];
+    ui dictionary_num[27][27];
+} dict_info;
+
+typedef struct {
+    char inDbFile[64];
+    char inDictFile[64];
+    char outBofwFile[64];
+    ui workers;
+} prog_args;
+
+typedef struct {
     FILE* fpi;
     FILE* fpo;
     char *stopwords;
@@ -32,6 +49,12 @@ typedef struct {
     ui *dictionary_num;
 } thread_args;
 
+
+void startJoinThreads(prog_args *args, Stopwords *stopwords, dict_info *dict);
+
+thread_args* setThreadArgs(prog_args *args, Stopwords *stopwords, dict_info *dict);
+
+prog_args* set_args(int argc, char* argv[]);
 
 int getIndexOfTerm(Bofw *bofw, ui cnt_bofw, char *term);
 
@@ -59,11 +82,13 @@ void toLower(char *term);
 
 void allocMemDictionary(ui n, Dictionary **d);
 
-void readDictionary(FILE *fp, Dictionary *dictionary[27][27], ui dictionary_num[27][27]);
+void getDictionary(FILE *fp, dict_info *dict);
+
+dict_info* readDictionary(prog_args *args);
 
 void toBaseform(char *term, Dictionary *dictionary[27][27], ui dictionary_num[27][27]);
 
-void getStopwords(char stopwords[][16], ui* stopwords_num);
+Stopwords* getStopwords();
 
 int isStopword(char *term, char stopwords[][16], ui stopwords_num);
 

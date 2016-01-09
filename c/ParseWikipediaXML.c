@@ -6,8 +6,7 @@
 #include <pthread.h>
 #include "ParseWikipediaXML.h"
 
-extern char verbose;
-
+static char verbose;
 static ui queue_first= 0;
 static ui queue_last = 0;
 static char *queue[QSIZE];
@@ -21,6 +20,118 @@ static pthread_cond_t pop_cond  = PTHREAD_COND_INITIALIZER;
 
 static ui page_saved = 0;
 static ui page_parsed= 0;
+
+void startJoinThreads(prog_args *args, Stopwords *stopwords, dict_info *dict){
+
+    thread_args *targs = setThreadArgs(args, stopwords, dict);
+
+    allocMemQueue();
+
+    pthread_t *threads[QSIZE];
+
+    for(ui i=0;i<args->workers;i++){
+        pthread_t *th = (pthread_t*)malloc(sizeof(pthread_t));
+        if(th==NULL) fprintf(stderr,"malloc failed\n");
+        pthread_create(th, NULL, parse_thread, targs);
+        threads[i] = th;
+    }
+
+    struct timeval s,f;
+    gettimeofday(&s,NULL);
+
+    readDatabase(targs->fpi);
+    for(ui i=0;i<args->workers;i++){
+        queue_push("::FINISHED::");
+    }
+
+    for(ui i=0;i<args->workers;i++){
+        pthread_join(*threads[i], NULL);
+    }
+
+    gettimeofday(&f,NULL);
+    printf(" > Read database in %.2f sec.\n",((float)(f.tv_sec-s.tv_sec)+(f.tv_usec-s.tv_usec)/1000000.0));
+
+    fclose(targs->fpi);
+    fclose(targs->fpo);
+}
+
+thread_args* setThreadArgs(prog_args *args, Stopwords *stopwords, dict_info *dict){
+
+    thread_args *targs = (thread_args*)malloc(sizeof(thread_args));
+
+    FILE *fpi = (FILE*)malloc(sizeof(FILE));
+    if(fpi==NULL) fprintf(stderr,"malloc failed\n");
+
+    FILE *fpo = (FILE*)malloc(sizeof(FILE));
+    if(fpo==NULL) fprintf(stderr,"malloc failed\n");
+
+    fpi = fopen(args->inDbFile,"r");
+
+    if(strlen(args->outBofwFile)>0){
+        fpo = fopen(args->outBofwFile,"w");
+    }
+
+    targs->fpi = fpi;
+    targs->fpo = fpo;
+    targs->stopwords = (char*)stopwords->s;
+    targs->stopwords_num = stopwords->n;
+    targs->dictionary = (Dictionary*)dict->dictionary;
+    targs->dictionary_num = (ui*)dict->dictionary_num;
+
+    return targs;
+
+}
+
+
+prog_args* set_args(int argc, char* argv[]){
+
+    prog_args *args = (prog_args*)malloc(sizeof(prog_args));
+    if(args==NULL) fprintf(stderr,"malloc failed\n");
+    memset(args,'\0',sizeof(prog_args));
+
+    argc--;
+    argv++;
+
+    char r = 0;
+
+    for(int i=0;i<argc;i++){
+        if(i%2==r){
+            if(strlen(argv[i])>2){
+                printf("Wrong option (%s).\n",argv[i]);
+                exit(0);
+            }
+            char c = argv[i][1];
+            switch (c) {
+                case 'i':
+                    strncpy(args->inDbFile, argv[i+1], strlen(argv[i+1]));
+                    break;
+                case 'd':
+                    strncpy(args->inDictFile, argv[i+1], strlen(argv[i+1]));
+                    break;
+                case 's':
+                    strncpy(args->outBofwFile, argv[i+1], strlen(argv[i+1]));
+                    break;
+                case 'w':
+                    args->workers = atoi(argv[i+1]);
+                    break;
+                case 'v':
+                    verbose = 1;
+                    r^=1;
+                    break;
+                default:
+                    break;
+            }
+        } else {
+        }
+    }
+
+    if(strlen(args->inDbFile)==0){
+        printf("Need to give input file.\n");
+        exit(1);
+    }
+
+    return args;
+}
 
 int getIndexOfTerm(Bofw *bofw, ui cnt_bofw, char *term){
     for(ui i=0;i<cnt_bofw;i++){
@@ -207,7 +318,29 @@ void allocMemDictionary(ui n, Dictionary **d){
 
 }
 
-void readDictionary(FILE *fp, Dictionary *dictionary[27][27], ui dictionary_num[27][27]){
+dict_info* readDictionary(prog_args *args){
+
+    dict_info *dict = (dict_info*)malloc(sizeof(dict_info));
+    if(dict==NULL) fprintf(stderr,"malloc failed\n");
+    memset(dict,'\0',sizeof(dict_info));
+
+    FILE *fpd = NULL;
+    if(strlen(args->inDictFile)>0){
+        fpd = fopen(args->inDictFile,"r");
+    }
+
+    struct timeval s,f;
+    gettimeofday(&s,NULL);
+    getDictionary(fpd,dict);
+    gettimeofday(&f,NULL);
+    printf(" > Read dictionary in %.2f sec.\n",((float)(f.tv_sec-s.tv_sec)+(f.tv_usec-s.tv_usec)/1000000.0));
+
+    fclose(fpd);
+
+    return dict;
+}
+
+void getDictionary(FILE *fp, dict_info *dict){
 
     char l[256] = {0};
     int cnt_dict = 0;
@@ -232,9 +365,9 @@ void readDictionary(FILE *fp, Dictionary *dictionary[27][27], ui dictionary_num[
                 ui t1 = (ui)c[1];
                 if(ASCII<=t0 && t0<ASCII+26){
                     if(ASCII<=t1 && t1<ASCII+26){
-                        n = &dictionary_num[t0-ASCII][t1-ASCII];
-                        allocMemDictionary(*n, &dictionary[t0-ASCII][t1-ASCII]);
-                        d = &dictionary[t0-ASCII][t1-ASCII][(*n)];
+                        n = &dict->dictionary_num[t0-ASCII][t1-ASCII];
+                        allocMemDictionary(*n, &dict->dictionary[t0-ASCII][t1-ASCII]);
+                        d = &dict->dictionary[t0-ASCII][t1-ASCII][(*n)];
                         strncpy(infl,c,strlen(c)-1); // remove the last space
                     }
                 }
@@ -283,17 +416,20 @@ void toBaseform(char *term, Dictionary *dictionary[27][27], ui dictionary_num[27
     }
 }
 
-void getStopwords(char stopwords[][16], ui* stopwords_num){
+Stopwords* getStopwords(){
+
+    Stopwords *stopwords = (Stopwords*)malloc(sizeof(Stopwords));
 
     char stopwords_base[1024] = "a,able,about,across,after,all,almost,also,am,among,an,and,any,are,as,at,be,because,been,but,by,can,cannot,could,dear,did,do,does,either,else,ever,every,for,from,get,got,had,has,have,he,her,hers,him,his,how,however,i,if,in,into,is,it,its,just,least,let,like,likely,may,me,might,most,must,my,neither,no,nor,not,of,off,often,on,only,or,other,our,own,rather,said,say,says,she,should,since,so,some,than,that,the,their,them,then,there,these,they,this,tis,to,too,twas,us,wants,was,we,were,what,when,where,which,while,who,whom,why,will,with,would,yet,you,your";
 
     char *c = strtok(stopwords_base,",");
     while(c != NULL){
-        strcpy(*stopwords,c);
-        stopwords++;
-        (*stopwords_num)++;
+        strcpy(*(stopwords->s+stopwords->n),c);
+        ++stopwords->n;
         c = strtok(NULL,",");
     }
+
+    return stopwords;
 }
 
 int isStopword(char *term, char stopwords[][16], ui stopwords_num){
