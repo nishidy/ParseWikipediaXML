@@ -14,6 +14,8 @@ int main(int argc, char* argv[]){
 
     Stopwords *stopwords = getStopwords();
 
+    registTags(args, "page", "text", "title");
+
     startJoinThreads(args, stopwords, dict);
 
     free(stopwords);

@@ -35,10 +35,17 @@ typedef struct {
 } dict_info;
 
 typedef struct {
+    char target[32];
+    char content[32];
+    char title[32];
+} tags_info;
+
+typedef struct {
     char inDbFile[FNAMELEN];
     char inDictFile[FNAMELEN];
     char outBofwFile[FNAMELEN];
     ui workers;
+    tags_info tags;
 } prog_args;
 
 typedef struct {
@@ -48,8 +55,12 @@ typedef struct {
     ui stopwords_num;
     Dictionary *dictionary;
     ui *dictionary_num;
+    char *content;
+    char *title;
 } thread_args;
 
+
+void registTags(prog_args *args, const char *target, const char *content, const char *title);
 
 void startJoinThreads(prog_args *args, Stopwords *stopwords, dict_info *dict);
 
@@ -105,7 +116,7 @@ void copy_to_queue(char **queue_pos, char *page);
 
 void queue_push(char* page);
 
-void readDatabase(FILE *fpi);
+void readDatabase(FILE *fpi, char *target);
 
 void run_parse(char* page_raw, thread_args *targs);
 

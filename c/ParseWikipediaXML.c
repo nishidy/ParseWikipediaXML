@@ -21,6 +21,13 @@ static pthread_cond_t pop_cond  = PTHREAD_COND_INITIALIZER;
 static ui page_saved = 0;
 static ui page_parsed= 0;
 
+
+void registTags(prog_args *args, const char *target, const char *content, const char *title){
+    strncpy(args->tags.target,target,32);
+    strncpy(args->tags.content,content,32);
+    strncpy(args->tags.title,title,32);
+}
+
 void startJoinThreads(prog_args *args, Stopwords *stopwords, dict_info *dict){
 
     thread_args *targs = setThreadArgs(args, stopwords, dict);
@@ -39,7 +46,8 @@ void startJoinThreads(prog_args *args, Stopwords *stopwords, dict_info *dict){
     struct timeval s,f;
     gettimeofday(&s,NULL);
 
-    readDatabase(targs->fpi);
+    readDatabase(targs->fpi, args->tags.target);
+
     for(ui i=0;i<args->workers;i++){
         queue_push("::FINISHED::");
     }
@@ -77,6 +85,8 @@ thread_args* setThreadArgs(prog_args *args, Stopwords *stopwords, dict_info *dic
     targs->stopwords_num = stopwords->n;
     targs->dictionary = (Dictionary*)dict->dictionary;
     targs->dictionary_num = (ui*)dict->dictionary_num;
+	targs->content = args->tags.content;
+	targs->title = args->tags.title;
 
     return targs;
 
@@ -551,9 +561,9 @@ void queue_push(char* page){
 
 }
 
-void readDatabase(FILE *fpi){
+void readDatabase(FILE *fpi, char *target){
     char *page_raw;
-    while( (page_raw=cbElementTextRaw(fpi,"page"))!=NULL ){
+    while( (page_raw=cbElementTextRaw(fpi,target))!=NULL ){
         queue_push(page_raw);
         free(page_raw);
     }
@@ -561,7 +571,7 @@ void readDatabase(FILE *fpi){
 
 void run_parse(char* page_raw, thread_args *targs){
 
-    char *text_raw = getElementText(page_raw, "text");
+    char *text_raw = getElementText(page_raw, targs->content);
     if(text_raw==NULL){
         printf("\ntext is NULL. %s\n",page_raw);
         return;
