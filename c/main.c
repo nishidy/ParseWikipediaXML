@@ -8,19 +8,19 @@
 
 int main(int argc, char* argv[]){
 
-	prog_args *args = set_args(argc, argv);
+    prog_args *args = set_args(argc, argv);
 
     dict_info *dict = readDictionary(args);
 
     Stopwords *stopwords = getStopwords();
 
-	startJoinThreads(args, stopwords, dict);
+    startJoinThreads(args, stopwords, dict);
 
-	free(stopwords);
-	free(dict);
+    free(stopwords);
+    free(dict);
 
-	// Run TF-IDF
+    // Run TF-IDF
 
-	free(args);
+    free(args);
 }
 

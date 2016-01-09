@@ -12,5 +12,5 @@ $(PROG).o:$(PROG).c
 
 .PHONY: clean
 clean:
-	rm $(PROG).o
+	rm $(PROG).o main.o
 
