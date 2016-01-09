@@ -10,6 +10,7 @@
 #define QSIZE 32
 #define ASCII 97
 #define TERMLEN 48
+#define FNAMELEN 64
 
 typedef unsigned int ui;
 
@@ -34,9 +35,9 @@ typedef struct {
 } dict_info;
 
 typedef struct {
-    char inDbFile[64];
-    char inDictFile[64];
-    char outBofwFile[64];
+    char inDbFile[FNAMELEN];
+    char inDictFile[FNAMELEN];
+    char outBofwFile[FNAMELEN];
     ui workers;
 } prog_args;
 

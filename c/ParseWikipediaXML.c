@@ -103,13 +103,13 @@ prog_args* set_args(int argc, char* argv[]){
             char c = argv[i][1];
             switch (c) {
                 case 'i':
-                    strncpy(args->inDbFile, argv[i+1], strlen(argv[i+1]));
+                    strncpy(args->inDbFile, argv[i+1], FNAMELEN);
                     break;
                 case 'd':
-                    strncpy(args->inDictFile, argv[i+1], strlen(argv[i+1]));
+                    strncpy(args->inDictFile, argv[i+1], FNAMELEN);
                     break;
                 case 's':
-                    strncpy(args->outBofwFile, argv[i+1], strlen(argv[i+1]));
+                    strncpy(args->outBofwFile, argv[i+1], FNAMELEN);
                     break;
                 case 'w':
                     args->workers = atoi(argv[i+1]);
