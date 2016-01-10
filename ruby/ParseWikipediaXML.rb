@@ -40,7 +40,7 @@ module ParseWikipediaXML
 
     attr_reader :options, :write_lock, :hdlr_bofw, :hdlr_title, :hdlr_tfidf, :redis
     attr_reader :tospexp, :splexp, :termexp, :page_queue
-    attr_reader :targettag, :contenttag, :titletag
+    attr_reader :target_tag, :content_tag, :title_tag
 
     def initialize(options)
       @options = options
@@ -86,9 +86,9 @@ module ParseWikipediaXML
     end
 
     def register_tags(target,content,title)
-      @targettag  = target
-      @contenttag = content
-      @titletag   = title
+      @target_tag  = target
+      @content_tag = content
+      @title_tag   = title
     end
 
     def post_each_parse(hash_bofw, total_num_of_words, title)
@@ -247,10 +247,10 @@ module ParseWikipediaXML
 
     def start_parse(page)
       fiber = Fiber.new do |page_|
-        %r{<#{@contenttag}[^>]*>([^<>]*)<\/#{@contenttag}>} =~ page_
+        %r{<#{@content_tag}[^>]*>([^<>]*)<\/#{@content_tag}>} =~ page_
         text = Regexp.last_match(1)
 
-        %r{<#{@titletag}[^>]*>([^<>]*)<\/#{@titletag}>} =~ page_
+        %r{<#{@title_tag}[^>]*>([^<>]*)<\/#{@title_tag}>} =~ page_
         title = Regexp.last_match(1)
 
         h, n = parse_bofw(text)
@@ -277,27 +277,32 @@ module ParseWikipediaXML
       [hash_bofw, total_num_of_words]
     end
 
+    def cb_element_text_raw(file,tag)
+      startflag = stopflag = false
+      page = ''
+      opentag='<'+tag; closetag='</'+tag
+      file.each_line do |line|
+        startflag = true if line.include? opentag
+        stopflag = true if line.include? closetag
+        page << line if startflag
+        break if startflag && stopflag
+      end
+      return page, !(startflag && stopflag)
+    end
+
     def pre_parse
       @redis.set 'start_time', Time.now.to_f unless @redis.nil?
 
-      cl=0
       cp=0
       m='> Reading database'
-      startflag = stopflag = false, page = ''
       s = Time.now.to_f
-      File.readlines(@options[:inWikiFile]).each do |line|
-        cl += 1
-        startflag = true if line.include? '<'+@targettag
-        stopflag = true if line.include? '</'+@targettag
-        page << line if startflag
-
-        if startflag && stopflag then
+      File.open(@options[:inWikiFile]) do |file|
+        loop {
+          page, err = cb_element_text_raw(file,@target_tag)
+          break if err
           yield(page)
-          cp += 1
-          page = ''
-          startflag = stopflag = false
-        end
-        print " #{m} [#page #{cp}]/[#line #{cl}]\r"
+          print " #{m} [#page #{cp+=1}]\r"
+        }
       end
       f = Time.now.to_f
       puts format("\n %s in %.2f sec.", m, f-s)
