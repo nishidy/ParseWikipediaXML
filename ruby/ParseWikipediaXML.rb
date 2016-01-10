@@ -109,13 +109,13 @@ module ParseWikipediaXML
     end
 
     def run_parser
-      pre_parse(&method(:start_parse))
+      wrapper_parse(&method(:start_parse))
     end
 
     def run_pusher
       @page_queue = Queue.new
       DRb.start_service("druby://localhost:12345",@page_queue)
-      pre_parse(&method(:push_page))
+      wrapper_parse(&method(:push_page))
       @page_queue.push "::FINISHED::"
       DRb.thread.join
     end
@@ -290,7 +290,7 @@ module ParseWikipediaXML
       return page, !(startflag && stopflag)
     end
 
-    def pre_parse
+    def wrapper_parse
       @redis.set 'start_time', Time.now.to_f unless @redis.nil?
 
       cp=0
