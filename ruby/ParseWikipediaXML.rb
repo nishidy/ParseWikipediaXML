@@ -319,17 +319,19 @@ module ParseWikipediaXML
       pc=0
       m='> Reading dictionary'
       s = Time.now.to_f
-      File.readlines(@options[:inDictFile]).each do |line|
-        items = line.split(/\t/)
-        if items.size > 2
-          pc+=1
-          trans = items[0].gsub(/ $/,"")
-          base = items[2]
-          unless trans == base or base.include?(' ')
-              @hash_dict[trans] = base
-              lc+=1
+      File.open(@options[:inDictFile]) do |file|
+        file.each_line do |line|
+          items = line.split(/\t/)
+          if items.size > 2
+            pc+=1
+            trans = items[0].gsub(/ $/,"")
+            base = items[2]
+            unless trans == base or base.include?(' ')
+                @hash_dict[trans] = base
+                lc+=1
+            end
+            print " #{m} [#word(loaded/parsed) #{lc}/#{pc}]\r"
           end
-          print " #{m} [#word(loaded/parsed) #{lc}/#{pc}]\r"
         end
       end
       f = Time.now.to_f
