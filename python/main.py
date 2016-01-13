@@ -1,11 +1,11 @@
 from ParseWikipediaXML import Parser
 import sys
-import psycopg2
 
-from functools import cmp_to_key, reduce
+import psycopg2
+from functools import reduce
 import re
 
-def myWriteToFile(self, dictBofw, title):
+def myWriteIntoHstore(self, dictBofw, title):
 
     docCount=sum(dictBofw.values())
 
@@ -37,7 +37,7 @@ def myWriteToFile(self, dictBofw, title):
     return code
 
 parser = Parser(sys.argv).new()
-parser.post_process = myWriteToFile
+parser.post_process = myWriteIntoHstore
 parser.readDictionary()
 parser.startParse()
 
