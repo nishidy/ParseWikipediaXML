@@ -189,6 +189,11 @@ func downloadXml() {
 
 func GetOpts() *Args {
 
+	if len(os.Args[1:]) == 0 {
+		fmt.Println("Run with -h to show help.")
+		os.Exit(1)
+	}
+
 	args := new(Args)
 
 	flag.StringVar(&args.inWikiFile, "i", "", "Input File(Wikipedia)")
