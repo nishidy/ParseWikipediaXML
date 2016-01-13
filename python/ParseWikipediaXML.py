@@ -11,6 +11,12 @@ import redis
 import time
 import math
 
+if sys.version_info[0] == 2:
+    import Queue
+    import msgpack
+else:
+    import queue as Queue
+    from functools import cmp_to_key, reduce
 
 def python_sorted(lst):
     if sys.version_info[0] == 2:
@@ -68,7 +74,7 @@ class bofwThread(threading.Thread):
                 text = match.group(1)
 
                 dictBofw = self.parser.parseText(text)
-                if self.parser.writeToFile(dictBofw, title): bofwThread.saved+=1
+                if self.parser.post_process(self.parser, dictBofw, title): bofwThread.saved+=1
 
             self.report()
 
@@ -81,10 +87,10 @@ class bofwThread(threading.Thread):
 
         bofwThread.lock.acquire()
         bofwThread.pages += 1
-        print( "%(message)s [ # page %(count)s / # saved %(saved)s @ thread %(index)s ]" %
+        print( "%(message)s [#page(saved/parsed) %(saved)s/%(count)s @ thread %(index)s]" %
                 { "message" : m,
                   "count"   : bofwThread.pages,
-                  "saved" : bofwThread.saved,
+                  "saved"   : bofwThread.saved,
                   "index"   : self.idx
                 },
                 "\r", end="" )
@@ -125,12 +131,14 @@ def check_time(func):
 class AbstParser():
 
     def __init__(self,args):
+
         self.lockb = threading.Lock()
         self.lockt = threading.Lock()
         self.args = args
         self.queue = Queue.Queue()
         self.client = redis.StrictRedis()
         self.redis_check()
+        self.post_process = self.writeToFile
 
     def redis_check(self):
         try:
@@ -404,7 +412,7 @@ class EngParser(AbstParser):
 
         return dictBofw
 
-class Main():
+class Parser():
 
     def __init__(self,argv):
         self.parseArgs(argv)
@@ -426,24 +434,27 @@ class Main():
 
         self.args = parser.parse_args(argv[1:])
 
+    def new(self):
+        if self.args.isjapanese:
+            parser = JapParser(self.args)
+        else:
+            parser = EngParser(self.args)
+
+        return parser
+
     def start(self):
+
         if self.args.isjapanese:
             parser = JapParser(self.args)
         else:
             parser = EngParser(self.args)
             parser.readDictionary()
+
         parser.startParse()
         parser.applyTfIdf()
 
 
 if __name__ == "__main__":
 
-    if sys.version_info[0] == 2:
-        import Queue
-        import msgpack
-    else:
-        import queue as Queue
-        from functools import cmp_to_key, reduce
-
-    Main(sys.argv).start()
+    Parser(sys.argv).start()
 
