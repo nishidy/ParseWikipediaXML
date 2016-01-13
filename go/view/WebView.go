@@ -68,7 +68,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	tmpl, err :=
 		template.New("index.tpl").
 			Funcs(template.FuncMap{"Func": GetUpperNum}).
-			ParseFiles("views/index.tpl")
+			ParseFiles("templ/index.tpl")
 
 	if err != nil {
 		panic(err)
