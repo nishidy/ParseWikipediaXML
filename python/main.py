@@ -3,16 +3,11 @@ import sys
 
 import psycopg2
 from functools import reduce
-import re
 
 def myWriteIntoHstore(self, dictBofw, title):
 
     docCount=sum(dictBofw.values())
 
-    conn = psycopg2.connect("dbname=testdb host=localhost user=test password=test")
-    cur = conn.cursor()
-
-    code = False
     if docCount >= self.args.minw and docCount <= self.args.maxw:
 
         # Make string from list of tuples of bag-of-words
@@ -23,20 +18,24 @@ def myWriteIntoHstore(self, dictBofw, title):
         ).rstrip(",")
 
         if len(cont) > 1:
+
+            cur = self.db_conn.cursor()
             cur.execute(
                 "INSERT INTO output (title, bagofwords) VALUES( '{0}', '{1}' )".format(
                     title.replace('\'','\'\''), cont.replace('\'','\'\'')
                 )
             )
             conn.commit()
-            code = True
+            cur.close()
 
-    cur.close()
-    conn.close()
+            return True
 
-    return code
+    return False
+
+conn = psycopg2.connect("dbname=testdb host=localhost user=test password=test")
 
 parser = Parser(sys.argv).new()
+parser.db_conn = conn
 parser.post_process = myWriteIntoHstore
 parser.readDictionary()
 parser.startParse()
