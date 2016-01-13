@@ -35,8 +35,11 @@ def myWriteIntoHstore(self, dictBofw, title):
 conn = psycopg2.connect("dbname=testdb host=localhost user=test password=test")
 
 parser = Parser(sys.argv).new()
+
 parser.db_conn = conn
 parser.post_process = myWriteIntoHstore
+
 parser.readDictionary()
 parser.startParse()
 
+conn.close()
