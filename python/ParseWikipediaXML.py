@@ -128,6 +128,31 @@ def check_time(func):
         return result
     return wrapper
 
+def writeToFile(self, dictBofw, title):
+
+    docCount=sum(dictBofw.values())
+    listTupleBofw = python_sorted(dictBofw.items())
+
+    if docCount >= self.args.minw and docCount <= self.args.maxw:
+
+        # Make string from list of tuples of bag-of-words
+        cont = reduce(
+            lambda _cont, _bofw: _cont+_bofw[0]+" "+str(_bofw[1])+" ",
+            [ _bofw for _bofw in listTupleBofw if _bofw[1] >= self.args.minc ],
+            ""
+        ).rstrip()
+
+        if len(cont) > 1:
+            self.lockb.acquire()
+            with open(self.args.ofcont,'a') as f:
+                f.write(cont+"\n")
+            self.lockb.release()
+            self.writeTitleToFile(title)
+
+            return True
+
+    return False
+
 class AbstParser():
 
     def __init__(self,args):
@@ -138,7 +163,7 @@ class AbstParser():
         self.queue = Queue.Queue()
         self.client = redis.StrictRedis()
         self.redis_check()
-        self.post_process = self.writeToFile
+        self.post_process = writeToFile
 
     def redis_check(self):
         try:
@@ -200,31 +225,6 @@ class AbstParser():
         with open(self.args.oftitle,'a') as f:
             f.write(title+"\n")
         self.lockt.release()
-
-    def writeToFile(self, dictBofw, title):
-
-        docCount=sum(dictBofw.values())
-        listTupleBofw = python_sorted(dictBofw.items())
-
-        if docCount >= self.args.minw and docCount <= self.args.maxw:
-
-            # Make string from list of tuples of bag-of-words
-            cont = reduce(
-                lambda _cont, _bofw: _cont+_bofw[0]+" "+str(_bofw[1])+" ",
-                [ _bofw for _bofw in listTupleBofw if _bofw[1] >= self.args.minc ],
-                ""
-            ).rstrip()
-
-            if len(cont) > 1:
-                self.lockb.acquire()
-                with open(self.args.ofcont,'a') as f:
-                    f.write(cont+"\n")
-                self.lockb.release()
-                self.writeTitleToFile(title)
-
-                return True
-
-        return False
 
     def saveWordCountsToRedis(self,total,num):
         if self.client == None: return
