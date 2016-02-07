@@ -67,14 +67,18 @@ class bofwThread(threading.Thread):
 
             elif re.search(args.recateg, page):
 
-                match = re.search("<title[^<>]*>([^<>]+)</title>",page)
-                title= match.group(1)
+                titlema = re.search("<title[^<>]*>([^<>]+)</title>",page)
+                textma = re.search("<text[^<>]*>([^<>]+)</text>",page)
 
-                match = re.search("<text[^<>]*>([^<>]+)</text>",page)
-                text = match.group(1)
+                if titlema and textma:
 
-                dictBofw = self.parser.parseText(text)
-                if self.parser.post_process(self.parser, dictBofw, title): bofwThread.saved+=1
+                    title = titlema.group(1)
+                    text = textma.group(1)
+
+                    dictBofw = self.parser.parseText(text)
+
+                    if self.parser.post_process(self.parser, dictBofw, title):
+                        bofwThread.saved+=1
 
             self.report()
 
