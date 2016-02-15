@@ -52,7 +52,7 @@ module ParseWikipediaXML
       rescue => e
         e.message
       end
-      set_regexps(" ", "^[a-z][0-9a-z'-]*[0-9a-z]$")
+      set_regexps(/ /, /^[a-z][0-9a-z'-]*[0-9a-z]$/)
     end
 
     def save_bofw_to_file(bofw)
