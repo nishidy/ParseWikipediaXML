@@ -39,7 +39,7 @@ module ParseWikipediaXML
     include RedisClient
 
     attr_reader :options, :write_lock, :hdlr_bofw, :hdlr_title, :hdlr_tfidf, :redis
-    attr_reader :tospexp, :splexp, :termexp, :page_queue
+    attr_reader :separator, :termexp, :page_queue
     attr_reader :target_tag, :content_tag, :title_tag
 
     def initialize(options)
@@ -52,13 +52,7 @@ module ParseWikipediaXML
       rescue => e
         e.message
       end
-      init_default_exps
-    end
-
-    def init_default_exps
-      @tospexp = '[,.;]'
-      @splexp="[ \n]"
-      @termexp="^[a-z][0-9a-z'-]*[0-9a-z]$"
+      set_regexps(" ", "^[a-z][0-9a-z'-]*[0-9a-z]$")
     end
 
     def save_bofw_to_file(bofw)
@@ -79,9 +73,8 @@ module ParseWikipediaXML
       end
     end
 
-    def set_exps(tosp, spl,term)
-      @tospexp = tosp
-      @splexp  = spl
+    def set_regexps(tosp, term)
+      @separator = tosp
       @termexp = term
     end
 
@@ -267,7 +260,7 @@ module ParseWikipediaXML
     def parse_bofw(text)
       hash_bofw = {}
       total_num_of_words = 0
-      text.gsub(/#{@tospexp}/, ' ').split(/#{@splexp}/).map(&:downcase)
+      text.gsub(/#{@separator}/, ' ').split(/ /).map(&:downcase)
         .select { |w| !@stopwords.include?(w) }
         .select { |w| w =~ /#{@termexp}/ }.each do |word|
         word = @hash_dict[word] if @hash_dict.key? word
@@ -410,7 +403,6 @@ module ParseWikipediaXML
       else
         parser = EngParser.new(options)
         parser.read_dictionary
-        parser.set_exps
       end
       parser.run_parser
       parser.run_tfidf
@@ -443,7 +435,6 @@ module ParseWikipediaXML
       else
         parser = EngParser.new(options)
         parser.read_dictionary
-        parser.set_exps
       end
       parser.run_popper
     end
