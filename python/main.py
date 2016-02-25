@@ -1,4 +1,4 @@
-from ParseWikipediaXML import Parser
+from ParseWikipediaXML.Parser import Parser
 import sys
 
 parser = Parser(sys.argv).new()
