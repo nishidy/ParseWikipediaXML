@@ -73,7 +73,6 @@ class EngParser(AbstParser):
             word = word.lower()
             if word in self.stopwords: continue
             if re.search(self.termexp,word) is None: continue
-             # defaultdict initializes the fist value of a key
             dictBofw[self.dictMap.get(word,word)] += 1
             totalNumOfWords +=1
 

@@ -1,0 +1,12 @@
+input_file_wikipedia: ../share/data/enwiki-test-5000
+input_file_dictionary: ../share/data/morph_english.flat
+output_file_bagofwords: bagofwords_1.txt
+output_file_title: title_1.txt
+output_file_tfidf: tfidf_1.txt
+minimum_count_per_doc: 1
+maximum_count_per_doc: 65535
+minimum_count_per_word: 1
+regexp_for_category: .*
+is_japanese: False
+number_of_workers: 1
+

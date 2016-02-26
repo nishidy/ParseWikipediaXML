@@ -71,12 +71,15 @@ def writeToFile(self, dictBofw, title):
             lambda _cont, _bofw: _cont+_bofw[0]+" "+str(_bofw[1])+" ",
             [ _bofw for _bofw in listTupleBofw if _bofw[1] >= self.args.minc ],
             ""
-        ).rstrip()
+        ).rstrip()+"\n"
 
         if len(cont) > 1:
             self.lockb.acquire()
-            with open(self.args.ofcont,'a') as f:
-                f.write(cont+"\n")
+            if self.args.ofcont:
+                with open(self.args.ofcont,'a') as f:
+                    f.write(cont)
+            else:
+                print(cont)
             self.lockb.release()
             self.writeTitleToFile(title)
 
