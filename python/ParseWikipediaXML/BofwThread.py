@@ -26,7 +26,7 @@ class BofwThread(threading.Thread):
 
             page = queue.get()
 
-            # This may finish main thread before parseText()
+            # XXX This may terminate main thread before the last parseText() ends
             #queue.task_done()
 
             if page == "Finished":
