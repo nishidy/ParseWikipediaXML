@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+
+from ParseWikipediaXML.util_funcs import *
+
 import re
 import threading
-from ParseWikipediaXML.funcs import *
 
 class BofwThread(threading.Thread):
     # static variables

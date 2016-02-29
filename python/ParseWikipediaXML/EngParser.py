@@ -3,7 +3,7 @@
 from __future__ import print_function
 
 from ParseWikipediaXML.AbstParser import AbstParser
-from ParseWikipediaXML.funcs import *
+from ParseWikipediaXML.util_funcs import *
 
 import sys
 import re
