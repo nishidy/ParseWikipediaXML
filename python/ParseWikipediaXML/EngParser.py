@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+
+from ParseWikipediaXML.AbstParser import AbstParser
+from ParseWikipediaXML.funcs import *
+
 import sys
 import re
 from collections import defaultdict
-from ParseWikipediaXML.AbstParser import AbstParser
-from ParseWikipediaXML.funcs import *
 
 if sys.version_info[0] == 2:
     import msgpack

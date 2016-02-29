@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+
+from ParseWikipediaXML.BofwThread import BofwThread
+from ParseWikipediaXML.util_funcs import *
+
 import sys
 import threading
 from collections import defaultdict
 import redis
 import math
-from ParseWikipediaXML.BofwThread import BofwThread
-from ParseWikipediaXML.funcs import *
 
 if sys.version_info[0] == 2:
     import Queue

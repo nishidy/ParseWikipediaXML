@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+
+from ParseWikipediaXML.AbstParser import AbstParser
+
 from collections import defaultdict
 import MeCab
-from ParseWikipediaXML.AbstParser import AbstParser
 
 class JapParser(AbstParser):
 
