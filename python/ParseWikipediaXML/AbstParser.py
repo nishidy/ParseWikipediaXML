@@ -2,28 +2,23 @@
 
 from __future__ import print_function
 
-from ParseWikipediaXML.BofwThread import BofwThread
+from ParseWikipediaXML import BofwProcess
 from ParseWikipediaXML.util_funcs import *
 
 import sys
-import threading
+import multiprocessing as mp
 from collections import defaultdict
 import redis
 import math
-
-if sys.version_info[0] == 2:
-    import Queue
-else:
-    import queue as Queue
 
 class AbstParser():
 
     def __init__(self,args):
 
-        self.lockb = threading.Lock()
-        self.lockt = threading.Lock()
+        self.lockb = mp.Lock()
+        self.lockt = mp.Lock()
         self.args = args
-        self.queue = Queue.Queue()
+        self.queue = mp.JoinableQueue()
         self.client = redis.StrictRedis()
         self.redis_check()
         self.post_process = writeToFile
@@ -45,10 +40,14 @@ class AbstParser():
     @check_time
     def startParse(self):
 
+        lock = mp.Lock()
         bofwthreads = []
 
+        pages = mp.Value('i',0)
+        saved = mp.Value('i',0)
+
         for i in range(self.args.workers):
-            bofwthreads.append(BofwThread(self,i))
+            bofwthreads.append( mp.Process(target=BofwProcess.run, args=(self,i,lock,pages,saved)) )
             bofwthreads[i].start()
 
         page=""
