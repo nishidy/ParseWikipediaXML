@@ -6,6 +6,12 @@ from ParseWikipediaXML.EngParser import EngParser
 from ParseWikipediaXML.JapParser import JapParser
 
 import argparse
+import sys
+
+#if sys.version_info[:3] == 3.6:
+#    import pyyaml
+#else:
+#    import yaml
 import yaml
 
 class Parser():
