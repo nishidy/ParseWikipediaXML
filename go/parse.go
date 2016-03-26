@@ -6,7 +6,9 @@ import (
 	"encoding/xml"
 	"flag"
 	"fmt"
+	"gopkg.in/yaml.v2"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"regexp"
@@ -53,7 +55,7 @@ func (l list) Swap(i, j int) {
 func (l list) FilterByCnt(args Args) list {
 	nlist := list{}
 	for _, e := range l {
-		if e.freq < args.minWord {
+		if e.freq < args.MinWord {
 			continue
 		}
 		nlist = append(nlist, e)
@@ -87,23 +89,23 @@ type parseType struct {
 }
 
 type Args struct {
-	inWikiFile    string
-	inDictFile    string
-	outBofwFile   string
-	outTitleFile  string
-	outTfIdfFile  string
-	minWordsInDoc int
-	maxWordsInDoc int
-	minWord       int
-	matchCategory string
-	outFormatJson bool
-	isJapanese    bool
-	workers       int
+	InWikiFile    string `yaml:"input_file_wikipedia"`
+	InDictFile    string `yaml:"input_file_dictionary"`
+	OutBofwFile   string `yaml:"output_file_bagofwords"`
+	OutTitleFile  string `yaml:"output_file_title"`
+	OutTfIdfFile  string `yaml:"output_file_tfidf"`
+	MinWordsInDoc int    `yaml:"minimum_count_per_doc"`
+	MaxWordsInDoc int    `yaml:"maximum_count_per_doc"`
+	MinWord       int    `yaml:"minimum_count_per_word"`
+	MatchCategory string `yaml:"regexp_for_category"`
+	OutFormatJson bool
+	IsJapanese    bool `yaml:"is_japanese"`
+	Workers       int  `yaml:"number_of_workers"`
 }
 
-func readDictionary(inDictFile string, baseforms map[string]string) {
+func readDictionary(InDictFile string, baseforms map[string]string) {
 
-	file, err := os.Open(inDictFile)
+	file, err := os.Open(InDictFile)
 	if err != nil {
 		os.Exit(10)
 	}
@@ -187,6 +189,17 @@ func downloadXml() {
 
 }
 
+func findIndex(arr []string, e string) (int, bool) {
+	index := 0
+	for _, a := range arr {
+		if a == e {
+			return index, true
+		}
+		index += 1
+	}
+	return -1, false
+}
+
 func GetOpts() *Args {
 
 	if len(os.Args[1:]) == 0 {
@@ -194,29 +207,50 @@ func GetOpts() *Args {
 		os.Exit(1)
 	}
 
+	if index, flag := findIndex(os.Args, "-y"); flag {
+		return GetOptsYaml(os.Args[index+1])
+	} else {
+		return GetOptsStdio()
+	}
+}
+
+func GetOptsYaml(yaml_file string) *Args {
+	buf, err := ioutil.ReadFile(yaml_file)
+	if err != nil {
+		panic(err)
+	}
+
+	args := new(Args)
+	err = yaml.Unmarshal(buf, args)
+	//args.OutFormatJson = false
+	return args
+}
+
+func GetOptsStdio() *Args {
+
 	args := new(Args)
 
-	flag.StringVar(&args.inWikiFile, "i", "", "Input File(Wikipedia)")
-	flag.StringVar(&args.inDictFile, "d", "", "Input File(dictionary)")
-	flag.StringVar(&args.outBofwFile, "s", "", "Output File(Contents)")
-	flag.StringVar(&args.outTitleFile, "t", "", "Output File(Title)")
-	flag.StringVar(&args.outTfIdfFile, "f", "", "Output File(TF-IDF)")
-	flag.IntVar(&args.minWordsInDoc, "m", 1, "Minimum number of words that a page should have")
-	flag.IntVar(&args.maxWordsInDoc, "x", 65535, "Maximum number of words that a page should have")
-	flag.IntVar(&args.minWord, "c", 1, "Minimum number that a word should have")
-	flag.StringVar(&args.matchCategory, "g", ".*", "Category(regular expression)")
-	flag.BoolVar(&args.outFormatJson, "n", false, "Generate bug-of-words in JSON format")
-	flag.BoolVar(&args.isJapanese, "j", false, "If this is for Japanese text")
-	flag.IntVar(&args.workers, "w", 1, "# of workers")
+	flag.StringVar(&args.InWikiFile, "i", "", "Input File(Wikipedia)")
+	flag.StringVar(&args.InDictFile, "d", "", "Input File(dictionary)")
+	flag.StringVar(&args.OutBofwFile, "s", "", "Output File(Contents)")
+	flag.StringVar(&args.OutTitleFile, "t", "", "Output File(Title)")
+	flag.StringVar(&args.OutTfIdfFile, "f", "", "Output File(TF-IDF)")
+	flag.IntVar(&args.MinWordsInDoc, "m", 1, "Minimum number of words that a page should have")
+	flag.IntVar(&args.MaxWordsInDoc, "x", 65535, "Maximum number of words that a page should have")
+	flag.IntVar(&args.MinWord, "c", 1, "Minimum number that a word should have")
+	flag.StringVar(&args.MatchCategory, "g", ".*", "Category(regular expression)")
+	flag.BoolVar(&args.OutFormatJson, "n", false, "Generate bug-of-words in JSON format")
+	flag.BoolVar(&args.IsJapanese, "j", false, "If this is for Japanese text")
+	flag.IntVar(&args.Workers, "w", 1, "# of Workers")
 
 	flag.Parse()
 
-	if args.inWikiFile == "" {
+	if args.InWikiFile == "" {
 		downloadXml()
 		os.Exit(0)
 	}
 
-	runtime.GOMAXPROCS(args.workers)
+	runtime.GOMAXPROCS(args.Workers)
 
 	return args
 
@@ -225,8 +259,8 @@ func GetOpts() *Args {
 func (args *Args) getBaseforms() map[string]string {
 
 	baseforms := make(map[string]string)
-	if !args.isJapanese && args.inDictFile != "" {
-		readDictionary(args.inDictFile, baseforms)
+	if !args.IsJapanese && args.InDictFile != "" {
+		readDictionary(args.InDictFile, baseforms)
 	}
 
 	return baseforms
@@ -236,7 +270,7 @@ func (args *Args) getBaseforms() map[string]string {
 func (args *Args) getStopWords() []string {
 
 	stopWords := make([]string, 0, 256)
-	if args.isJapanese {
+	if args.IsJapanese {
 		for _, word := range strings.Split(stopWordsJp, ",") {
 			stopWords = append(stopWords, word)
 		}
@@ -373,7 +407,7 @@ func (p *parseType) goParse(args Args, title string, text string) {
 		p.wait.Done()
 	}()
 
-	if !categoryCheck(args.matchCategory, text) {
+	if !categoryCheck(args.MatchCategory, text) {
 		return
 	}
 
@@ -385,24 +419,24 @@ func (p *parseType) goParse(args Args, title string, text string) {
 	}
 
 	var wordCount int
-	if args.isJapanese {
+	if args.IsJapanese {
 		wordCount = ctype.countWordJp()
 		if wordCount == 0 ||
-			wordCount > args.maxWordsInDoc ||
-			wordCount < args.minWordsInDoc {
+			wordCount > args.MaxWordsInDoc ||
+			wordCount < args.MinWordsInDoc {
 			return
 		}
 	} else {
 		wordCount = ctype.countWordEn()
 		if wordCount == 0 ||
-			wordCount > args.maxWordsInDoc ||
-			wordCount < args.minWordsInDoc {
+			wordCount > args.MaxWordsInDoc ||
+			wordCount < args.MinWordsInDoc {
 			return
 		}
 	}
 
 	var strText string
-	if args.outFormatJson {
+	if args.OutFormatJson {
 		bs, err := json.Marshal(ctype.MapWordFreq)
 		if err != nil {
 			panic(err)
@@ -446,17 +480,18 @@ func NewParseType(args *Args) *parseType {
 	stopWords := args.getStopWords()
 	baseforms := args.getBaseforms()
 
-	rdHdrWiki, err := os.Open(args.inWikiFile)
+	rdHdrWiki, err := os.Open(args.InWikiFile)
 	if err != nil {
+		fmt.Printf("The input file %s is not available.\n", args.InWikiFile)
 		os.Exit(1)
 	}
 
-	wrHdrTitle, _ := os.Create(args.outTitleFile)
-	wrHdrBofw, _ := os.Create(args.outBofwFile)
+	wrHdrTitle, _ := os.Create(args.OutTitleFile)
+	wrHdrBofw, _ := os.Create(args.OutBofwFile)
 
 	wrMtx := make(chan int, 1)
 	stdoutMtx := make(chan int, 1)
-	goSemaph := make(chan int, args.workers)
+	goSemaph := make(chan int, args.Workers)
 
 	client := getClientRedis()
 

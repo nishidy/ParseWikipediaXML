@@ -166,22 +166,22 @@ func (t *tfidfType) RunTfIdf(args *Args) {
 
 	df, docs := t.getDfCorpus()
 
-	t.rdHdrBofw, _ = os.Open(args.outBofwFile)
+	t.rdHdrBofw, _ = os.Open(args.OutBofwFile)
 	t.getTfIdf(df, docs)
 
 }
 
 func NewTfIdfType(args *Args) (*tfidfType, error) {
-	if args.outTfIdfFile == "" {
+	if args.OutTfIdfFile == "" {
 		return nil, errors.New("File to save not specified for TF-IDF.")
 	}
 
-	rdHdrBofw, err := os.Open(args.outBofwFile)
+	rdHdrBofw, err := os.Open(args.OutBofwFile)
 	if err != nil {
 		os.Exit(1)
 	}
 
-	wrHdrTfIdf, _ := os.Create(args.outTfIdfFile)
+	wrHdrTfIdf, _ := os.Create(args.OutTfIdfFile)
 
 	return &tfidfType{
 		rdHdrBofw,
