@@ -5,8 +5,12 @@ use std::collections::HashMap;
 use std::io::BufReader;
 use std::io::BufRead;
 use std::io::Write;
+use std::io::stdout;
 use std::fs::File;
 use regex::Regex;
+
+use std::thread;
+use std::sync::mpsc;
 
 fn output_result(dicts: &HashMap<String, isize>, fd: &mut File) {
 	let mut output = Vec::new();
@@ -20,17 +24,11 @@ fn output_result(dicts: &HashMap<String, isize>, fd: &mut File) {
 	}
 }
 
-fn update_dict(dicts: &mut HashMap<String, isize>, lines_str: &String) -> bool {
+fn update_dict<'a>(tx: &mpsc::SyncSender<String>, lines_str: &'a String) -> bool {
 	let re_tag = Regex::new(r"<text[^<>]*>([^<>]*)</text>").unwrap();
-	let re_word= Regex::new(r"^[a-z][0-9a-z'-]*[0-9a-z]$").unwrap();
 	if let Some(text_cap) = re_tag.captures(&lines_str) {
-		for word in text_cap.at(1).unwrap().split(" ") {
-			if re_word.is_match(word) {
-				let lc_word = word.to_string().to_lowercase();
-				let counter = dicts.entry(lc_word).or_insert(0);
-				*counter += 1;
-			}
-		}
+		let text_clone = text_cap.at(1).unwrap().clone().to_string();
+		tx.send(text_clone).unwrap();
 		true
 	}else{
 		false
@@ -57,22 +55,52 @@ fn main() {
 		Err(_) => return ()
 	};
 
-	let mut dicts = HashMap::new();
-	let mut lines_str: String = "".to_string();
+	let (txd,rxd) = mpsc::sync_channel(10);
+	let (txc,rxc) = mpsc::sync_channel(1);
 
+	thread::spawn( move || {
+		let mut docs = 0;
+		let mut alldocs = 0;
+		loop { 
+			let text_str:String = rxd.recv().unwrap();
+			if text_str == "::FINISHED::" {
+				println!("\nGJ.");
+				txc.send(()).unwrap();
+				break;
+			}
+			let mut dicts = HashMap::new();
+			let re_word= Regex::new(r"^[a-z][0-9a-z'-]*[0-9a-z]$").unwrap();
+			for word in text_str.split(" ") {
+				if re_word.is_match(word) {
+					let lc_word = word.to_string().to_lowercase();
+					let counter = dicts.entry(lc_word).or_insert(0);
+					*counter += 1;
+				}
+			}
+
+			if dicts.len() > 0 {
+				output_result(&dicts,&mut fd_out);
+				docs += 1;
+			}
+			print!("\r# of docs {}/{}",docs,alldocs);
+			let _ = stdout().flush();
+			alldocs += 1;
+		}
+	});
+
+	let mut lines_str: String = "".to_string();
 	let buf = BufReader::new(&fd_in);
+
 	for line in buf.lines() {
 		let line_str = line.unwrap();
 		lines_str.push_str(&line_str);
-		if update_dict(&mut dicts,&lines_str) {
-			if dicts.len() > 0 {
-				output_result(&dicts,&mut fd_out)
-			}
-			dicts.clear();
+		if update_dict(&txd,&lines_str) {
 			lines_str.clear();
-			()
 		}
 	}
+
+	txd.send("::FINISHED::".to_string()).unwrap();
+	rxc.recv().unwrap();
 
 }
 
