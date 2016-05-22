@@ -1,4 +1,5 @@
 extern crate regex;
+extern crate time;
 
 use std::env;
 use std::collections::HashMap;
@@ -82,14 +83,16 @@ fn main() {
 				output_result(&dicts,&mut fd_out);
 				docs += 1;
 			}
+			alldocs += 1;
 			print!("\r# of docs {}/{}",docs,alldocs);
 			let _ = stdout().flush();
-			alldocs += 1;
 		}
 	});
 
 	let mut lines_str: String = "".to_string();
 	let buf = BufReader::new(&fd_in);
+
+	let start_time = time::precise_time_ns();
 
 	for line in buf.lines() {
 		let line_str = line.unwrap();
@@ -102,5 +105,8 @@ fn main() {
 	txd.send("::FINISHED::".to_string()).unwrap();
 	rxc.recv().unwrap();
 
+	let end_time = time::precise_time_ns();
+	let dur = (end_time-start_time) as f64;
+	println!("Elapsed {:.3} sec.",dur/(10u64.pow(9) as f64));
 }
 
