@@ -26,12 +26,16 @@ fn output_result(dicts: &HashMap<String, isize>, fd: &mut File) {
 }
 
 fn update_dict<'a>(tx: &mpsc::SyncSender<String>, lines_str: &'a String) -> bool {
-	let re_tag = Regex::new(r"<text[^<>]*>([^<>]*)</text>").unwrap();
-	if let Some(text_cap) = re_tag.captures(&lines_str) {
-		let text_clone = text_cap.at(1).unwrap().clone().to_string();
-		tx.send(text_clone).unwrap();
-		true
-	}else{
+	if lines_str.find("</text>") != None {
+		let re_tag = Regex::new(r"<text[^<>]*>([^<>]*)</text>").unwrap();
+		if let Some(text_cap) = re_tag.captures(&lines_str) {
+			let text_clone = text_cap.at(1).unwrap().clone().to_string();
+			tx.send(text_clone).unwrap();
+			true
+		}else{
+			false
+		}
+	} else {
 		false
 	}
 }
