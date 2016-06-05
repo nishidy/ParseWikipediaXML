@@ -5,4 +5,5 @@ authors = ["nishidy <nishidyatutokyo@gmail.com>"]
 
 [dependencies]
 regex = "0.1"
+time = "0.1.35"
 
